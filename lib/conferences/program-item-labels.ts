@@ -1,0 +1,26 @@
+import type { ProgramItemType } from "@/types"
+
+export const PROGRAM_ITEM_LABELS: Record<ProgramItemType, string> = {
+  presiding: "Presiding",
+  conducting: "Conducting",
+  organist: "Organist",
+  pianist: "Pianist",
+  music_leader: "Music Leader",
+  prelude_music: "Prelude Music",
+  opening_hymn: "Opening Hymn",
+  closing_hymn: "Closing Hymn",
+  intermediate_hymn: "Intermediate Hymn",
+  invocation: "Invocation",
+  benediction: "Benediction",
+  speaker: "Speaker",
+  speaker_primary: "Speaker (Primary)",
+  speaker_youth: "Speaker (Youth)",
+  instruction: "Instruction",
+  testimony: "Testimony",
+  breakout: "Breakout",
+  discussion: "Discussion",
+  closing_remarks: "Closing Remarks",
+  special_musical_number: "Special Musical Number",
+  stake_business: "Stake Business / Sustaining",
+  other: "Other",
+}

@@ -1,0 +1,34 @@
+================================================================================
+                    STAKE PRESIDENT APP - START HERE
+================================================================================
+
+IMPORTANT: This project does NOT include the node_modules folder.
+          You MUST run 'npm install' first!
+
+QUICK SETUP:
+------------
+
+1. Open this folder in Cursor (File → Open Folder)
+
+2. Open Terminal in Cursor (Ctrl + ` or View → Terminal)
+
+3. Install dependencies:
+   npm install
+
+4. Create .env.local file (see SETUP_FOR_DAD.md for details)
+
+5. Start the app:
+   npm run dev
+
+6. Open browser to: http://localhost:3000
+
+================================================================================
+
+FOR DETAILED INSTRUCTIONS:
+→ Read SETUP_FOR_DAD.md
+
+FOR AI ASSISTANTS (Cursor, Copilot, etc.):
+→ Read README_FOR_CURSOR.md
+
+================================================================================
+
