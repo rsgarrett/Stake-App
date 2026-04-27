@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 
 import type { HighCouncilMember, HCWeeklyReport, HCReportResponse } from "@/types"
+import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 
 type TabView = "reports" | "roster"
 
@@ -264,7 +265,9 @@ export default function HCCommunicationPage() {
               <label className="text-sm font-medium text-gray-700">Reporting Week:</label>
               <select value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)} className={`${inputClass} w-auto`}>
                 {weekOptions.map((w) => (
-                  <option key={w} value={w}>Week of {formatWeek(w)}</option>
+                  <option key={w} value={w}>
+                    {englishMenuTitleCase("Week of")} {formatWeek(w)}
+                  </option>
                 ))}
               </select>
             </div>
@@ -280,7 +283,7 @@ export default function HCCommunicationPage() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">High Councilor</label>
                     <select value={reportForm.member_id} onChange={(e) => setReportForm({ ...reportForm, member_id: e.target.value })} className={inputClass}>
-                      <option value="">Select member...</option>
+                      <option value="">{englishMenuTitleCase("Select member...")}</option>
                       {activeMembers.map((m) => (
                         <option key={m.id} value={m.id}>{m.member_name}</option>
                       ))}

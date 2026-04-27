@@ -1,8 +1,13 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { safeQuery } from "@/lib/utils/safe-query"
+import { formatInterviewType, MISSION_INTERVIEW_TYPE } from "@/lib/interviews/interview-types"
+import { navigateInterviewSelection } from "@/lib/interviews/navigate-mission-interview"
+import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
+import { DEFAULT_MISSION_READY_TASKS } from "@/lib/missionary/mission-ready-defaults"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button, buttonVariants } from "@/components/ui/button"
 import Link from "next/link"
@@ -17,6 +22,9 @@ import {
   ClipboardCheck,
   ChevronRight,
   Award,
+  AlertTriangle,
+  Trash2,
+  Loader2,
 } from "lucide-react"
 
 interface Interview {
@@ -44,8 +52,7 @@ interface MissionReadyProgress {
   completed: boolean
 }
 
-type MainTab = "interviews" | "mission_ready"
-type InterviewTab = "upcoming" | "completed" | "all"
+type InterviewTab = "upcoming" | "missed" | "all"
 type MissionTab = "preparing" | "serving" | "returned"
 
 const READY_STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
@@ -57,38 +64,17 @@ const READY_STATUS_STYLES: Record<string, { bg: string; text: string; label: str
   completed: { bg: "bg-gray-100", text: "text-gray-600", label: "Returned" },
 }
 
-const DEFAULT_TASKS = [
-  { task_number: 1, task_name: "Read The Book of Mormon", additional_resource: "For the Strength of Youth Guide" },
-  { task_number: 2, task_name: "D&C 121", additional_resource: null },
-  { task_number: 3, task_name: "Missionary Growth Path", additional_resource: "Emotional Resilience Manual" },
-  { task_number: 4, task_name: "Melchizedek Priesthood", additional_resource: "Missionary Preparation" },
-  { task_number: 5, task_name: "Endowment", additional_resource: "Supplemental Information" },
-  { task_number: 6, task_name: "Submit name to work in the temple", additional_resource: null },
-  { task_number: 7, task_name: "Fulfill Your Missionary Purpose (PMG chp. 1)", additional_resource: "The District Video Series" },
-  { task_number: 8, task_name: "Adjusting to Missionary Life", additional_resource: "Serve and Prepare Videos" },
-  { task_number: 9, task_name: "Missionary Standards for Disciples of Jesus Christ", additional_resource: "Mission Ready Talks" },
-  { task_number: 10, task_name: "The Fourth Missionary", additional_resource: null },
-  { task_number: 11, task_name: "Growth Mindset", additional_resource: null },
-  { task_number: 12, task_name: "Using Technology Wisely and Righteously", additional_resource: null },
-  { task_number: 13, task_name: "Study & Teach the Gospel (PMG chp. 3)", additional_resource: null },
-  { task_number: 14, task_name: "Teach to Build Faith (PMG chp. 10)", additional_resource: null },
-  { task_number: 15, task_name: "Help People Make & Keep Commitments (PMG chp. 11)", additional_resource: null },
-  { task_number: 16, task_name: "Accomplish the Work through Goals and Plans (PMG chp. 8)", additional_resource: null },
-  { task_number: 17, task_name: "Papers Submitted", additional_resource: null },
-  { task_number: 18, task_name: "Call Received", additional_resource: null },
-  { task_number: 19, task_name: "Setting Apart Scheduled", additional_resource: null },
-  { task_number: 20, task_name: "Seek Christlike Attributes (PMG chp. 6)", additional_resource: null },
-]
-
 export default function InterviewsPage() {
-  const [mainTab, setMainTab] = useState<MainTab>("interviews")
   const supabase = createClient()
+  const router = useRouter()
 
   // --- Interviews state ---
   const [interviews, setInterviews] = useState<Interview[]>([])
   const [interviewTab, setInterviewTab] = useState<InterviewTab>("upcoming")
   const [typeFilter, setTypeFilter] = useState("all")
   const [loading, setLoading] = useState(true)
+  const [deletingInterviewId, setDeletingInterviewId] = useState<string | null>(null)
+  const [openingInterviewId, setOpeningInterviewId] = useState<string | null>(null)
 
   // --- Mission Ready state ---
   const [readyMissionaries, setReadyMissionaries] = useState<MissionReadyMissionary[]>([])
@@ -120,10 +106,39 @@ export default function InterviewsPage() {
     }
   }
 
+  const deleteInterview = async (id: string) => {
+    if (!confirm("Delete this interview? Related notes and schedule slots will be removed. This cannot be undone.")) {
+      return
+    }
+    setDeletingInterviewId(id)
+    try {
+      const { error } = await supabase.from("interviews").delete().eq("id", id)
+      if (error) throw error
+      await loadInterviews()
+    } catch (err: unknown) {
+      console.error(err)
+      const message = err instanceof Error ? err.message : "Could not delete this interview."
+      alert(message)
+    } finally {
+      setDeletingInterviewId(null)
+    }
+  }
+
+  const openMissionInterviewRow = (interview: Interview) => {
+    if (openingInterviewId) return
+    setOpeningInterviewId(interview.id)
+    void navigateInterviewSelection(supabase, router, interview).finally(() => setOpeningInterviewId(null))
+  }
+
   const now = new Date()
+  const missedInterviews = interviews.filter((i) => {
+    if (i.status !== "scheduled") return false
+    return new Date(i.scheduled_date) < now
+  })
+
   const filteredInterviews = interviews.filter((i) => {
     if (interviewTab === "upcoming") return i.status === "scheduled" && new Date(i.scheduled_date) >= now
-    if (interviewTab === "completed") return i.status === "completed"
+    if (interviewTab === "missed") return i.status === "scheduled" && new Date(i.scheduled_date) < now
     return true
   }).filter((i) => typeFilter === "all" || i.interview_type === typeFilter)
 
@@ -141,7 +156,6 @@ export default function InterviewsPage() {
   })
 
   const uniqueTypes = Array.from(new Set(interviews.map((i) => i.interview_type))).sort()
-  const formatType = (t: string) => t.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())
 
   const getStatusIcon = (status: string) => {
     if (status === "scheduled") return <Clock className="h-4 w-4 text-blue-500" />
@@ -194,7 +208,7 @@ export default function InterviewsPage() {
 
       if (insertError || !newMissionary) throw insertError
 
-      const progressItems = DEFAULT_TASKS.map((task) => ({
+      const progressItems = DEFAULT_MISSION_READY_TASKS.map((task) => ({
         missionary_id: newMissionary.id,
         task_number: task.task_number,
         task_name: task.task_name,
@@ -242,41 +256,17 @@ export default function InterviewsPage() {
     <div className="p-6">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Interviews & Missionary</h1>
-          <p className="mt-2 text-gray-600">Manage interviews and track missionary preparation</p>
+          <h1 className="text-3xl font-bold text-gray-900">Interviews</h1>
+          <p className="mt-2 text-gray-600">Schedule interviews and track Mission Ready candidates on this page.</p>
         </div>
-        {mainTab === "interviews" && (
-          <Link href="/modules/interviews/schedule" className={buttonVariants()}>
-            <Plus className="h-4 w-4 mr-2" />Schedule Interview
-          </Link>
-        )}
+        <Link href="/modules/interviews/schedule" className={buttonVariants()}>
+          <Plus className="h-4 w-4 mr-2" />
+          Schedule Interview
+        </Link>
       </div>
 
-      {/* Main Tabs */}
-      <div className="flex space-x-1 border-b mb-6">
-        <button
-          onClick={() => setMainTab("interviews")}
-          className={`flex items-center px-5 py-2.5 text-sm font-medium border-b-2 -mb-px ${
-            mainTab === "interviews" ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          <CalendarIcon className="h-4 w-4 mr-2" />
-          Interviews
-        </button>
-        <button
-          onClick={() => setMainTab("mission_ready")}
-          className={`flex items-center px-5 py-2.5 text-sm font-medium border-b-2 -mb-px ${
-            mainTab === "mission_ready" ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          <Globe className="h-4 w-4 mr-2" />
-          Mission Ready
-        </button>
-      </div>
-
-      {/* ==================== INTERVIEWS TAB ==================== */}
-      {mainTab === "interviews" && (
-        <>
+      {/* ==================== INTERVIEWS ==================== */}
+      <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <Card>
               <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-gray-500">Today</CardTitle></CardHeader>
@@ -292,64 +282,172 @@ export default function InterviewsPage() {
                 <p className="text-xs text-gray-500 mt-1">upcoming interviews</p>
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-gray-500">Completed</CardTitle></CardHeader>
+            <Card className={missedInterviews.length > 0 ? "border-amber-200 bg-amber-50/40" : ""}>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
+                  <AlertTriangle className={`h-4 w-4 ${missedInterviews.length > 0 ? "text-amber-600" : "text-gray-400"}`} />
+                  Missed
+                </CardTitle>
+              </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">{interviews.filter((i) => i.status === "completed").length}</div>
-                <p className="text-xs text-gray-500 mt-1">total conducted</p>
+                <div className={`text-3xl font-bold ${missedInterviews.length > 0 ? "text-amber-700" : "text-gray-700"}`}>
+                  {missedInterviews.length}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">scheduled but past time — mark complete or reschedule</p>
               </CardContent>
             </Card>
           </div>
 
           <div className="flex items-center justify-between mb-4">
             <div className="flex space-x-1 border-b">
-              {(["upcoming", "completed", "all"] as const).map((t) => (
+              {(["upcoming", "missed", "all"] as const).map((t) => (
                 <button key={t} onClick={() => setInterviewTab(t)}
                   className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px capitalize ${interviewTab === t ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
-                  {t}
+                  {t === "missed" ? "Missed" : t}
                 </button>
               ))}
             </div>
             <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}
               className="px-3 py-1.5 text-sm border border-gray-300 rounded-md">
-              <option value="all">All Types</option>
-              {uniqueTypes.map((t) => <option key={t} value={t}>{formatType(t)}</option>)}
+              <option value="all">{englishMenuTitleCase("All types")}</option>
+              {uniqueTypes.map((t) => (
+                <option key={t} value={t}>
+                  {formatInterviewType(t)}
+                </option>
+              ))}
             </select>
           </div>
 
           <Card>
             <CardContent className="pt-6">
               {filteredInterviews.length === 0 ? (
-                <p className="text-center text-gray-500 py-8">No interviews found</p>
+                <p className="text-center text-gray-500 py-8">
+                  {interviewTab === "missed"
+                    ? "No missed interviews — past-due scheduled interviews will appear here."
+                    : "No interviews found"}
+                </p>
               ) : (
                 <div className="space-y-2">
-                  {filteredInterviews.map((interview) => (
-                    <Link key={interview.id} href={`/modules/interviews/${interview.id}`}>
-                      <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
-                        <div className="flex items-center space-x-3">
+                  {filteredInterviews.map((interview) => {
+                    const isMissionInterview = interview.interview_type === MISSION_INTERVIEW_TYPE
+                    const rowOpening = openingInterviewId === interview.id
+
+                    const rowBody = (
+                      <>
+                        <div className="flex items-center space-x-3 min-w-0">
                           {getStatusIcon(interview.status)}
-                          <div>
-                            <div className="font-medium text-gray-900">{interview.interviewee_name}</div>
-                            <div className="text-sm text-gray-500">{formatType(interview.interview_type)}</div>
+                          <div className="min-w-0">
+                            <div className="font-medium text-gray-900 truncate">{interview.interviewee_name}</div>
+                            <div className="text-sm text-gray-500">{formatInterviewType(interview.interview_type)}</div>
                           </div>
                         </div>
-                        <div className="text-right">
+                        <div className="text-right shrink-0 pl-2">
+                          {isMissionInterview && rowOpening ? (
+                            <Loader2 className="h-5 w-5 animate-spin text-indigo-600 inline-block mb-1" aria-label="Opening Mission Ready" />
+                          ) : null}
                           <div className="text-sm text-gray-700">{new Date(interview.scheduled_date).toLocaleDateString()}</div>
                           <div className="text-xs text-gray-500">{new Date(interview.scheduled_date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+                          {interviewTab === "missed" && interview.status === "scheduled" && (
+                            <div className="text-xs font-medium text-amber-700 mt-1">Needs follow-up</div>
+                          )}
                         </div>
-                      </div>
-                    </Link>
-                  ))}
+                      </>
+                    )
+
+                    const missionPrimaryClass =
+                      "flex flex-1 min-w-0 items-center justify-between p-3 text-left rounded-l-lg outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500"
+
+                    if (interviewTab === "all") {
+                      return (
+                        <div
+                          key={interview.id}
+                          className="flex items-stretch rounded-lg border border-gray-200 bg-white hover:bg-gray-50/80"
+                        >
+                          {isMissionInterview ? (
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault()
+                                  openMissionInterviewRow(interview)
+                                }
+                              }}
+                              onClick={() => openMissionInterviewRow(interview)}
+                              className={`${missionPrimaryClass} cursor-pointer hover:bg-gray-50/80 ${rowOpening ? "pointer-events-none opacity-70" : ""}`}
+                            >
+                              {rowBody}
+                            </div>
+                          ) : (
+                            <Link href={`/modules/interviews/${interview.id}`} className={missionPrimaryClass}>
+                              {rowBody}
+                            </Link>
+                          )}
+                          <button
+                            type="button"
+                            title="Delete interview"
+                            aria-label="Delete interview"
+                            disabled={deletingInterviewId === interview.id}
+                            onClick={(e) => {
+                              e.preventDefault()
+                              void deleteInterview(interview.id)
+                            }}
+                            className="shrink-0 px-3 border-l border-gray-200 text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:pointer-events-none"
+                          >
+                            {deletingInterviewId === interview.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
+                      )
+                    }
+
+                    if (isMissionInterview) {
+                      return (
+                        <div
+                          key={interview.id}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault()
+                              openMissionInterviewRow(interview)
+                            }
+                          }}
+                          onClick={() => openMissionInterviewRow(interview)}
+                          className={`flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 ${rowOpening ? "pointer-events-none opacity-70" : ""}`}
+                        >
+                          {rowBody}
+                        </div>
+                      )
+                    }
+
+                    return (
+                      <Link key={interview.id} href={`/modules/interviews/${interview.id}`}>
+                        <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                          {rowBody}
+                        </div>
+                      </Link>
+                    )
+                  })}
                 </div>
               )}
             </CardContent>
           </Card>
-        </>
-      )}
+      </>
 
-      {/* ==================== MISSION READY TAB ==================== */}
-      {mainTab === "mission_ready" && (
-        <>
+      {/* ==================== MISSION READY (all candidates) ==================== */}
+      <div className="mt-12 pt-10 border-t border-gray-200">
+          <div className="mb-6">
+            <h2 className="text-lg font-semibold text-gray-900">Mission Ready tracker</h2>
+            <p className="text-sm text-gray-600 mt-1">
+              All missionary candidates in your stake. Scheduling a <strong>Mission Interview</strong> (after date and
+              time are saved) or opening one from this page or the meetings calendar goes here; new interviewees are added
+              automatically if needed.
+            </p>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-gray-500">Mission Ready</CardTitle></CardHeader>
               <CardContent><div className="text-3xl font-bold text-indigo-600">{preparingMissionaries.length}</div></CardContent></Card>
@@ -513,8 +611,7 @@ export default function InterviewsPage() {
               </CardContent>
             </Card>
           )}
-        </>
-      )}
+      </div>
     </div>
   )
 }

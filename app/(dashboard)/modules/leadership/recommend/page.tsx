@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
+import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 
 const ORGANIZATIONS = [
   "Stake Presidency",
@@ -201,10 +202,10 @@ export default function SubmitNamePage() {
                   onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
                   className={inputClass}
                 >
-                  <option value="Calling">Calling</option>
-                  <option value="Release">Release</option>
-                  <option value="Assignment">Assignment</option>
-                  <option value="MP">Melchizedek Priesthood</option>
+                  <option value="Calling">{englishMenuTitleCase("Calling")}</option>
+                  <option value="Release">{englishMenuTitleCase("Release")}</option>
+                  <option value="Assignment">{englishMenuTitleCase("Assignment")}</option>
+                  <option value="MP">{englishMenuTitleCase("Melchizedek priesthood")}</option>
                 </select>
               </div>
               <div>
@@ -217,9 +218,13 @@ export default function SubmitNamePage() {
                   onChange={(e) => setFormData({ ...formData, ward: e.target.value })}
                   className={inputClass}
                 >
-                  <option value="">-- Select Ward --</option>
-                  {WARDS.map((w) => <option key={w} value={w}>{w}</option>)}
-                  <option value="Stake">Stake-wide</option>
+                  <option value="">-- {englishMenuTitleCase("Select ward")} --</option>
+                  {WARDS.map((w) => (
+                    <option key={w} value={w}>
+                      {englishMenuTitleCase(w)}
+                    </option>
+                  ))}
+                  <option value="Stake">{englishMenuTitleCase("Stake-wide")}</option>
                 </select>
               </div>
             </div>
@@ -248,8 +253,12 @@ export default function SubmitNamePage() {
                 onChange={(e) => handleOrgChange(e.target.value)}
                 className={inputClass}
               >
-                <option value="">-- Select Organization --</option>
-                {ORGANIZATIONS.map((org) => <option key={org} value={org}>{org}</option>)}
+                <option value="">-- {englishMenuTitleCase("Select organization")} --</option>
+                {ORGANIZATIONS.map((org) => (
+                  <option key={org} value={org}>
+                    {englishMenuTitleCase(org)}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -293,14 +302,24 @@ export default function SubmitNamePage() {
                   className={inputClass}
                 >
                   <option value="">
-                    {formData.organization ? `-- Select Calling in ${formData.organization} --` : "-- Select Organization first --"}
+                    {formData.organization
+                      ? `-- ${englishMenuTitleCase(`Select calling in ${formData.organization}`)} --`
+                      : `-- ${englishMenuTitleCase("Select organization first")} --`}
                   </option>
                   {formData.organization ? (
-                    filteredCallings.map((c) => <option key={c} value={c}>{c}</option>)
+                    filteredCallings.map((c) => (
+                      <option key={c} value={c}>
+                        {englishMenuTitleCase(c)}
+                      </option>
+                    ))
                   ) : (
                     Object.entries(CALLINGS_BY_ORG).map(([org, callings]) => (
-                      <optgroup key={org} label={org}>
-                        {callings.map((c) => <option key={`${org}-${c}`} value={c}>{c}</option>)}
+                      <optgroup key={org} label={englishMenuTitleCase(org)}>
+                        {callings.map((c) => (
+                          <option key={`${org}-${c}`} value={c}>
+                            {englishMenuTitleCase(c)}
+                          </option>
+                        ))}
                       </optgroup>
                     ))
                   )}
@@ -326,10 +345,10 @@ export default function SubmitNamePage() {
                 onChange={(e) => setFormData({ ...formData, replaces_person_name: e.target.value })}
                 className={inputClass}
               >
-                <option value="">N/A — New calling (no one to replace)</option>
+                <option value="">{englishMenuTitleCase("N/A — New calling (no one to replace)")}</option>
                 {roleUsers.map((u) => (
                   <option key={u.full_name} value={u.full_name}>
-                    {u.full_name} ({u.role.replace(/_/g, " ")})
+                    {u.full_name} ({englishMenuTitleCase(u.role?.replace(/_/g, " ") || "")})
                   </option>
                 ))}
               </select>

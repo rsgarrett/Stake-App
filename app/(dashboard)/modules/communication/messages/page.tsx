@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ArrowLeft, Send, Mail, MailOpen } from "lucide-react"
+import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 
 interface Message {
   id: string
@@ -195,8 +196,13 @@ export default function MessagesPage() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">To <span className="text-red-500">*</span></label>
                     <select required value={composeData.to} onChange={(e) => setComposeData({ ...composeData, to: e.target.value })} className={inputClass}>
-                      <option value="">Select recipient...</option>
-                      {leaders.map((l) => <option key={l.id} value={l.id}>{l.full_name || l.email}{l.role ? ` (${l.role.replace(/_/g, " ")})` : ""}</option>)}
+                      <option value="">{englishMenuTitleCase("Select recipient...")}</option>
+                      {leaders.map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.full_name || l.email}
+                          {l.role ? ` (${englishMenuTitleCase(l.role.replace(/_/g, " "))})` : ""}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div>

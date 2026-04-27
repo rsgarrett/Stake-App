@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
+import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 
 const inputClass = "w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
 
@@ -228,12 +229,12 @@ export default function NewEventPage() {
                 }}
                 className={inputClass}
               >
-                <option value="stake_conference">Stake Conference</option>
-                <option value="fireside">Fireside</option>
-                <option value="broadcast">Broadcast</option>
-                <option value="devotional">Devotional</option>
-                <option value="training">Training</option>
-                <option value="other">Other</option>
+                <option value="stake_conference">{englishMenuTitleCase("Stake conference")}</option>
+                <option value="fireside">{englishMenuTitleCase("Fireside")}</option>
+                <option value="broadcast">{englishMenuTitleCase("Broadcast")}</option>
+                <option value="devotional">{englishMenuTitleCase("Devotional")}</option>
+                <option value="training">{englishMenuTitleCase("Training")}</option>
+                <option value="other">{englishMenuTitleCase("Other")}</option>
               </select>
             </div>
 
@@ -241,8 +242,14 @@ export default function NewEventPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Setup (each of the 2 conferences per year can be different)</label>
                 <select value={formData.setup} onChange={(e) => setFormData({ ...formData, setup: e.target.value as "template" | "blank" })} className={inputClass}>
-                  <option value="template">Suggested template — Ministering visits, Presidency meeting, Leadership, Adult & General sessions</option>
-                  <option value="blank">Start blank — Add only the sessions you need for this conference</option>
+                  <option value="template">
+                    {englishMenuTitleCase(
+                      "Suggested template — Ministering visits, Presidency meeting, Leadership, Adult & General sessions"
+                    )}
+                  </option>
+                  <option value="blank">
+                    {englishMenuTitleCase("Start blank — Add only the sessions you need for this conference")}
+                  </option>
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
                   Handbook 29.3.1: Stake conference is held twice each year. The stake president presides and plans the meetings. He may invite visiting General Authorities or Area Seventies.
@@ -259,10 +266,10 @@ export default function NewEventPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Presiding Authority</label>
                 <select value={formData.presiding_authority} onChange={(e) => setFormData({ ...formData, presiding_authority: e.target.value })} className={inputClass}>
-                  <option value="">Select who will preside...</option>
-                  <option value="Stake President">Stake President</option>
-                  <option value="Area Seventy">Area Seventy</option>
-                  <option value="General Authority">General Authority</option>
+                  <option value="">{englishMenuTitleCase("Select who will preside...")}</option>
+                  <option value="Stake President">{englishMenuTitleCase("Stake president")}</option>
+                  <option value="Area Seventy">{englishMenuTitleCase("Area seventy")}</option>
+                  <option value="General Authority">{englishMenuTitleCase("General authority")}</option>
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
                   {formData.presiding_authority === "Stake President"

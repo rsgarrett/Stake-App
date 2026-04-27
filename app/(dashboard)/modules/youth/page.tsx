@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button, buttonVariants } from "@/components/ui/button"
 import Link from "next/link"
 import { Plus, Award, Calendar, Users, ArrowUp } from "lucide-react"
+import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 
 interface YouthProgram {
   id: string
@@ -196,10 +197,10 @@ export default function YouthPage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <input type="text" placeholder="Youth name *" value={advForm.youth_name} onChange={(e) => setAdvForm({ ...advForm, youth_name: e.target.value })} className={inputClass} />
                 <select value={advForm.advancement_type} onChange={(e) => setAdvForm({ ...advForm, advancement_type: e.target.value })} className={inputClass}>
-                  <option value="deacon">Deacon</option>
-                  <option value="teacher">Teacher</option>
-                  <option value="priest">Priest</option>
-                  <option value="elder">Elder</option>
+                  <option value="deacon">{englishMenuTitleCase("Deacon")}</option>
+                  <option value="teacher">{englishMenuTitleCase("Teacher")}</option>
+                  <option value="priest">{englishMenuTitleCase("Priest")}</option>
+                  <option value="elder">{englishMenuTitleCase("Elder")}</option>
                 </select>
                 <input type="date" value={advForm.advancement_date} onChange={(e) => setAdvForm({ ...advForm, advancement_date: e.target.value })} className={inputClass} />
               </div>

@@ -6,6 +6,7 @@ import { safeQuery } from "@/lib/utils/safe-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Plus, Building, BookOpen, Users, Calendar } from "lucide-react"
+import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 
 interface TempleAttendance {
   id: string
@@ -170,11 +171,11 @@ export default function TemplePage() {
                 <input type="date" value={attForm.event_date} onChange={(e) => setAttForm({ ...attForm, event_date: e.target.value })} className={inputClass} />
                 <input type="number" placeholder="Attendance count" value={attForm.attendance_count} onChange={(e) => setAttForm({ ...attForm, attendance_count: e.target.value })} className={inputClass} min="1" />
                 <select value={attForm.event_type} onChange={(e) => setAttForm({ ...attForm, event_type: e.target.value })} className={inputClass}>
-                  <option>Stake Temple Trip</option>
-                  <option>Ward Temple Trip</option>
-                  <option>Youth Temple Trip</option>
-                  <option>Temple Day</option>
-                  <option>Other</option>
+                  <option value="Stake Temple Trip">{englishMenuTitleCase("Stake temple trip")}</option>
+                  <option value="Ward Temple Trip">{englishMenuTitleCase("Ward temple trip")}</option>
+                  <option value="Youth Temple Trip">{englishMenuTitleCase("Youth temple trip")}</option>
+                  <option value="Temple Day">{englishMenuTitleCase("Temple day")}</option>
+                  <option value="Other">{englishMenuTitleCase("Other")}</option>
                 </select>
               </div>
               <div className="flex space-x-2 mt-3">
@@ -209,11 +210,11 @@ export default function TemplePage() {
             <Card><CardContent className="pt-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <select value={actForm.activity_type} onChange={(e) => setActForm({ ...actForm, activity_type: e.target.value })} className={inputClass}>
-                  <option>Indexing Event</option>
-                  <option>Family History Class</option>
-                  <option>Temple Name Preparation</option>
-                  <option>Family History Fair</option>
-                  <option>Other</option>
+                  <option value="Indexing Event">{englishMenuTitleCase("Indexing event")}</option>
+                  <option value="Family History Class">{englishMenuTitleCase("Family history class")}</option>
+                  <option value="Temple Name Preparation">{englishMenuTitleCase("Temple name preparation")}</option>
+                  <option value="Family History Fair">{englishMenuTitleCase("Family history fair")}</option>
+                  <option value="Other">{englishMenuTitleCase("Other")}</option>
                 </select>
                 <input type="date" value={actForm.date} onChange={(e) => setActForm({ ...actForm, date: e.target.value })} className={inputClass} />
                 <input type="text" placeholder="Description" value={actForm.description} onChange={(e) => setActForm({ ...actForm, description: e.target.value })} className={inputClass} />
@@ -250,11 +251,11 @@ export default function TemplePage() {
             <Card><CardContent className="pt-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <select value={assForm.assignment_type} onChange={(e) => setAssForm({ ...assForm, assignment_type: e.target.value })} className={inputClass}>
-                  <option>Temple Worker</option>
-                  <option>Ordinance Worker</option>
-                  <option>Veil Worker</option>
-                  <option>Temple Volunteer</option>
-                  <option>Other</option>
+                  <option value="Temple Worker">{englishMenuTitleCase("Temple worker")}</option>
+                  <option value="Ordinance Worker">{englishMenuTitleCase("Ordinance worker")}</option>
+                  <option value="Veil Worker">{englishMenuTitleCase("Veil worker")}</option>
+                  <option value="Temple Volunteer">{englishMenuTitleCase("Temple volunteer")}</option>
+                  <option value="Other">{englishMenuTitleCase("Other")}</option>
                 </select>
                 <input type="text" placeholder="Assigned to" value={assForm.assigned_to} onChange={(e) => setAssForm({ ...assForm, assigned_to: e.target.value })} className={inputClass} />
                 <input type="date" value={assForm.assignment_date} onChange={(e) => setAssForm({ ...assForm, assignment_date: e.target.value })} className={inputClass} />

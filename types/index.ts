@@ -222,7 +222,7 @@ export interface TempleAttendance {
 export interface TempleInterview {
   id: string
   interviewee_name: string
-  interview_type: "temple_recommend" | "calling" | "worthiness"
+  interview_type: string
   scheduled_date: string
   conducted_date?: string
   interviewer_id: string

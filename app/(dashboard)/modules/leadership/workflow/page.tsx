@@ -21,6 +21,7 @@ import {
   Clock,
   Edit,
 } from "lucide-react"
+import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 
 interface Calling {
   id: string
@@ -206,14 +207,20 @@ export default function CallingWorkflowPage() {
           onChange={(e) => setFilter(e.target.value)}
           className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
         >
-          <option value="all">All Callings ({callings.length})</option>
-          <option value="active">In Progress ({callings.filter((c) => getStepIndex(c) < 6).length})</option>
-          <option value="completed">Completed ({callings.filter((c) => getStepIndex(c) >= 6).length})</option>
-          <option value="sp_consideration">SP Consideration</option>
-          <option value="bishop_approval">Bishop Approval</option>
-          <option value="hc_sustained">HC Sustained</option>
-          <option value="ward_sustained">Ward Sustained</option>
-          <option value="set_apart">Set Apart</option>
+          <option value="all">
+            {englishMenuTitleCase("All callings")} ({callings.length})
+          </option>
+          <option value="active">
+            {englishMenuTitleCase("In progress")} ({callings.filter((c) => getStepIndex(c) < 6).length})
+          </option>
+          <option value="completed">
+            {englishMenuTitleCase("Completed")} ({callings.filter((c) => getStepIndex(c) >= 6).length})
+          </option>
+          <option value="sp_consideration">{englishMenuTitleCase("SP consideration")}</option>
+          <option value="bishop_approval">{englishMenuTitleCase("Bishop approval")}</option>
+          <option value="hc_sustained">{englishMenuTitleCase("HC sustained")}</option>
+          <option value="ward_sustained">{englishMenuTitleCase("Ward sustained")}</option>
+          <option value="set_apart">{englishMenuTitleCase("Set apart")}</option>
         </select>
       </div>
 

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
 import { ArrowLeft, Save, CheckCircle2, Clock, XCircle } from "lucide-react"
+import { formatInterviewType } from "@/lib/interviews/interview-types"
 
 interface Interview {
   id: string
@@ -90,8 +91,6 @@ export default function InterviewDetailPage() {
     }
   }
 
-  const formatType = (t: string) => t.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())
-
   if (loading) return <div className="p-6"><div className="text-center py-12">Loading...</div></div>
   if (!interview) return <div className="p-6"><div className="text-center py-12 text-gray-500">Interview not found</div></div>
 
@@ -104,7 +103,7 @@ export default function InterviewDetailPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">{interview.interviewee_name}</h1>
-          <p className="mt-1 text-gray-600">{formatType(interview.interview_type)} Interview</p>
+          <p className="mt-1 text-gray-600">{formatInterviewType(interview.interview_type)} Interview</p>
         </div>
         <div className="flex items-center space-x-2">
           {interview.status === "scheduled" && (
@@ -137,7 +136,7 @@ export default function InterviewDetailPage() {
           <CardContent className="space-y-3">
             <div>
               <span className="text-xs text-gray-500">Type</span>
-              <p className="text-sm font-medium">{formatType(interview.interview_type)}</p>
+              <p className="text-sm font-medium">{formatInterviewType(interview.interview_type)}</p>
             </div>
             <div>
               <span className="text-xs text-gray-500">Scheduled</span>

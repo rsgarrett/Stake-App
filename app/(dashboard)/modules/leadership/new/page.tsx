@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { createClient } from "@/lib/supabase/client"
+import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 
 const ORGANIZATIONS = [
   "Stake Presidency",
@@ -135,10 +136,10 @@ export default function NewCallingPage() {
                   Type <span className="text-red-500">*</span>
                 </label>
                 <select id="type" required value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value as any })} className={inputClass}>
-                  <option value="Calling">Calling</option>
-                  <option value="Release">Release</option>
-                  <option value="Assignment">Assignment</option>
-                  <option value="MP">Melchizedek Priesthood</option>
+                  <option value="Calling">{englishMenuTitleCase("Calling")}</option>
+                  <option value="Release">{englishMenuTitleCase("Release")}</option>
+                  <option value="Assignment">{englishMenuTitleCase("Assignment")}</option>
+                  <option value="MP">{englishMenuTitleCase("Melchizedek priesthood")}</option>
                 </select>
               </div>
               <div>
@@ -146,9 +147,9 @@ export default function NewCallingPage() {
                   Status <span className="text-red-500">*</span>
                 </label>
                 <select id="status" required value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value as any })} className={inputClass}>
-                  <option value="pending">Pending</option>
-                  <option value="active">Active</option>
-                  <option value="released">Released</option>
+                  <option value="pending">{englishMenuTitleCase("Pending")}</option>
+                  <option value="active">{englishMenuTitleCase("Active")}</option>
+                  <option value="released">{englishMenuTitleCase("Released")}</option>
                 </select>
               </div>
             </div>
@@ -175,9 +176,11 @@ export default function NewCallingPage() {
                 Organization
               </label>
               <select id="organization" value={formData.organization} onChange={(e) => setFormData({ ...formData, organization: e.target.value })} className={inputClass}>
-                <option value="">Select organization...</option>
+                <option value="">{englishMenuTitleCase("Select organization...")}</option>
                 {ORGANIZATIONS.map((org) => (
-                  <option key={org} value={org}>{org}</option>
+                  <option key={org} value={org}>
+                    {englishMenuTitleCase(org)}
+                  </option>
                 ))}
               </select>
             </div>

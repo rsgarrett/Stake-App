@@ -10,6 +10,7 @@ import {
   Calendar, Clock, BookOpen, Users, ClipboardList, CheckCircle,
   Copy, MessageSquare,
 } from "lucide-react"
+import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 
 export interface CalendarItem { date: string; time: string; event: string }
 export interface ActionItem { assigned_to: string; status: string; assignment: string }
@@ -274,10 +275,15 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
           <Button variant="outline" size="sm" onClick={() => loadAgenda(getNextDate())} className="ml-2">Today</Button>
           {allKnownDates.length > 0 && (
             <select className="text-sm border rounded-md px-2 py-1 text-gray-700" value={agenda.meeting_date} onChange={(e) => loadAgenda(e.target.value)}>
-              {!allKnownDates.includes(agenda.meeting_date) && <option value={agenda.meeting_date}>{formatShortDate(agenda.meeting_date)} (new)</option>}
+              {!allKnownDates.includes(agenda.meeting_date) && (
+                <option value={agenda.meeting_date}>
+                  {formatShortDate(agenda.meeting_date)} {englishMenuTitleCase("(new)")}
+                </option>
+              )}
               {[...allKnownDates].reverse().map((d) => (
                 <option key={d} value={d}>
-                  {formatShortDate(d)}{allDates.includes(d) ? "" : " (scheduled)"}
+                  {formatShortDate(d)}
+                  {allDates.includes(d) ? "" : ` ${englishMenuTitleCase("(scheduled)")}`}
                 </option>
               ))}
             </select>
@@ -408,9 +414,9 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
                       <div className="grid grid-cols-12 gap-2 items-center">
                         <input type="text" value={item.assigned_to} onChange={(e) => { const items = [...agenda.action_items]; items[idx] = { ...items[idx], assigned_to: e.target.value }; update("action_items", items) }} placeholder="Assigned to" className={`${inputClass} col-span-4`} />
                         <select value={item.status} onChange={(e) => { const items = [...agenda.action_items]; items[idx] = { ...items[idx], status: e.target.value }; update("action_items", items) }} className={`${inputClass} col-span-3`}>
-                          <option value="Assigned">Assigned</option>
-                          <option value="In Progress">In Progress</option>
-                          <option value="Completed">Completed</option>
+                          <option value="Assigned">{englishMenuTitleCase("Assigned")}</option>
+                          <option value="In Progress">{englishMenuTitleCase("In Progress")}</option>
+                          <option value="Completed">{englishMenuTitleCase("Completed")}</option>
                         </select>
                         <input type="text" value={item.assignment} onChange={(e) => { const items = [...agenda.action_items]; items[idx] = { ...items[idx], assignment: e.target.value }; update("action_items", items) }} placeholder="Assignment description" className={`${inputClass} col-span-4`} />
                         <button onClick={() => update("action_items", agenda.action_items.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 col-span-1 flex justify-center"><Trash2 className="h-4 w-4" /></button>
@@ -508,9 +514,9 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
           <div className="flex items-center gap-2">
             <label className="text-sm text-gray-500">Status:</label>
             <select value={agenda.status} onChange={(e) => update("status", e.target.value)} className="text-sm border rounded-md px-2 py-1 text-gray-700">
-              <option value="upcoming">Upcoming</option>
-              <option value="in_progress">In Progress</option>
-              <option value="completed">Completed</option>
+              <option value="upcoming">{englishMenuTitleCase("Upcoming")}</option>
+              <option value="in_progress">{englishMenuTitleCase("In Progress")}</option>
+              <option value="completed">{englishMenuTitleCase("Completed")}</option>
             </select>
           </div>
           <Button onClick={saveAgenda} disabled={saving} size="lg">

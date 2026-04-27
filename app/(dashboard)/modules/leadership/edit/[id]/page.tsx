@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
 import { ArrowLeft, CheckCircle2, UserPlus, Users, ShieldCheck, Vote, Hand, Sparkles } from "lucide-react"
+import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 
 const ORGANIZATIONS = [
   "Stake Presidency", "High Council", "Stake Clerk", "Stake Executive Secretary",
@@ -274,25 +275,29 @@ export default function EditCallingPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
                 <select value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value })} className={inputClass}>
-                  <option value="Calling">Calling</option>
-                  <option value="Release">Release</option>
-                  <option value="Assignment">Assignment</option>
-                  <option value="MP">Melchizedek Priesthood</option>
+                  <option value="Calling">{englishMenuTitleCase("Calling")}</option>
+                  <option value="Release">{englishMenuTitleCase("Release")}</option>
+                  <option value="Assignment">{englishMenuTitleCase("Assignment")}</option>
+                  <option value="MP">{englishMenuTitleCase("Melchizedek priesthood")}</option>
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                 <select value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value })} className={inputClass}>
-                  <option value="pending">Pending</option>
-                  <option value="active">Active</option>
-                  <option value="released">Released</option>
+                  <option value="pending">{englishMenuTitleCase("Pending")}</option>
+                  <option value="active">{englishMenuTitleCase("Active")}</option>
+                  <option value="released">{englishMenuTitleCase("Released")}</option>
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Ward</label>
                 <select value={formData.ward} onChange={(e) => setFormData({ ...formData, ward: e.target.value })} className={inputClass}>
-                  <option value="">Select ward...</option>
-                  {WARDS.map((w) => <option key={w} value={w}>{w}</option>)}
+                  <option value="">{englishMenuTitleCase("Select ward...")}</option>
+                  {WARDS.map((w) => (
+                    <option key={w} value={w}>
+                      {englishMenuTitleCase(w)}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -311,8 +316,12 @@ export default function EditCallingPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Organization</label>
               <select value={formData.organization} onChange={(e) => setFormData({ ...formData, organization: e.target.value })} className={inputClass}>
-                <option value="">Select...</option>
-                {ORGANIZATIONS.map((org) => <option key={org} value={org}>{org}</option>)}
+                <option value="">{englishMenuTitleCase("Select...")}</option>
+                {ORGANIZATIONS.map((org) => (
+                  <option key={org} value={org}>
+                    {englishMenuTitleCase(org)}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -403,9 +412,13 @@ export default function EditCallingPage() {
                             onChange={(e) => setFormData({ ...formData, extend_authority: e.target.value })}
                             className={inputClass}
                           >
-                            <option value={auth.extend}>{auth.extend} (recommended)</option>
+                            <option value={auth.extend}>
+                              {englishMenuTitleCase(auth.extend)} ({englishMenuTitleCase("recommended")})
+                            </option>
                             {AUTHORITY_LEVELS.filter((a) => a !== auth.extend).map((a) => (
-                              <option key={a} value={a}>{a}</option>
+                              <option key={a} value={a}>
+                                {englishMenuTitleCase(a)}
+                              </option>
                             ))}
                           </select>
                         </div>
@@ -433,9 +446,13 @@ export default function EditCallingPage() {
                             onChange={(e) => setFormData({ ...formData, set_apart_authority: e.target.value })}
                             className={inputClass}
                           >
-                            <option value={auth.setApart}>{auth.setApart} (recommended)</option>
+                            <option value={auth.setApart}>
+                              {englishMenuTitleCase(auth.setApart)} ({englishMenuTitleCase("recommended")})
+                            </option>
                             {AUTHORITY_LEVELS.filter((a) => a !== auth.setApart).map((a) => (
-                              <option key={a} value={a}>{a}</option>
+                              <option key={a} value={a}>
+                                {englishMenuTitleCase(a)}
+                              </option>
                             ))}
                           </select>
                         </div>

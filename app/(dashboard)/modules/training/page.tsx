@@ -6,7 +6,8 @@ import { safeQuery } from "@/lib/utils/safe-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button, buttonVariants } from "@/components/ui/button"
 import Link from "next/link"
-import { BookOpen, CheckCircle2, Clock, Plus, AlertTriangle, Users } from "lucide-react"
+import { BookOpen, CheckCircle2, Clock, Plus, AlertTriangle, Users, GraduationCap, Church } from "lucide-react"
+import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 
 interface TrainingModule {
   id: string
@@ -110,7 +111,15 @@ export default function TrainingPage() {
           <h1 className="text-3xl font-bold text-gray-900">Training & Resources</h1>
           <p className="mt-2 text-gray-600">Training modules, handbook resources, and policy updates</p>
         </div>
-        <div className="flex space-x-2">
+        <div className="flex flex-wrap gap-2">
+          <Link href="/modules/training/high-council" className={buttonVariants({ variant: "default" })}>
+            <GraduationCap className="h-4 w-4 mr-2" />
+            High Council Training
+          </Link>
+          <Link href="/modules/training/bishop" className={buttonVariants({ variant: "outline" })}>
+            <Church className="h-4 w-4 mr-2" />
+            Bishop Training
+          </Link>
           <Link href="/modules/training/handbook" className={buttonVariants({ variant: "outline" })}><BookOpen className="h-4 w-4 mr-2" />Handbook</Link>
           <Link href="/modules/training/compliance" className={buttonVariants({ variant: "outline" })}><Users className="h-4 w-4 mr-2" />Compliance Dashboard</Link>
           <Button onClick={() => setAddingModule(true)}><Plus className="h-4 w-4 mr-2" />Add Module</Button>
@@ -149,9 +158,9 @@ export default function TrainingPage() {
               <input type="text" placeholder="Module title *" value={newModule.title} onChange={(e) => setNewModule({ ...newModule, title: e.target.value })} className={inputClass} />
               <textarea rows={2} placeholder="Description" value={newModule.description} onChange={(e) => setNewModule({ ...newModule, description: e.target.value })} className={inputClass} />
               <select value={newModule.module_type} onChange={(e) => setNewModule({ ...newModule, module_type: e.target.value })} className={inputClass}>
-                <option value="required">Required</option>
-                <option value="recommended">Recommended</option>
-                <option value="optional">Optional</option>
+                <option value="required">{englishMenuTitleCase("Required")}</option>
+                <option value="recommended">{englishMenuTitleCase("Recommended")}</option>
+                <option value="optional">{englishMenuTitleCase("Optional")}</option>
               </select>
               <div className="flex space-x-2">
                 <Button onClick={addModule} disabled={!newModule.title}>Add Module</Button>

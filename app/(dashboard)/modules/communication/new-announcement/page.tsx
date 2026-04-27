@@ -8,6 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 
+import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
+
 const inputClass = "w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
 
 const AUDIENCES = [
@@ -100,14 +102,18 @@ export default function NewAnnouncementPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Audience</label>
                 <select value={formData.target_audience} onChange={(e) => setFormData({ ...formData, target_audience: e.target.value })} className={inputClass}>
-                  {AUDIENCES.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+                  {AUDIENCES.map((a) => (
+                    <option key={a.value} value={a.value}>
+                      {englishMenuTitleCase(a.label)}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
                 <select value={formData.priority} onChange={(e) => setFormData({ ...formData, priority: e.target.value as any })} className={inputClass}>
-                  <option value="normal">Normal</option>
-                  <option value="high">High</option>
+                  <option value="normal">{englishMenuTitleCase("Normal")}</option>
+                  <option value="high">{englishMenuTitleCase("High")}</option>
                 </select>
               </div>
             </div>

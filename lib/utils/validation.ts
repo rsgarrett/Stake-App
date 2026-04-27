@@ -54,7 +54,7 @@ export const missionaryApplicationSchema = z.object({
 // Temple interview schemas
 export const templeInterviewSchema = z.object({
   interviewee_name: z.string().min(1),
-  interview_type: z.enum(["temple_recommend", "calling", "worthiness"]),
+  interview_type: z.string().min(1),
   scheduled_date: z.string().datetime(),
   conducted_date: z.string().datetime().optional(),
   interviewer_id: z.string().uuid(),

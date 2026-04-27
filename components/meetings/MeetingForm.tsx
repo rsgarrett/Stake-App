@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ExternalLink } from "lucide-react"
 import { getAgendaTemplateUrl } from "@/lib/meetings/agenda-templates"
+import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 
 interface StandardMeetingTemplate {
   id: string
@@ -279,14 +280,14 @@ export function MeetingForm({
                     }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   >
-                    <option value="">Select a meeting type...</option>
+                    <option value="">{englishMenuTitleCase("Select a meeting type...")}</option>
                     {sortedStandardTemplates.map((t) => (
                       <option key={t.id} value={t.id}>
-                        {t.title}
-                        {t.category ? ` (${t.category})` : ""}
+                        {englishMenuTitleCase(t.title)}
+                        {t.category ? ` (${englishMenuTitleCase(t.category)})` : ""}
                       </option>
                     ))}
-                    <option value="__custom__">Other (custom)…</option>
+                    <option value="__custom__">{englishMenuTitleCase("Other (custom)…")}</option>
                   </select>
                   <p className="text-xs text-gray-500 mt-1">
                     Standard stake meetings from the handbook catalog.
@@ -364,13 +365,13 @@ export function MeetingForm({
                       }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     >
-                      <option value="">Select a meeting...</option>
+                      <option value="">{englishMenuTitleCase("Select a meeting...")}</option>
                       {existingMeetingNames.map((name) => (
                         <option key={name} value={name}>
-                          {name}
+                          {englishMenuTitleCase(name)}
                         </option>
                       ))}
-                      <option value="__custom__">+ New meeting name...</option>
+                      <option value="__custom__">{englishMenuTitleCase("+ New meeting name...")}</option>
                     </select>
                   </div>
                 ) : (
@@ -484,7 +485,7 @@ export function MeetingForm({
                       formData.color === color.value ? "border-gray-900" : "border-gray-300"
                     }`}
                     style={{ backgroundColor: color.color }}
-                    title={color.label}
+                    title={englishMenuTitleCase(color.label)}
                   />
                 ))}
               </div>
@@ -506,7 +507,7 @@ export function MeetingForm({
               >
                 {RECURRENCE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
-                    {option.label}
+                    {englishMenuTitleCase(option.label)}
                   </option>
                 ))}
               </select>
@@ -531,7 +532,7 @@ export function MeetingForm({
                               : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                           }`}
                         >
-                          {day.label}
+                          {englishMenuTitleCase(day.label)}
                         </button>
                       ))}
                     </div>

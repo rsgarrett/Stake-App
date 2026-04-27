@@ -21,6 +21,7 @@ import {
   CheckCircle,
   Copy,
 } from "lucide-react"
+import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 
 interface CalendarItem {
   date: string
@@ -371,7 +372,9 @@ export default function SPMeetingAgendaPage() {
               onChange={(e) => loadAgenda(e.target.value)}
             >
               {!allDates.includes(agenda.meeting_date) && (
-                <option value={agenda.meeting_date}>{formatShortDate(agenda.meeting_date)} (new)</option>
+                <option value={agenda.meeting_date}>
+                  {formatShortDate(agenda.meeting_date)} {englishMenuTitleCase("(new)")}
+                </option>
               )}
               {allDates.map((d) => (
                 <option key={d} value={d}>
@@ -611,7 +614,7 @@ export default function SPMeetingAgendaPage() {
                           >
                             {CORE_AREAS.map((area) => (
                               <option key={area} value={area}>
-                                {area}
+                                {englishMenuTitleCase(area)}
                               </option>
                             ))}
                           </select>
@@ -627,11 +630,11 @@ export default function SPMeetingAgendaPage() {
                             }
                             className={inputClass}
                           >
-                            <option value="TBD">TBD</option>
-                            <option value="Decision">Decision Needed</option>
-                            <option value="Action">Action Required</option>
-                            <option value="In Progress">In Progress</option>
-                            <option value="Completed">Completed</option>
+                            <option value="TBD">{englishMenuTitleCase("TBD")}</option>
+                            <option value="Decision">{englishMenuTitleCase("Decision needed")}</option>
+                            <option value="Action">{englishMenuTitleCase("Action required")}</option>
+                            <option value="In Progress">{englishMenuTitleCase("In progress")}</option>
+                            <option value="Completed">{englishMenuTitleCase("Completed")}</option>
                           </select>
                         </div>
                         <div className="flex items-end">
@@ -700,9 +703,9 @@ export default function SPMeetingAgendaPage() {
               onChange={(e) => update("status", e.target.value)}
               className="text-sm border rounded-md px-2 py-1 text-gray-700"
             >
-              <option value="upcoming">Upcoming</option>
-              <option value="in_progress">In Progress</option>
-              <option value="completed">Completed</option>
+              <option value="upcoming">{englishMenuTitleCase("Upcoming")}</option>
+              <option value="in_progress">{englishMenuTitleCase("In progress")}</option>
+              <option value="completed">{englishMenuTitleCase("Completed")}</option>
             </select>
           </div>
           <Button onClick={saveAgenda} disabled={saving} size="lg">

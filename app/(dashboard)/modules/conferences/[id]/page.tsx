@@ -24,6 +24,7 @@ import { defaultStakeConferenceSessionDate, normalizeStakeConferenceWeekend } fr
 import { programItemAllowsDuration, programItemMinutesForTotal } from "@/lib/conferences/program-item-duration"
 import { PROGRAM_ITEM_LABELS } from "@/lib/conferences/program-item-labels"
 import { CONDUCTING_SHEET_HEADER_QUOTES } from "@/lib/conferences/conducting-sheet-header-quotes"
+import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 import {
   anyStandardOpeningTypeInProgram,
   hasStandardOpeningPrefix,
@@ -777,10 +778,10 @@ export default function ConferenceDetailPage() {
               {editingPresiding && (
                 <div className="mt-1 flex items-center gap-2">
                   <select value={presidingInput} onChange={(e) => setPresidingInput(e.target.value)} className="px-2 py-1 rounded text-sm text-gray-900 bg-white/90">
-                    <option value="">Select...</option>
-                    <option value="Stake President">Stake President</option>
-                    <option value="Area Seventy">Area Seventy</option>
-                    <option value="General Authority">General Authority</option>
+                    <option value="">{englishMenuTitleCase("Select...")}</option>
+                    <option value="Stake President">{englishMenuTitleCase("Stake president")}</option>
+                    <option value="Area Seventy">{englishMenuTitleCase("Area seventy")}</option>
+                    <option value="General Authority">{englishMenuTitleCase("General authority")}</option>
                   </select>
                   <input type="text" value={presidingInput} onChange={(e) => setPresidingInput(e.target.value)} placeholder="Or type a name..." className="px-2 py-1 rounded text-sm text-gray-900 bg-white/90 w-48" onKeyDown={(e) => e.key === "Enter" && savePresiding()} />
                   <button onClick={savePresiding} className="text-white hover:text-indigo-200"><Check className="h-4 w-4" /></button>
@@ -824,7 +825,9 @@ export default function ConferenceDetailPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Session Type</label>
                     <select value={newSessionType} onChange={(e) => setNewSessionType(e.target.value as ConferenceSessionType)} className={inputClass}>
                       {Object.entries(SESSION_TYPE_LABELS).map(([value, label]) => (
-                        <option key={value} value={value}>{label}</option>
+                        <option key={value} value={value}>
+                          {englishMenuTitleCase(label)}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -1241,7 +1244,9 @@ export default function ConferenceDetailPage() {
                                         className={selectClass}
                                       >
                                         {typeOptionsForAdd.map(([val, lbl]) => (
-                                          <option key={val} value={val}>{lbl}</option>
+                                          <option key={val} value={val}>
+                                            {englishMenuTitleCase(lbl)}
+                                          </option>
                                         ))}
                                       </select>
                                       )}
@@ -1313,7 +1318,9 @@ export default function ConferenceDetailPage() {
                                         className={selectClass}
                                       >
                                         {Object.entries(INVITE_STATUS_STYLES).map(([val, s]) => (
-                                          <option key={val} value={val}>{s.label}</option>
+                                          <option key={val} value={val}>
+                                            {englishMenuTitleCase(s.label)}
+                                          </option>
                                         ))}
                                       </select>
                                     </td>
@@ -1605,9 +1612,9 @@ export default function ConferenceDetailPage() {
                 <div className="mb-4 p-4 border border-indigo-200 rounded-lg bg-indigo-50">
                   <div className="space-y-3">
                     <select value={noteForm.note_type} onChange={(e) => setNoteForm({ ...noteForm, note_type: e.target.value as "general" | "followup" | "feedback" })} className={inputClass}>
-                      <option value="general">General Note</option>
-                      <option value="followup">Follow-up Action</option>
-                      <option value="feedback">Feedback</option>
+                      <option value="general">{englishMenuTitleCase("General note")}</option>
+                      <option value="followup">{englishMenuTitleCase("Follow-up action")}</option>
+                      <option value="feedback">{englishMenuTitleCase("Feedback")}</option>
                     </select>
                     <textarea value={noteForm.content} onChange={(e) => setNoteForm({ ...noteForm, content: e.target.value })} placeholder="Write your note..." rows={3} className={inputClass} />
                   </div>

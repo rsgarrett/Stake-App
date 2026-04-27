@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { CalendarView } from "@/components/meetings/CalendarView"
+import { CalendarView, type CalendarEvent } from "@/components/meetings/CalendarView"
 import { MeetingForm, MeetingFormData } from "@/components/meetings/MeetingForm"
 import { Calendar, List, Plus } from "lucide-react"
 import { format } from "date-fns"
@@ -325,9 +325,14 @@ export default function MeetingsPage() {
     setShowForm(true)
   }
 
-  const handleEventClick = (event: Meeting) => {
+  const handleMeetingRowClick = (event: Meeting) => {
     setSelectedMeeting(event)
     setShowForm(true)
+  }
+
+  const handleCalendarEventClick = (event: CalendarEvent) => {
+    const meeting = meetings.find((m) => m.id === event.id)
+    if (meeting) handleMeetingRowClick(meeting)
   }
 
   // Convert meetings to calendar events format
@@ -355,14 +360,14 @@ export default function MeetingsPage() {
       })
 
   if (showForm) {
-    const initialData = selectedMeeting
+    const initialData: Partial<MeetingFormData> | undefined = selectedMeeting
       ? {
           title: selectedMeeting.title,
           meeting_type: selectedMeeting.meeting_type,
           scheduled_date: selectedMeeting.scheduled_date,
-          end_date: selectedMeeting.end_date,
-          location: selectedMeeting.location,
-          color: selectedMeeting.color,
+          end_date: selectedMeeting.end_date ?? undefined,
+          location: selectedMeeting.location ?? undefined,
+          color: selectedMeeting.color ?? undefined,
         }
       : selectedDate
       ? {
@@ -453,7 +458,7 @@ export default function MeetingsPage() {
           <CalendarView
             events={expandedMeetings}
             onDateClick={handleDateClick}
-            onEventClick={handleEventClick}
+            onEventClick={handleCalendarEventClick}
             onAddEvent={() => setShowForm(true)}
           />
 
@@ -512,7 +517,7 @@ export default function MeetingsPage() {
                     <div
                       key={meeting.id}
                       className="border-b pb-3 cursor-pointer hover:bg-gray-50 p-2 rounded"
-                      onClick={() => handleEventClick(meeting)}
+                      onClick={() => handleMeetingRowClick(meeting)}
                     >
                       <div className="font-medium">{meeting.title}</div>
                       <div className="text-sm text-gray-600">{meeting.meeting_type}</div>

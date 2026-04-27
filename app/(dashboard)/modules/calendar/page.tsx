@@ -6,6 +6,7 @@ import { safeQuery } from "@/lib/utils/safe-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Calendar, ChevronLeft, ChevronRight, AlertTriangle, Download, List, LayoutGrid } from "lucide-react"
+import { formatInterviewType } from "@/lib/interviews/interview-types"
 
 interface UnifiedEvent {
   id: string
@@ -67,7 +68,7 @@ export default function UnifiedCalendarPage() {
       interviews?.forEach((i) => events.push({
         id: `interview-${i.id}`, title: `Interview: ${i.interviewee_name}`, start: new Date(i.scheduled_date),
         source: "interview", color: SOURCE_COLORS.interview,
-        extra: i.interview_type.replace(/_/g, " "),
+        extra: formatInterviewType(i.interview_type),
       }))
 
       // Conferences

@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 
 const AVAILABLE_TABLES = [
   "callings",
@@ -93,10 +94,10 @@ export function GoogleSheetsImporter() {
             onChange={(e) => setSelectedTable(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
-            <option value="">Choose a table...</option>
+            <option value="">{englishMenuTitleCase("Choose a table...")}</option>
             {AVAILABLE_TABLES.map((table) => (
               <option key={table} value={table}>
-                {table.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
+                {englishMenuTitleCase(table.replace(/_/g, " "))}
               </option>
             ))}
           </select>

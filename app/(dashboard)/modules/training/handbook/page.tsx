@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ArrowLeft, Search, BookOpen } from "lucide-react"
+import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 
 interface HandbookSection {
   id: string
@@ -65,8 +66,12 @@ export default function HandbookPage() {
         </div>
         <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}
           className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
-          <option value="all">All Categories</option>
-          {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+          <option value="all">{englishMenuTitleCase("All categories")}</option>
+          {categories.map((c) => (
+            <option key={c} value={c}>
+              {englishMenuTitleCase(c)}
+            </option>
+          ))}
         </select>
       </div>
 

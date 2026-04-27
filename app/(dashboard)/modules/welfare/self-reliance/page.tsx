@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ArrowLeft, Plus, CheckCircle2, Clock, XCircle } from "lucide-react"
+import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 
 interface Participant {
   id: string
@@ -111,7 +112,11 @@ export default function SelfReliancePage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <input type="text" placeholder="Participant name *" value={formData.participant_name} onChange={(e) => setFormData({ ...formData, participant_name: e.target.value })} className={inputClass} />
               <select value={formData.course_name} onChange={(e) => setFormData({ ...formData, course_name: e.target.value })} className={inputClass}>
-                {COURSES.map((c) => <option key={c} value={c}>{c}</option>)}
+                {COURSES.map((c) => (
+                  <option key={c} value={c}>
+                    {englishMenuTitleCase(c)}
+                  </option>
+                ))}
               </select>
               <input type="date" value={formData.start_date} onChange={(e) => setFormData({ ...formData, start_date: e.target.value })} className={inputClass} />
             </div>
@@ -127,8 +132,12 @@ export default function SelfReliancePage() {
       <div className="mb-4">
         <select value={courseFilter} onChange={(e) => setCourseFilter(e.target.value)}
           className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
-          <option value="all">All Courses</option>
-          {uniqueCourses.map((c) => <option key={c} value={c}>{c}</option>)}
+          <option value="all">{englishMenuTitleCase("All courses")}</option>
+          {uniqueCourses.map((c) => (
+            <option key={c} value={c}>
+              {englishMenuTitleCase(c)}
+            </option>
+          ))}
         </select>
       </div>
 

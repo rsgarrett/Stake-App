@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "generate-key": "node scripts/generate-encryption-key.js"
+    "generate-key": "node scripts/generate-encryption-key.js",
+    "generate-calendar-migration": "node scripts/generate-2026-calendar-migration.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.4",

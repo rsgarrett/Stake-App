@@ -22,12 +22,12 @@ export default async function InterviewsPage() {
     .order("scheduled_date", { ascending: true })
     .limit(10)
 
-  // Fetch recent completed interviews
-  const { data: completed } = await supabase
+  const { data: missed } = await supabase
     .from("interviews")
     .select("*")
-    .eq("status", "completed")
-    .order("conducted_date", { ascending: false })
+    .eq("status", "scheduled")
+    .lt("scheduled_date", new Date().toISOString())
+    .order("scheduled_date", { ascending: true })
     .limit(10)
 
   return (
@@ -71,28 +71,26 @@ export default async function InterviewsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Recent Completed Interviews</CardTitle>
-            <CardDescription>Recently conducted interviews</CardDescription>
+            <CardTitle>Missed interviews</CardTitle>
+            <CardDescription>Scheduled past their time — follow up, complete, or reschedule</CardDescription>
           </CardHeader>
           <CardContent>
-            {completed && completed.length > 0 ? (
+            {missed && missed.length > 0 ? (
               <div className="space-y-4">
-                {completed.map((interview) => (
+                {missed.map((interview) => (
                   <div key={interview.id} className="border-b pb-3">
                     <div className="font-medium">{interview.interviewee_name}</div>
                     <div className="text-sm text-gray-600 capitalize">
                       {interview.interview_type.replace("_", " ")}
                     </div>
-                    {interview.conducted_date && (
-                      <div className="text-xs text-gray-500 mt-1">
-                        {new Date(interview.conducted_date).toLocaleDateString()}
-                      </div>
-                    )}
+                    <div className="text-xs text-amber-700 mt-1 font-medium">
+                      Was scheduled {new Date(interview.scheduled_date).toLocaleString()}
+                    </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-gray-500">No completed interviews found</p>
+              <p className="text-gray-500">No missed interviews</p>
             )}
           </CardContent>
         </Card>

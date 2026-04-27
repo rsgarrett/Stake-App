@@ -22,6 +22,7 @@ import {
   Trash2,
 } from "lucide-react"
 import { format, addDays, subDays } from "date-fns"
+import { formatInterviewType } from "@/lib/interviews/interview-types"
 
 interface Meeting {
   id: string
@@ -427,7 +428,7 @@ export default function DayViewPage() {
                         <div>
                           <h3 className="font-semibold text-gray-900">{interview.interviewee_name}</h3>
                           <p className="text-sm text-gray-500 mt-0.5">
-                            {interview.interview_type.replace(/_/g, " ")}
+                            {formatInterviewType(interview.interview_type)}
                           </p>
                         </div>
                         <span className={`text-xs font-medium px-2 py-1 rounded-full ${

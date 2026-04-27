@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { useParams } from "next/navigation"
+import { useParams, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -12,6 +12,8 @@ import {
 } from "lucide-react"
 
 import type { MissionReadyMissionary, MissionReadyProgress } from "@/types"
+import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
+import { MISSION_INTERVIEW_TYPE } from "@/lib/interviews/interview-types"
 
 const inputClass = "w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
 
@@ -26,7 +28,9 @@ const STATUS_OPTIONS = [
 
 export default function MissionReadyDetailPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const missionaryId = params.id as string
+  const fromInterviewSchedule = searchParams.get("from") === "interview-schedule"
   const supabase = createClient()
 
   const [missionary, setMissionary] = useState<MissionReadyMissionary | null>(null)
@@ -95,6 +99,22 @@ export default function MissionReadyDetailPage() {
         <ArrowLeft className="h-4 w-4 mr-1" /> Back to Missionary Work
       </Link>
 
+      {fromInterviewSchedule && (
+        <div className="mb-4 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-950">
+          <p className="font-medium">Mission interview is on the calendar</p>
+          <p className="mt-1 text-indigo-900/90">
+            Date and time were saved with the interview. Checklist updates here save automatically. Open the form again
+            if you need to change date, time, or location.
+          </p>
+          <Link
+            href={`/modules/interviews/schedule?interviewee=${encodeURIComponent(missionary.missionary_name)}&type=${MISSION_INTERVIEW_TYPE}`}
+            className="mt-2 inline-flex font-medium text-indigo-700 underline hover:text-indigo-900"
+          >
+            Open schedule form for this person
+          </Link>
+        </div>
+      )}
+
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
@@ -108,7 +128,9 @@ export default function MissionReadyDetailPage() {
             className={`px-3 py-1.5 text-sm rounded-full border-0 font-medium ${currentStatus.bg} ${currentStatus.text} cursor-pointer`}
           >
             {STATUS_OPTIONS.map((s) => (
-              <option key={s.value} value={s.value}>{s.label}</option>
+              <option key={s.value} value={s.value}>
+                {englishMenuTitleCase(s.label)}
+              </option>
             ))}
           </select>
         </div>
