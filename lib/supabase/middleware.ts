@@ -3,12 +3,22 @@ import { NextResponse, type NextRequest } from "next/server"
 import { isHttpDevHost } from "@/lib/http-dev-host"
 
 export async function updateSession(request: NextRequest) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim()
+  // Prefer NEXT_PUBLIC_* (matches browser client). Also accept non-public names — some teams
+  // duplicate these in Vercel if Edge reads them more reliably than NEXT_PUBLIC_* alone.
+  const supabaseUrl =
+    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || process.env.SUPABASE_URL?.trim()
+  const supabaseAnonKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ||
+    process.env.SUPABASE_ANON_KEY?.trim()
   if (!supabaseUrl || !supabaseAnonKey) {
-    console.error("[middleware] Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY")
+    console.error(
+      "[middleware] Missing Supabase URL/anon key (need NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_ANON_KEY or SUPABASE_URL + SUPABASE_ANON_KEY)"
+    )
     return new NextResponse(
-      "Missing Supabase env on the server. In Vercel: Project → Settings → Environment Variables — set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY for Production (no extra spaces), Save, then Redeploy.",
+      "Missing Supabase env on Vercel. Open this project → Settings → Environment Variables. Add for Production:\n\n" +
+        "NEXT_PUBLIC_SUPABASE_URL = (from Supabase → Project Settings → API → Project URL)\n" +
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY = (anon / public API key)\n\n" +
+        "Enable Production on both, Save, then Deployments → Redeploy.",
       { status: 503 }
     )
   }
