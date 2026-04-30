@@ -3,6 +3,11 @@ import { NextResponse, type NextRequest } from "next/server"
 import { isHttpDevHost } from "@/lib/http-dev-host"
 
 export async function updateSession(request: NextRequest) {
+  // Bypass Supabase for env probe — otherwise we'd 503 before the route runs (same as other /api routes).
+  if (request.nextUrl.pathname === "/api/health/env") {
+    return NextResponse.next({ request })
+  }
+
   // Prefer NEXT_PUBLIC_* (matches browser client). Also accept non-public names — some teams
   // duplicate these in Vercel if Edge reads them more reliably than NEXT_PUBLIC_* alone.
   const supabaseUrl =
