@@ -3,49 +3,50 @@ import { NextResponse, type NextRequest } from "next/server"
 import { isHttpDevHost } from "@/lib/http-dev-host"
 
 export async function updateSession(request: NextRequest) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error("[middleware] Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY")
+    return new NextResponse("Application configuration error", { status: 503 })
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   })
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet, headers) {
-          const { hostname, protocol } = request.nextUrl
-          const relaxCookies = isHttpDevHost(hostname, protocol)
-
-          cookiesToSet.forEach(({ name, value, options }) => {
-            request.cookies.set(name, value)
-          })
-
-          supabaseResponse = NextResponse.next({
-            request,
-          })
-
-          cookiesToSet.forEach(({ name, value, options }) => {
-            const cookieOptions = { ...options }
-            if (relaxCookies) {
-              if (cookieOptions.sameSite === "none") {
-                cookieOptions.sameSite = "lax"
-              }
-              cookieOptions.secure = false
-            }
-
-            supabaseResponse.cookies.set(name, value, cookieOptions)
-          })
-
-          Object.entries(headers).forEach(([key, value]) => {
-            supabaseResponse.headers.set(key, value)
-          })
-        },
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll()
       },
-    }
-  )
+      setAll(cookiesToSet, headers) {
+        const { hostname, protocol } = request.nextUrl
+        const relaxCookies = isHttpDevHost(hostname, protocol)
+
+        // Do not call request.cookies.set — it throws on Vercel Edge (immutable request).
+        // Only set cookies and cache headers on the response (Supabase SSR pattern).
+        supabaseResponse = NextResponse.next({
+          request,
+        })
+
+        cookiesToSet.forEach(({ name, value, options }) => {
+          const cookieOptions = { ...options }
+          if (relaxCookies) {
+            if (cookieOptions.sameSite === "none") {
+              cookieOptions.sameSite = "lax"
+            }
+            cookieOptions.secure = false
+          }
+
+          supabaseResponse.cookies.set(name, value, cookieOptions)
+        })
+
+        Object.entries(headers).forEach(([key, value]) => {
+          supabaseResponse.headers.set(key, value)
+        })
+      },
+    },
+  })
 
   // getUser() validates the JWT with Supabase and refreshes expired access tokens.
   // getSession() only reads cookies and does NOT refresh — after ~1h idle you appear logged out.
