@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
+import { isHttpDevHost } from "@/lib/http-dev-host"
 
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url)
+  const requestUrl = new URL(request.url)
+  const { searchParams, origin } = requestUrl
   const code = searchParams.get("code")
   const next = searchParams.get("next") ?? "/modules/leadership"
+  const relaxCookies = isHttpDevHost(requestUrl.hostname, requestUrl.protocol)
 
   if (code) {
     const cookieStore = await cookies()
@@ -17,13 +20,14 @@ export async function GET(request: Request) {
           getAll() {
             return cookieStore.getAll()
           },
-          setAll(cookiesToSet) {
+          setAll(cookiesToSet, _headers) {
             cookiesToSet.forEach(({ name, value, options }) => {
-              cookieStore.set(name, value, {
-                ...options,
-                sameSite: "lax",
-                secure: false,
-              })
+              const merged = { ...options }
+              if (relaxCookies) {
+                if (merged.sameSite === "none") merged.sameSite = "lax"
+                merged.secure = false
+              }
+              cookieStore.set(name, value, merged)
             })
           },
         },

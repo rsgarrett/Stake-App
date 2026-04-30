@@ -182,7 +182,10 @@ export default function ConferenceDetailPage() {
   const [visitForm, setVisitForm] = useState({ presidency_member: "", visitee_name: "", ward: "", start_time: "", end_time: "", notes: "" })
   const [visitError, setVisitError] = useState<string | null>(null)
   const [showAddNote, setShowAddNote] = useState(false)
-  const [noteForm, setNoteForm] = useState({ content: "", note_type: "general" as const })
+  const [noteForm, setNoteForm] = useState<{
+    content: string
+    note_type: "general" | "followup" | "feedback"
+  }>({ content: "", note_type: "general" })
   const [showAddSuggestion, setShowAddSuggestion] = useState(false)
   const [suggestionForm, setSuggestionForm] = useState({ suggested_name: "", suggested_role: "", notes: "" })
 
@@ -1191,7 +1194,11 @@ export default function ConferenceDetailPage() {
                                           type="text"
                                           value={editForm.topic ?? item.topic ?? ""}
                                           onChange={(e) => setEditForm((f) => ({ ...f, topic: e.target.value }))}
-                                          onBlur={(e) => void patchProgramItem(item.id, { topic: e.target.value.trim() || null })}
+                                          onBlur={(e) =>
+                                            void patchProgramItem(item.id, {
+                                              topic: e.target.value.trim() || undefined,
+                                            })
+                                          }
                                           placeholder="Topic"
                                           className={inputClass}
                                         />
@@ -1201,7 +1208,11 @@ export default function ConferenceDetailPage() {
                                           type="text"
                                           value={editForm.notes ?? item.notes ?? ""}
                                           onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
-                                          onBlur={(e) => void patchProgramItem(item.id, { notes: e.target.value.trim() || null })}
+                                          onBlur={(e) =>
+                                            void patchProgramItem(item.id, {
+                                              notes: e.target.value.trim() || undefined,
+                                            })
+                                          }
                                           placeholder="Notes"
                                           className={inputClass}
                                         />
@@ -1282,7 +1293,11 @@ export default function ConferenceDetailPage() {
                                         type="text"
                                         value={editForm.assigned_to ?? item.assigned_to ?? ""}
                                         onChange={(e) => setEditForm((f) => ({ ...f, assigned_to: e.target.value }))}
-                                        onBlur={(e) => void patchProgramItem(item.id, { assigned_to: e.target.value.trim() || null })}
+                                        onBlur={(e) =>
+                                        void patchProgramItem(item.id, {
+                                          assigned_to: e.target.value.trim() || undefined,
+                                        })
+                                      }
                                         placeholder="Name..."
                                         className={inputClass}
                                       />
@@ -1292,7 +1307,11 @@ export default function ConferenceDetailPage() {
                                         type="text"
                                         value={editForm.topic ?? item.topic ?? ""}
                                         onChange={(e) => setEditForm((f) => ({ ...f, topic: e.target.value }))}
-                                        onBlur={(e) => void patchProgramItem(item.id, { topic: e.target.value.trim() || null })}
+                                        onBlur={(e) =>
+                                            void patchProgramItem(item.id, {
+                                              topic: e.target.value.trim() || undefined,
+                                            })
+                                          }
                                         placeholder="Topic or hymn..."
                                         className={inputClass}
                                       />
@@ -1302,7 +1321,11 @@ export default function ConferenceDetailPage() {
                                         type="text"
                                         value={editForm.notes ?? item.notes ?? ""}
                                         onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
-                                        onBlur={(e) => void patchProgramItem(item.id, { notes: e.target.value.trim() || null })}
+                                        onBlur={(e) =>
+                                            void patchProgramItem(item.id, {
+                                              notes: e.target.value.trim() || undefined,
+                                            })
+                                          }
                                         placeholder="Notes..."
                                         className={inputClass}
                                       />
@@ -1389,8 +1412,8 @@ export default function ConferenceDetailPage() {
                                         defaultValue={item.assigned_to ?? ""}
                                         placeholder="Name..."
                                         onBlur={(e) => {
-                                          const v = e.target.value.trim() || null
-                                          const prev = item.assigned_to?.trim() || null
+                                          const v = e.target.value.trim() || undefined
+                                          const prev = item.assigned_to?.trim() || undefined
                                           if (v !== prev) void patchProgramItem(item.id, { assigned_to: v })
                                         }}
                                         className={`${inputClass} py-1.5 text-sm`}
@@ -1611,7 +1634,16 @@ export default function ConferenceDetailPage() {
               {showAddNote && (
                 <div className="mb-4 p-4 border border-indigo-200 rounded-lg bg-indigo-50">
                   <div className="space-y-3">
-                    <select value={noteForm.note_type} onChange={(e) => setNoteForm({ ...noteForm, note_type: e.target.value as "general" | "followup" | "feedback" })} className={inputClass}>
+                    <select
+                      value={noteForm.note_type}
+                      onChange={(e) =>
+                        setNoteForm({
+                          ...noteForm,
+                          note_type: e.target.value as "general" | "followup" | "feedback",
+                        })
+                      }
+                      className={inputClass}
+                    >
                       <option value="general">{englishMenuTitleCase("General note")}</option>
                       <option value="followup">{englishMenuTitleCase("Follow-up action")}</option>
                       <option value="feedback">{englishMenuTitleCase("Feedback")}</option>

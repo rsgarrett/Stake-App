@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { Suspense, useState, useEffect, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -117,6 +117,20 @@ function formatShortDate(dateStr: string): string {
 }
 
 export default function SPMeetingAgendaPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-6 flex min-h-[40vh] items-center justify-center text-gray-500 text-sm">
+          Loading…
+        </div>
+      }
+    >
+      <SPMeetingAgendaContent />
+    </Suspense>
+  )
+}
+
+function SPMeetingAgendaContent() {
   const supabase = createClient()
   const searchParams = useSearchParams()
   const dateParam = searchParams.get("date")

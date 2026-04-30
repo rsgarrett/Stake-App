@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
+import { isHttpDevHost } from "@/lib/http-dev-host"
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -11,38 +12,35 @@ export async function updateSession(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value ?? null
-        },
         getAll() {
           return request.cookies.getAll()
         },
-        setAll(cookiesToSet) {
-          const isLocalhost = request.nextUrl.hostname === "localhost"
-          
+        setAll(cookiesToSet, headers) {
+          const { hostname, protocol } = request.nextUrl
+          const relaxCookies = isHttpDevHost(hostname, protocol)
+
           cookiesToSet.forEach(({ name, value, options }) => {
             request.cookies.set(name, value)
           })
-          
-          // Create new response with updated cookies
+
           supabaseResponse = NextResponse.next({
             request,
           })
-          
-          // Set cookies with localhost-friendly options
+
           cookiesToSet.forEach(({ name, value, options }) => {
-            // Adjust cookie options for localhost
             const cookieOptions = { ...options }
-            if (isLocalhost) {
-              // On localhost, use Lax instead of None (None requires Secure)
+            if (relaxCookies) {
               if (cookieOptions.sameSite === "none") {
                 cookieOptions.sameSite = "lax"
               }
-              // Don't use Secure on localhost (http://)
               cookieOptions.secure = false
             }
-            
+
             supabaseResponse.cookies.set(name, value, cookieOptions)
+          })
+
+          Object.entries(headers).forEach(([key, value]) => {
+            supabaseResponse.headers.set(key, value)
           })
         },
       },

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { Suspense, useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -14,6 +14,20 @@ const inputClass =
   "w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
 
 export default function ScheduleInterviewPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-6 flex min-h-[40vh] items-center justify-center text-gray-500 text-sm">
+          Loading…
+        </div>
+      }
+    >
+      <ScheduleInterviewContent />
+    </Suspense>
+  )
+}
+
+function ScheduleInterviewContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [loading, setLoading] = useState(false)

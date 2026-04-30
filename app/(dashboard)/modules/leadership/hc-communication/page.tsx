@@ -496,9 +496,13 @@ export default function HCCommunicationPage() {
                           <div className="flex items-center space-x-2">
                             <span className="font-medium text-gray-900">{m.member_name}</span>
                             {hasReportedThisWeek ? (
-                              <CheckCircle2 className="h-4 w-4 text-green-500" title="Reported this week" />
+                              <span title="Reported this week" className="inline-flex">
+                                <CheckCircle2 className="h-4 w-4 text-green-500" aria-hidden />
+                              </span>
                             ) : (
-                              <Clock className="h-4 w-4 text-amber-400" title="Not yet reported this week" />
+                              <span title="Not yet reported this week" className="inline-flex">
+                                <Clock className="h-4 w-4 text-amber-400" aria-hidden />
+                              </span>
                             )}
                           </div>
                           <div className="text-sm text-gray-500">

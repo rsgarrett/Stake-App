@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { CalendarView, type CalendarEvent } from "@/components/meetings/CalendarView"
 import { MeetingForm, MeetingFormData } from "@/components/meetings/MeetingForm"
-import { Calendar, List, BookOpen, ArrowLeft, Plus, Clock, MapPin, ExternalLink, Repeat, Edit, User } from "lucide-react"
+import { Calendar, List, BookOpen, ArrowLeft, Plus, Clock, MapPin, ExternalLink, Repeat, Edit, User, Trash2, Loader2 } from "lucide-react"
 import { format, isSameDay, eachDayOfInterval, parseISO, startOfDay } from "date-fns"
 import { getAgendaTemplateUrl, hasAgendaTemplate } from "@/lib/meetings/agenda-templates"
 import { formatInterviewType } from "@/lib/interviews/interview-types"
@@ -336,6 +336,8 @@ export default function MeetingsPage() {
     closing_prayer: string; handbook_trainer: string; handbook_topic: string; goal: string;
   }>>({})
   const [loading, setLoading] = useState(true)
+  /** Tracks an in-flight delete from list view (interview or meeting). */
+  const [deletingListItem, setDeletingListItem] = useState<{ kind: "interview" | "meeting"; id: string } | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -496,6 +498,55 @@ export default function MeetingsPage() {
       setScheduleByDate(byDate)
     } catch (error) {
       console.error("Error loading schedule details:", error)
+    }
+  }
+
+  const deleteListInterview = async (id: string) => {
+    if (
+      !confirm(
+        "Delete this interview? Related notes and schedule slots will be removed. This cannot be undone."
+      )
+    ) {
+      return
+    }
+    setDeletingListItem({ kind: "interview", id })
+    try {
+      const { error } = await supabase.from("interviews").delete().eq("id", id)
+      if (error) throw error
+      await loadInterviews()
+    } catch (err: unknown) {
+      console.error(err)
+      const message = err instanceof Error ? err.message : "Could not delete this interview."
+      alert(message)
+    } finally {
+      setDeletingListItem(null)
+    }
+  }
+
+  const deleteListMeeting = async (id: string) => {
+    if (
+      !confirm(
+        "Delete this meeting? Agendas and related data for this meeting will be removed. This cannot be undone."
+      )
+    ) {
+      return
+    }
+    setDeletingListItem({ kind: "meeting", id })
+    try {
+      const { error } = await supabase.from("meetings").delete().eq("id", id)
+      if (error) throw error
+      if (selectedMeeting?.id === id) {
+        setSelectedMeeting(null)
+        setShowForm(false)
+      }
+      await loadMeetings()
+      await loadAgendaItems()
+    } catch (err: unknown) {
+      console.error(err)
+      const message = err instanceof Error ? err.message : "Could not delete this meeting."
+      alert(message)
+    } finally {
+      setDeletingListItem(null)
     }
   }
 
@@ -1022,6 +1073,24 @@ export default function MeetingsPage() {
                                             <Edit className="h-3.5 w-3.5" />
                                             Edit
                                           </button>
+                                          <button
+                                            type="button"
+                                            title="Delete meeting"
+                                            aria-label="Delete meeting"
+                                            disabled={
+                                              deletingListItem?.kind === "meeting" &&
+                                              deletingListItem.id === meeting.id
+                                            }
+                                            onClick={() => void deleteListMeeting(meeting.id)}
+                                            className="inline-flex items-center justify-center rounded-md px-2 py-1 text-gray-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100 disabled:opacity-50 disabled:pointer-events-none"
+                                          >
+                                            {deletingListItem?.kind === "meeting" &&
+                                            deletingListItem.id === meeting.id ? (
+                                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                            ) : (
+                                              <Trash2 className="h-3.5 w-3.5" />
+                                            )}
+                                          </button>
                                         </div>
                                       </div>
                                       {meeting.location && (
@@ -1120,6 +1189,24 @@ export default function MeetingsPage() {
                                             <Edit className="h-3.5 w-3.5" />
                                             Edit
                                           </button>
+                                          <button
+                                            type="button"
+                                            title="Delete meeting"
+                                            aria-label="Delete meeting"
+                                            disabled={
+                                              deletingListItem?.kind === "meeting" &&
+                                              deletingListItem.id === meeting.id
+                                            }
+                                            onClick={() => void deleteListMeeting(meeting.id)}
+                                            className="inline-flex items-center justify-center rounded-md px-2 py-1 text-gray-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100 disabled:opacity-50 disabled:pointer-events-none"
+                                          >
+                                            {deletingListItem?.kind === "meeting" &&
+                                            deletingListItem.id === meeting.id ? (
+                                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                            ) : (
+                                              <Trash2 className="h-3.5 w-3.5" />
+                                            )}
+                                          </button>
                                         </div>
                                       </div>
                                       {meeting.location && (
@@ -1185,17 +1272,38 @@ export default function MeetingsPage() {
                             <h3 className="font-semibold text-gray-900 truncate">Interview: {inv.interviewee_name}</h3>
                             <p className="text-sm text-gray-500 mt-0.5">{formatInterviewType(inv.interview_type)}</p>
                           </div>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              openInterviewRow()
-                            }}
-                            className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-50 text-violet-800 hover:bg-violet-100"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                            Open
-                          </button>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              title="Delete interview appointment"
+                              aria-label="Delete interview appointment"
+                              disabled={
+                                deletingListItem?.kind === "interview" && deletingListItem.id === inv.id
+                              }
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                void deleteListInterview(inv.id)
+                              }}
+                              className="inline-flex items-center justify-center rounded-md p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:pointer-events-none"
+                            >
+                              {deletingListItem?.kind === "interview" && deletingListItem.id === inv.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                openInterviewRow()
+                              }}
+                              className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-50 text-violet-800 hover:bg-violet-100"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                              Open
+                            </button>
+                          </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-gray-500">
                           <span className="inline-flex items-center gap-1">
@@ -1325,6 +1433,25 @@ export default function MeetingsPage() {
                           >
                             <Edit className="h-3.5 w-3.5" />
                             Edit
+                          </button>
+                          <button
+                            type="button"
+                            title="Delete meeting"
+                            aria-label="Delete meeting"
+                            disabled={
+                              deletingListItem?.kind === "meeting" && deletingListItem.id === meeting.id
+                            }
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void deleteListMeeting(meeting.id)
+                            }}
+                            className="inline-flex items-center justify-center rounded-md p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:pointer-events-none"
+                          >
+                            {deletingListItem?.kind === "meeting" && deletingListItem.id === meeting.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
                           </button>
                         </div>
                       </div>

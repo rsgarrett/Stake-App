@@ -23,7 +23,33 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "(auth)",
+    "(dashboard)",
+    "api",
+    "auth-check",
+    "calendar",
+    "communication",
+    "conferences",
+    "dashboard",
+    "export",
+    "google-sheets",
+    "import",
+    "interviews",
+    "layout",
+    "leadership",
+    "meetings",
+    "missionary",
+    "modules",
+    "register",
+    "settings",
+    "temple",
+    "training",
+    "welfare",
+    "youth",
+    "supabase"
+  ]
 }
 
 
