@@ -3,11 +3,14 @@ import { NextResponse, type NextRequest } from "next/server"
 import { isHttpDevHost } from "@/lib/http-dev-host"
 
 export async function updateSession(request: NextRequest) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim()
   if (!supabaseUrl || !supabaseAnonKey) {
     console.error("[middleware] Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY")
-    return new NextResponse("Application configuration error", { status: 503 })
+    return new NextResponse(
+      "Missing Supabase env on the server. In Vercel: Project → Settings → Environment Variables — set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY for Production (no extra spaces), Save, then Redeploy.",
+      { status: 503 }
+    )
   }
 
   let supabaseResponse = NextResponse.next({
