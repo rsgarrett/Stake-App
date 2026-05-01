@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ConductingSheetView } from "@/components/conferences/conducting-sheet-view"
+import { ConferenceProgramMobile } from "@/components/conferences/conference-program-mobile"
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog"
 import Link from "next/link"
 import {
@@ -812,17 +813,6 @@ export default function ConferenceDetailPage() {
         ))}
       </div>
 
-      <p
-        className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-[13px] leading-snug text-amber-950 shadow-sm conducting-no-print lg:hidden"
-        role="note"
-      >
-        <strong className="font-semibold">Small screen?</strong> In Safari use the{" "}
-        <span className="whitespace-nowrap font-medium">aA menu → Website → uncheck Desktop Website</span>
-        ; in Chrome tap <span className="whitespace-nowrap font-medium">⋮ → uncheck Desktop site</span>. Then pull down to refresh.
-        Expanded sessions use a{" "}
-        <span className="font-medium"> sideways-scrolling program table</span>.
-      </p>
-
       </div>
 
       {/* ==================== SESSIONS TAB ==================== */}
@@ -1078,11 +1068,34 @@ export default function ConferenceDetailPage() {
                               <Plus className="h-3.5 w-3.5 mr-1" /> Add name
                             </button>
                           )}
-                          <div className="overflow-x-auto [-webkit-overflow-scrolling:touch] rounded-lg border">
-                            <p className="px-3 pt-3 text-[11px] text-gray-500 md:hidden">
-                              Swipe sideways to see all columns.
-                            </p>
-                            <table className="w-full min-w-[560px] text-sm">
+                          <div className="md:hidden space-y-3 pb-2">
+                            {visits.map((v) => (
+                              <div key={v.id} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                                <p className="text-base font-semibold text-gray-900">{v.visitee_name}</p>
+                                <dl className="mt-2 space-y-1 text-sm text-gray-600">
+                                  <div>
+                                    <dt className="text-[11px] font-semibold uppercase text-gray-400">Visit from</dt>
+                                    <dd>{v.presidency_member || "—"}</dd>
+                                  </div>
+                                  <div>
+                                    <dt className="text-[11px] font-semibold uppercase text-gray-400">Ward</dt>
+                                    <dd>{v.ward || "—"}</dd>
+                                  </div>
+                                  <div>
+                                    <dt className="text-[11px] font-semibold uppercase text-gray-400">Time</dt>
+                                    <dd>{v.start_time ? formatTime(v.start_time) : "—"}</dd>
+                                  </div>
+                                </dl>
+                                <div className="mt-3 flex justify-end border-t border-gray-100 pt-3">
+                                  <button type="button" onClick={() => deleteVisit(v.id)} className="text-red-500" aria-label="Remove visit">
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="hidden md:block overflow-x-auto rounded-lg border [-webkit-overflow-scrolling:touch]">
+                            <table className="w-full text-sm">
                               <thead>
                                 <tr className="bg-gray-50 border-b text-left">
                                   <th className="px-3 py-2 font-medium text-gray-500">Name</th>
@@ -1132,7 +1145,7 @@ export default function ConferenceDetailPage() {
                           </Button>
                         </div>
                       )}
-                      <div className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]">
+                      <div className="overscroll-x-contain">
                         {(() => {
                           const isPresidencyMeeting = session.session_type === "presidency_meeting"
                           const sortedProgramItems = sortProgramItemsByOrder(items)
@@ -1147,11 +1160,28 @@ export default function ConferenceDetailPage() {
                           )
                           return (
                         <>
-                        {!isPresidencyMeeting && (
-                          <p className="mb-2 px-1 text-[11px] text-gray-500 md:hidden">
-                            Swipe sideways for full program row (type, assignee, notes, status).
-                          </p>
-                        )}
+                        <ConferenceProgramMobile
+                          session={session}
+                          itemsUnsorted={items}
+                          totalMin={totalMin}
+                          editingItem={editingItem}
+                          setEditingItem={setEditingItem}
+                          editForm={editForm}
+                          setEditForm={setEditForm}
+                          presidencyItemForm={presidencyItemForm}
+                          setPresidencyItemForm={setPresidencyItemForm}
+                          addingPresidencySessionId={addingPresidencySessionId}
+                          setAddingPresidencySessionId={setAddingPresidencySessionId}
+                          patchProgramItem={patchProgramItem}
+                          deleteProgramItem={deleteProgramItem}
+                          moveProgramItem={moveProgramItem}
+                          cycleInviteStatus={cycleInviteStatus}
+                          addProgramItem={addProgramItem}
+                          addPresidencyItem={addPresidencyItem}
+                          inputClass={inputClass}
+                          selectClass={selectClass}
+                        />
+                        <div className="hidden md:block overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]">
                         <table className={`w-full text-sm ${isPresidencyMeeting ? "min-w-0" : "min-w-[720px]"}`}>
                           <thead>
                             <tr className="bg-gray-50 border-b text-left">
@@ -1543,6 +1573,7 @@ export default function ConferenceDetailPage() {
                             </tr>
                           </tfoot>
                         </table>
+                        </div>
                         </>
                           )
                         })()}
