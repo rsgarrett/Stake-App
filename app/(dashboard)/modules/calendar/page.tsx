@@ -179,12 +179,12 @@ export default function UnifiedCalendarPage() {
 
   return (
     <div className="p-6">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Unified Calendar</h1>
-          <p className="mt-2 text-gray-600">All stake events in one view</p>
+      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">Unified Calendar</h1>
+          <p className="mt-2 text-sm text-gray-600 sm:text-base">All stake events in one view</p>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           <div className="flex border border-gray-300 rounded-md">
             <Button variant={viewMode === "month" ? "default" : "ghost"} size="sm" onClick={() => setViewMode("month")} className="rounded-r-none">
               <LayoutGrid className="h-4 w-4 mr-1" />Month

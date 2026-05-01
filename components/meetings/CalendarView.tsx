@@ -325,8 +325,10 @@ export function CalendarView({
             ref={scrollRef}
             onScroll={updateHeaderFromScroll}
             className={cn(
-              "overflow-y-auto overscroll-y-contain",
-              fillHeight ? "min-h-0 flex-1" : "h-[min(72vh,680px)] min-h-[360px]"
+              "touch-pan-y overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]",
+              fillHeight
+                ? "min-h-[max(260px,min(58dvh,560px))] flex-1"
+                : "h-[min(72dvh,680px)] min-h-[320px]"
             )}
           >
             {weeks.map((week) => (
@@ -406,8 +408,10 @@ export function CalendarView({
         >
           <div
             className={cn(
-              "overflow-y-auto overscroll-y-contain p-2 sm:p-3",
-              fillHeight ? "min-h-0 flex-1" : "max-h-[min(72vh,680px)] min-h-[360px]"
+              "touch-pan-y overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] p-2 sm:p-3",
+              fillHeight
+                ? "min-h-[max(260px,min(58dvh,560px))] flex-1"
+                : "max-h-[min(72dvh,680px)] min-h-[320px]"
             )}
           >
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

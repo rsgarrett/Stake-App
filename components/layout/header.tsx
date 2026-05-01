@@ -4,10 +4,10 @@ import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Bell, MessageSquare } from "lucide-react"
+import { Bell, Menu, MessageSquare } from "lucide-react"
 import Link from "next/link"
 
-export function Header() {
+export function Header({ onMenuToggle }: { onMenuToggle?: () => void }) {
   const router = useRouter()
   const supabase = createClient()
   const [notificationCount, setNotificationCount] = useState(0)
@@ -62,9 +62,19 @@ export function Header() {
 
   return (
     <header className="bg-white shadow-sm border-b">
-      <div className="flex h-16 items-center justify-between px-6">
-        <div className="flex items-center">
-          <h2 className="text-lg font-semibold text-gray-900">
+      <div className="flex h-16 items-center justify-between px-4 sm:px-6">
+        <div className="flex min-w-0 items-center">
+          {onMenuToggle ? (
+            <button
+              type="button"
+              onClick={onMenuToggle}
+              className="mr-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-gray-700 hover:bg-gray-100 md:hidden"
+              aria-label="Open navigation menu"
+            >
+              <Menu className="h-5 w-5" aria-hidden />
+            </button>
+          ) : null}
+          <h2 className="truncate text-base font-semibold text-gray-900 sm:text-lg">
             Stake President Management
           </h2>
         </div>

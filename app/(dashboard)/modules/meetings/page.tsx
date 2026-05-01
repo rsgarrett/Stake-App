@@ -867,11 +867,15 @@ export default function MeetingsPage() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-6">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-4 sm:p-6">
       <div className="mb-4 flex shrink-0 flex-col gap-4 sm:mb-5 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Meetings & Conferences</h1>
-          <p className="mt-2 text-gray-600">Schedule meetings, manage agendas, and plan conferences</p>
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
+            Meetings & Conferences
+          </h1>
+          <p className="mt-2 text-sm text-gray-600 sm:text-base">
+            Schedule meetings, manage agendas, and plan conferences
+          </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <div className="inline-flex rounded-md border border-gray-300 bg-white shadow-sm">
