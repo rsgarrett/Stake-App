@@ -57,7 +57,7 @@ export function ConductingSheetView({
   }, [lagSessions.length])
 
   return (
-    <div className="conducting-sheet-print space-y-8">
+    <div className="conducting-sheet-print space-y-8 px-3 sm:px-0">
       <div className="conducting-no-print rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
         <p className="font-medium text-slate-900">Conducting sheets</p>
         <p className="mt-1 text-slate-600">

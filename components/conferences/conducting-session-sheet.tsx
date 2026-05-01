@@ -118,7 +118,7 @@ export function ConductingSessionSheet({
   return (
     <article
       ref={articleRef}
-      className="conducting-sheet-page w-full bg-white text-slate-900"
+      className="conducting-sheet-page w-full min-w-0 max-w-full break-words bg-white text-slate-900"
       style={{ padding: `${fit.paddingIn}in`, pageBreakAfter: "always", breakAfter: "page" }}
     >
       <div ref={clipRef}>
@@ -127,7 +127,7 @@ export function ConductingSessionSheet({
             <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500">
               Stake conference
             </p>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+            <h1 className="mt-2 break-words text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
               {session.session_label}
             </h1>
             <p className="mt-1 text-base text-slate-700">{event.title}</p>

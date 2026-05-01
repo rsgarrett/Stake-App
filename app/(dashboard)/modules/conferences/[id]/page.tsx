@@ -693,13 +693,13 @@ export default function ConferenceDetailPage() {
   const HANDBOOK_URL = "https://www.churchofjesuschrist.org/study/manual/general-handbook/29-meetings-in-the-church?lang=eng"
 
   return (
-    <div className="conference-detail-root p-6 max-w-6xl mx-auto">
+    <div className="conference-detail-root mx-auto max-w-6xl min-w-0 px-3 py-4 sm:px-6 sm:py-6">
       <div className="conference-detail-print-chrome">
-      <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-        <Link href="/modules/conferences" className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center">
+      <div className="mb-4 flex flex-col gap-3 flex-wrap sm:flex-row sm:items-start sm:justify-between">
+        <Link href="/modules/conferences" className="text-sm text-indigo-600 hover:text-indigo-800 flex shrink-0 items-center">
           <ArrowLeft className="h-4 w-4 mr-1" /> Back to Conferences
         </Link>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-start gap-x-3 gap-y-2">
           <Button
             type="button"
             variant="outline"
@@ -719,11 +719,11 @@ export default function ConferenceDetailPage() {
 
       {/* Header Card */}
       <Card className="mb-6 overflow-hidden">
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-5 text-white">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <h1 className="text-2xl font-bold">{event.title}</h1>
-              <p className="mt-1 text-indigo-100 text-sm">
+        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-4 text-white sm:px-6 sm:py-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 flex-1">
+              <h1 className="break-words text-xl font-bold sm:text-2xl">{event.title}</h1>
+              <p className="mt-1 text-sm text-indigo-100 leading-snug">
                 {event.event_type === "stake_conference" ? (
                   (() => {
                     const w = normalizeStakeConferenceWeekend(event.start_date)
@@ -752,8 +752,8 @@ export default function ConferenceDetailPage() {
                 {event.location && ` · ${event.location}`}
               </p>
               {event.theme && !editingTheme && (
-                <div className="mt-2 flex items-center gap-2">
-                  <span className="text-xs uppercase tracking-wider text-indigo-200">Theme:</span>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className="text-xs uppercase tracking-wider text-indigo-200 shrink-0">Theme:</span>
                   <span className="font-medium text-white">{event.theme}</span>
                   <button onClick={() => { setEditingTheme(true); setThemeInput(event.theme || "") }} className="text-indigo-200 hover:text-white"><Edit2 className="h-3 w-3" /></button>
                 </div>
@@ -762,16 +762,16 @@ export default function ConferenceDetailPage() {
                 <button onClick={() => { setEditingTheme(true); setThemeInput("") }} className="mt-2 text-xs text-indigo-200 hover:text-white underline">+ Add conference theme</button>
               )}
               {editingTheme && (
-                <div className="mt-2 flex items-center gap-2">
-                  <input type="text" value={themeInput} onChange={(e) => setThemeInput(e.target.value)} placeholder="e.g., Stake Vision, Ministering in a Higher Way" className="px-2 py-1 rounded text-sm text-gray-900 bg-white/90 w-80" autoFocus onKeyDown={(e) => e.key === "Enter" && saveTheme()} />
+                <div className="mt-2 flex flex-wrap items-start gap-2">
+                  <input type="text" value={themeInput} onChange={(e) => setThemeInput(e.target.value)} placeholder="e.g., Stake Vision, Ministering in a Higher Way" className="w-full max-w-xl rounded px-2 py-1 text-sm text-gray-900 bg-white/90 sm:max-w-lg" autoFocus onKeyDown={(e) => e.key === "Enter" && saveTheme()} />
                   <button onClick={saveTheme} className="text-white hover:text-indigo-200"><Check className="h-4 w-4" /></button>
                   <button onClick={() => setEditingTheme(false)} className="text-indigo-200 hover:text-white"><X className="h-4 w-4" /></button>
                 </div>
               )}
               {event.presiding_authority && !editingPresiding && (
-                <div className="mt-1 flex items-center gap-2">
-                  <span className="text-xs uppercase tracking-wider text-indigo-200">Presiding:</span>
-                  <span className="text-sm text-white">{event.presiding_authority}</span>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <span className="text-xs uppercase tracking-wider text-indigo-200 shrink-0">Presiding:</span>
+                  <span className="break-words text-sm text-white">{event.presiding_authority}</span>
                   <button onClick={() => { setEditingPresiding(true); setPresidingInput(event.presiding_authority || "") }} className="text-indigo-200 hover:text-white"><Edit2 className="h-3 w-3" /></button>
                 </div>
               )}
@@ -779,14 +779,14 @@ export default function ConferenceDetailPage() {
                 <button onClick={() => { setEditingPresiding(true); setPresidingInput("") }} className="mt-1 text-xs text-indigo-200 hover:text-white underline">+ Set presiding authority</button>
               )}
               {editingPresiding && (
-                <div className="mt-1 flex items-center gap-2">
-                  <select value={presidingInput} onChange={(e) => setPresidingInput(e.target.value)} className="px-2 py-1 rounded text-sm text-gray-900 bg-white/90">
+                <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                  <select value={presidingInput} onChange={(e) => setPresidingInput(e.target.value)} className="w-full max-w-xs rounded px-2 py-1 text-sm text-gray-900 bg-white/90 sm:w-auto">
                     <option value="">{englishMenuTitleCase("Select...")}</option>
                     <option value="Stake President">{englishMenuTitleCase("Stake president")}</option>
                     <option value="Area Seventy">{englishMenuTitleCase("Area seventy")}</option>
                     <option value="General Authority">{englishMenuTitleCase("General authority")}</option>
                   </select>
-                  <input type="text" value={presidingInput} onChange={(e) => setPresidingInput(e.target.value)} placeholder="Or type a name..." className="px-2 py-1 rounded text-sm text-gray-900 bg-white/90 w-48" onKeyDown={(e) => e.key === "Enter" && savePresiding()} />
+                  <input type="text" value={presidingInput} onChange={(e) => setPresidingInput(e.target.value)} placeholder="Or type a name..." className="w-full max-w-sm rounded px-2 py-1 text-sm text-gray-900 bg-white/90 sm:w-48" onKeyDown={(e) => e.key === "Enter" && savePresiding()} />
                   <button onClick={savePresiding} className="text-white hover:text-indigo-200"><Check className="h-4 w-4" /></button>
                   <button onClick={() => setEditingPresiding(false)} className="text-indigo-200 hover:text-white"><X className="h-4 w-4" /></button>
                 </div>
@@ -797,7 +797,7 @@ export default function ConferenceDetailPage() {
       </Card>
 
       {/* Tabs */}
-      <div className="flex space-x-1 border-b mb-6 overflow-x-auto">
+      <div className="-mx-3 mb-6 flex gap-1 overflow-x-auto border-b px-3 pb-px [-webkit-overflow-scrolling:touch] sm:mx-0 sm:px-0">
         {([
           { key: "sessions" as const, label: `Sessions (${sessions.length})`, icon: Calendar },
           { key: "conducting" as const, label: "Conducting Sheets", icon: Printer },
@@ -806,8 +806,8 @@ export default function ConferenceDetailPage() {
           { key: "suggestions" as const, label: `Name Bank (${suggestions.length})`, icon: Lightbulb },
         ]).map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setTabView(key)}
-            className={`flex items-center px-4 py-2 text-sm font-medium border-b-2 -mb-px whitespace-nowrap ${tabView === key ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
-            <Icon className="h-4 w-4 mr-2" />{label}
+            className={`flex shrink-0 items-center rounded-t-md px-2.5 py-2 text-xs font-medium border-b-2 -mb-px sm:px-4 sm:text-sm whitespace-nowrap ${tabView === key ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
+            <Icon className="mr-1.5 h-4 w-4 shrink-0 sm:mr-2" />{label}
           </button>
         ))}
       </div>
@@ -817,13 +817,13 @@ export default function ConferenceDetailPage() {
       {tabView === "sessions" && (
         <div className="space-y-4">
           <div className="flex justify-end">
-            <Button onClick={() => setShowAddSession(true)}><Plus className="h-4 w-4 mr-2" />Add Session</Button>
+            <Button className="w-full sm:w-auto" onClick={() => setShowAddSession(true)}><Plus className="h-4 w-4 mr-2" />Add Session</Button>
           </div>
 
           {showAddSession && (
             <Card>
               <CardContent className="pt-4">
-                <div className="flex items-end gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-start">
                   <div className="flex-1">
                     <label className="block text-sm font-medium text-gray-700 mb-1">Session Type</label>
                     <select value={newSessionType} onChange={(e) => setNewSessionType(e.target.value as ConferenceSessionType)} className={inputClass}>
@@ -876,13 +876,13 @@ export default function ConferenceDetailPage() {
               return (
                 <Card key={session.id} className={`overflow-hidden border-l-4 ${sessionColor}`}>
                   <div
-                    className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50"
+                    className="flex cursor-pointer flex-col gap-3 p-4 hover:bg-gray-50 sm:flex-row sm:items-start sm:justify-between"
                     onClick={() => toggleSession(session.id)}
                   >
-                    <div className="flex items-center space-x-3">
-                      {isExpanded ? <ChevronUp className="h-5 w-5 text-gray-400" /> : <ChevronDown className="h-5 w-5 text-gray-400" />}
-                      <div>
-                        <div className="font-semibold text-gray-900 text-lg">{session.session_label}</div>
+                    <div className="flex min-w-0 flex-1 items-start gap-3">
+                      {isExpanded ? <ChevronUp className="h-5 w-5 shrink-0 text-gray-400 mt-0.5" /> : <ChevronDown className="h-5 w-5 shrink-0 text-gray-400 mt-0.5" />}
+                      <div className="min-w-0">
+                        <div className="break-words text-lg font-semibold text-gray-900">{session.session_label}</div>
                         <div className="text-sm text-gray-500 mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
                           {sessionDateLabel && (
                             <span className="inline-flex items-center gap-1">
@@ -940,7 +940,7 @@ export default function ConferenceDetailPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex shrink-0 items-center justify-end gap-2 sm:pt-0.5 self-end sm:self-start" onClick={(e) => e.stopPropagation()}>
                       <button onClick={() => deleteSession(session.id)} className="text-red-400 hover:text-red-600 p-1" title="Delete session">
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -983,7 +983,7 @@ export default function ConferenceDetailPage() {
                           {(session.session_type !== "ministering_visits" && session.session_type !== "presidency_meeting" && session.session_type !== "leadership_session" && session.session_type !== "dinner") && (
                             <div>
                               <label className="block text-xs font-medium text-gray-500 mb-1">Broadcast URL</label>
-                              <div className="flex items-center gap-1">
+                              <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
                                 <input type="url" defaultValue={session.broadcast_url || ""} placeholder="YouTube link..." onBlur={(e) => updateSessionField(session.id, "broadcast_url", e.target.value)} className={inputClass} />
                                 {session.broadcast_url && (
                                   <a href={session.broadcast_url} target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:text-indigo-700 p-1">
@@ -1050,7 +1050,7 @@ export default function ConferenceDetailPage() {
                           )}
                           {showAddVisit ? (
                             <div className="mb-4 p-4 border border-emerald-200 rounded-lg bg-emerald-50">
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
                                 <input type="text" placeholder="Name being visited *" value={visitForm.visitee_name} onChange={(e) => setVisitForm({ ...visitForm, visitee_name: e.target.value })} className={inputClass} />
                                 <input type="text" placeholder="Who is making the visit" value={visitForm.presidency_member} onChange={(e) => setVisitForm({ ...visitForm, presidency_member: e.target.value })} className={inputClass} />
                                 <input type="text" placeholder="Ward" value={visitForm.ward} onChange={(e) => setVisitForm({ ...visitForm, ward: e.target.value })} className={inputClass} />
@@ -1066,8 +1066,11 @@ export default function ConferenceDetailPage() {
                               <Plus className="h-3.5 w-3.5 mr-1" /> Add name
                             </button>
                           )}
-                          <div className="overflow-x-auto border rounded-lg">
-                            <table className="w-full text-sm">
+                          <div className="overflow-x-auto [-webkit-overflow-scrolling:touch] rounded-lg border">
+                            <p className="px-3 pt-3 text-[11px] text-gray-500 md:hidden">
+                              Swipe sideways to see all columns.
+                            </p>
+                            <table className="w-full min-w-[560px] text-sm">
                               <thead>
                                 <tr className="bg-gray-50 border-b text-left">
                                   <th className="px-3 py-2 font-medium text-gray-500">Name</th>
@@ -1117,7 +1120,7 @@ export default function ConferenceDetailPage() {
                           </Button>
                         </div>
                       )}
-                      <div className="overflow-x-auto">
+                      <div className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]">
                         {(() => {
                           const isPresidencyMeeting = session.session_type === "presidency_meeting"
                           const sortedProgramItems = sortProgramItemsByOrder(items)
@@ -1131,7 +1134,13 @@ export default function ConferenceDetailPage() {
                             ([val]) => !isStandardLagFixedProgramItemType(val as ProgramItemType)
                           )
                           return (
-                        <table className="w-full text-sm">
+                        <>
+                        {!isPresidencyMeeting && (
+                          <p className="mb-2 px-1 text-[11px] text-gray-500 md:hidden">
+                            Swipe sideways for full program row (type, assignee, notes, status).
+                          </p>
+                        )}
+                        <table className={`w-full text-sm ${isPresidencyMeeting ? "min-w-0" : "min-w-[720px]"}`}>
                           <thead>
                             <tr className="bg-gray-50 border-b text-left">
                               {isPresidencyMeeting ? (
@@ -1522,6 +1531,7 @@ export default function ConferenceDetailPage() {
                             </tr>
                           </tfoot>
                         </table>
+                        </>
                           )
                         })()}
                       </div>
@@ -1537,7 +1547,8 @@ export default function ConferenceDetailPage() {
       )}
 
       {tabView === "conducting" && event && (
-        <ConductingSheetView
+        <div className="min-w-0 overflow-x-auto">
+          <ConductingSheetView
           event={{
             title: event.title,
             theme: event.theme,
@@ -1553,6 +1564,7 @@ export default function ConferenceDetailPage() {
           formatSessionDateLong={formatSessionDateLong}
           generateConductingText={generateConductingText}
         />
+        </div>
       )}
 
       {tabView === "business" && (
@@ -1622,12 +1634,12 @@ export default function ConferenceDetailPage() {
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
                   <CardTitle>Post-Conference Notes</CardTitle>
                   <CardDescription>Record follow-up items, feedback, and observations</CardDescription>
                 </div>
-                <Button onClick={() => setShowAddNote(true)}><Plus className="h-4 w-4 mr-2" />Add Note</Button>
+                <Button className="w-full shrink-0 sm:w-auto" onClick={() => setShowAddNote(true)}><Plus className="h-4 w-4 mr-2" />Add Note</Button>
               </div>
             </CardHeader>
             <CardContent>
@@ -1662,8 +1674,8 @@ export default function ConferenceDetailPage() {
               ) : (
                 <div className="space-y-3">
                   {notes.map((n) => (
-                    <div key={n.id} className="flex items-start justify-between p-4 border border-gray-200 rounded-lg">
-                      <div className="flex-1">
+                    <div key={n.id} className="flex flex-col gap-3 border border-gray-200 rounded-lg p-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center space-x-2 mb-1">
                           <span className={`px-2 py-0.5 text-xs rounded-full ${
                             n.note_type === "followup" ? "bg-amber-100 text-amber-700" :
@@ -1676,7 +1688,7 @@ export default function ConferenceDetailPage() {
                         </div>
                         <p className="text-gray-800 text-sm whitespace-pre-wrap">{n.content}</p>
                       </div>
-                      <button onClick={() => deleteNote(n.id)} className="text-red-400 hover:text-red-600 ml-3"><Trash2 className="h-4 w-4" /></button>
+                      <button onClick={() => deleteNote(n.id)} className="self-end text-red-400 hover:text-red-600 sm:self-start sm:ml-3"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   ))}
                 </div>
@@ -1691,12 +1703,12 @@ export default function ConferenceDetailPage() {
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
                   <CardTitle>Name Suggestions</CardTitle>
                   <CardDescription>Track potential speakers, musicians, and participants for future conferences</CardDescription>
                 </div>
-                <Button onClick={() => setShowAddSuggestion(true)}><Plus className="h-4 w-4 mr-2" />Add Suggestion</Button>
+                <Button className="w-full shrink-0 sm:w-auto" onClick={() => setShowAddSuggestion(true)}><Plus className="h-4 w-4 mr-2" />Add Suggestion</Button>
               </div>
             </CardHeader>
             <CardContent>
@@ -1717,8 +1729,8 @@ export default function ConferenceDetailPage() {
               {suggestions.length === 0 ? (
                 <p className="text-center text-gray-500 py-8">No name suggestions yet.</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                <div className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]">
+                  <table className="w-full min-w-[520px] text-sm">
                     <thead>
                       <tr className="border-b text-left">
                         <th className="px-4 py-2 font-medium text-gray-500">Name</th>
