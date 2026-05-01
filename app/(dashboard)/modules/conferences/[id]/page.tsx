@@ -811,6 +811,18 @@ export default function ConferenceDetailPage() {
           </button>
         ))}
       </div>
+
+      <p
+        className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-[13px] leading-snug text-amber-950 shadow-sm conducting-no-print lg:hidden"
+        role="note"
+      >
+        <strong className="font-semibold">Small screen?</strong> In Safari use the{" "}
+        <span className="whitespace-nowrap font-medium">aA menu → Website → uncheck Desktop Website</span>
+        ; in Chrome tap <span className="whitespace-nowrap font-medium">⋮ → uncheck Desktop site</span>. Then pull down to refresh.
+        Expanded sessions use a{" "}
+        <span className="font-medium"> sideways-scrolling program table</span>.
+      </p>
+
       </div>
 
       {/* ==================== SESSIONS TAB ==================== */}

@@ -38,14 +38,22 @@ export default function ConferencesPage() {
   if (loading) return <div className="p-6 text-center py-12 text-gray-500">Loading...</div>
 
   return (
-    <div className="p-6">
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Conferences & Special Events</h1>
-          <p className="mt-2 text-gray-600">Plan conferences and coordinate special events</p>
+    <div className="mx-auto max-w-6xl min-w-0 px-3 py-4 sm:p-6">
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold text-gray-900 break-words sm:text-3xl">
+            Conferences & Special Events
+          </h1>
+          <p className="mt-2 text-sm text-gray-600 sm:text-base">
+            Plan conferences and coordinate special events
+          </p>
         </div>
-        <Link href="/modules/conferences/new-event" className={buttonVariants()}>
-          <Plus className="h-4 w-4 mr-2" />New Event
+        <Link
+          href="/modules/conferences/new-event"
+          className={buttonVariants({ className: "w-full shrink-0 justify-center sm:w-auto" })}
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          New Event
         </Link>
       </div>
 
