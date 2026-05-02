@@ -10,6 +10,10 @@ import { MeetingForm, MeetingFormData } from "@/components/meetings/MeetingForm"
 import { Calendar, List, BookOpen, ArrowLeft, Plus, Clock, MapPin, ExternalLink, Repeat, Edit, User, Trash2, Loader2 } from "lucide-react"
 import { format, isSameDay, eachDayOfInterval, parseISO, startOfDay } from "date-fns"
 import { getAgendaTemplateUrl, hasAgendaTemplate } from "@/lib/meetings/agenda-templates"
+import {
+  dedupeSchedulingStandardTemplates,
+  templateAllowedInStakeMeetingScheduler,
+} from "@/lib/meetings/schedulable-standard-templates"
 import { formatInterviewType } from "@/lib/interviews/interview-types"
 import { navigateInterviewSelection } from "@/lib/interviews/navigate-mission-interview"
 
@@ -340,6 +344,13 @@ export default function MeetingsPage() {
   const [deletingListItem, setDeletingListItem] = useState<{ kind: "interview" | "meeting"; id: string } | null>(null)
   const router = useRouter()
   const supabase = createClient()
+
+  const schedulableStandardTemplates = useMemo(() => {
+    const narrowed = standardTemplates.filter((t) =>
+      templateAllowedInStakeMeetingScheduler(t.meeting_type as string, null)
+    )
+    return dedupeSchedulingStandardTemplates(narrowed)
+  }, [standardTemplates])
 
   useEffect(() => {
     loadMeetings()
@@ -1569,7 +1580,7 @@ export default function MeetingsPage() {
 
       {viewMode === "templates" && (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {standardTemplates.length === 0 ? (
+          {schedulableStandardTemplates.length === 0 ? (
             <p className="py-12 text-center text-gray-500">No standard meeting templates are available.</p>
           ) : (
             <Card>
@@ -1579,7 +1590,7 @@ export default function MeetingsPage() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {standardTemplates.map((template) => (
+                  {schedulableStandardTemplates.map((template) => (
                     <div
                       key={template.id}
                       className="rounded-lg border border-gray-200 p-4 transition-shadow hover:shadow-md"

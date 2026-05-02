@@ -5,6 +5,12 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ExternalLink } from "lucide-react"
 import { getAgendaTemplateUrl } from "@/lib/meetings/agenda-templates"
+import {
+  dedupeSchedulingStandardTemplates,
+  normalizeMeetingTypeSlug,
+  sortSchedulableStandardTemplates,
+  templateAllowedInStakeMeetingScheduler,
+} from "@/lib/meetings/schedulable-standard-templates"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 
 interface StandardMeetingTemplate {
@@ -31,6 +37,8 @@ interface MeetingFormProps {
   initialData?: Partial<MeetingFormData>
   standardTemplates?: StandardMeetingTemplate[]
   existingMeetingNames?: string[]
+  /** Opt-in full handbook picker (every `standard_meeting_templates` row). Default: narrowed coordinating-council catalog only. */
+  allowFullStandardCatalog?: boolean
 }
 
 export interface MeetingFormData {
@@ -75,6 +83,7 @@ const MEETING_TYPE_ROLES: Record<string, string[]> = {
   high_council_meeting: ["stake_presidency", "high_council"],
   stake_council: ["stake_presidency", "high_council", "stake_council"],
   stake_council_meeting: ["stake_presidency", "high_council", "stake_council"],
+  stake_finance_meeting: ["stake_presidency", "bishops"],
   bishopric_meeting: ["stake_presidency"],
   bishops_council: ["stake_presidency"],
   stake_conference: ["all"],
@@ -120,6 +129,7 @@ export function MeetingForm({
   initialData,
   standardTemplates = [],
   existingMeetingNames = [],
+  allowFullStandardCatalog = false,
 }: MeetingFormProps) {
   const [formData, setFormData] = useState<MeetingFormData>({
     title: initialData?.title || "",
@@ -140,28 +150,46 @@ export function MeetingForm({
   const [selectedCatalogId, setSelectedCatalogId] = useState<string>("")
   const [useCustomName, setUseCustomName] = useState(!existingMeetingNames.length || (!!initialData?.title && !existingMeetingNames.includes(initialData.title)))
 
-  const sortedStandardTemplates = useMemo(
-    () =>
-      [...standardTemplates].sort(
+  /** Deduped filtered catalog for the picker (always enforce narrow UX here so deploys can't skip it). */
+  const catalogTemplates = useMemo(() => {
+    const deduped = dedupeSchedulingStandardTemplates([...standardTemplates])
+
+    if (allowFullStandardCatalog) {
+      return deduped.sort(
         (a, b) =>
-          (a.category || "").localeCompare(b.category || "") || a.title.localeCompare(b.title)
-      ),
-    [standardTemplates]
-  )
+          (a.category || "").localeCompare(b.category || "") ||
+          (a.title || "").localeCompare(b.title || "")
+      )
+    }
+
+    let rows = deduped.filter((t) =>
+      templateAllowedInStakeMeetingScheduler(
+        t.meeting_type,
+        initialData?.meeting_type ?? null
+      )
+    )
+    rows = dedupeSchedulingStandardTemplates(rows)
+    return sortSchedulableStandardTemplates(rows)
+  }, [standardTemplates, allowFullStandardCatalog, initialData?.meeting_type])
+
+  const sortedStandardTemplates = catalogTemplates
 
   const agendaTemplateUrl = getAgendaTemplateUrl(formData.meeting_type)
   const preserveScheduleOnTemplate = Boolean(initialData?.scheduled_date)
 
   useEffect(() => {
-    if (!standardTemplates.length || !initialData?.meeting_type) return
-    const t = standardTemplates.find((x) => x.meeting_type === initialData.meeting_type)
+    if (!catalogTemplates.length || !initialData?.meeting_type) return
+    const want = normalizeMeetingTypeSlug(initialData.meeting_type)
+    const t = catalogTemplates.find(
+      (x) => normalizeMeetingTypeSlug(x.meeting_type) === want
+    )
     if (t) setSelectedCatalogId(t.id)
     else setSelectedCatalogId("__custom__")
-  }, [standardTemplates, initialData?.meeting_type])
+  }, [catalogTemplates, initialData?.meeting_type])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (standardTemplates.length > 0) {
+    if (catalogTemplates.length > 0) {
       if (!selectedCatalogId) {
         alert("Please select a meeting type.")
         return
@@ -250,7 +278,7 @@ export function MeetingForm({
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Basic Information */}
           <div className="space-y-4">
-            {standardTemplates.length > 0 ? (
+            {catalogTemplates.length > 0 ? (
               <>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -275,14 +303,14 @@ export function MeetingForm({
                         }))
                         return
                       }
-                      const template = standardTemplates.find((t) => t.id === v)
+                      const template = catalogTemplates.find((t) => t.id === v)
                       if (template) applyTemplateFromCatalog(template)
                     }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   >
                     <option value="">{englishMenuTitleCase("Select a meeting type...")}</option>
                     {sortedStandardTemplates.map((t) => (
-                      <option key={t.id} value={t.id}>
+                      <option key={`${normalizeMeetingTypeSlug(t.meeting_type)}-${t.id}`} value={t.id}>
                         {englishMenuTitleCase(t.title)}
                         {t.category ? ` (${englishMenuTitleCase(t.category)})` : ""}
                       </option>
