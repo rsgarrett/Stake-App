@@ -60,32 +60,18 @@ export function isSchedulableStandardMeetingType(
   return templateAllowedInStakeMeetingScheduler(meetingType, undefined)
 }
 
-const MEETING_TYPE_ORDER = new Map<string, number>(
-  [
-    STAKE_PRESIDENCY_MEETING_TYPE_PREFERRED,
-    "stake_council",
-    HIGH_COUNCIL_MEETING_TYPE_PREFERRED,
-    "bishops_council",
-    "elders_quorum_presidents_council",
-    "relief_society_presidents_council",
-    "stake_finance_meeting",
-    "stake_relief_society_presidency",
-    "missionary_correlation",
-    "temple_family_history",
-  ].map((t, i) => [normalizeMeetingTypeSlug(t), i])
-)
-
-/** Stable stakeholder display order after filtering. */
+/** Display rows alphabetically by title (then meeting_type as a tiebreaker). */
 export function sortSchedulableStandardTemplates<
-  T extends { meeting_type: string },
+  T extends { meeting_type: string; title?: string | null },
 >(templates: T[]): T[] {
-  const orderFor = (mt: string) =>
-    MEETING_TYPE_ORDER.get(normalizeMeetingTypeSlug(mt)) ?? 999
+  const collator = new Intl.Collator("en", { sensitivity: "base" })
 
   return [...templates].sort((a, b) => {
-    const ia = orderFor(a.meeting_type)
-    const ib = orderFor(b.meeting_type)
-    return ia - ib || a.meeting_type.localeCompare(b.meeting_type)
+    const titleA = (a.title ?? "").trim()
+    const titleB = (b.title ?? "").trim()
+    const byTitle = collator.compare(titleA, titleB)
+    if (byTitle !== 0) return byTitle
+    return collator.compare(a.meeting_type, b.meeting_type)
   })
 }
 
