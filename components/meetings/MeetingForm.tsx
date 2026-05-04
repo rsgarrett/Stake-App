@@ -388,7 +388,6 @@ export function MeetingForm({
                     {sortedStandardTemplates.map((t) => (
                       <option key={`${normalizeMeetingTypeSlug(t.meeting_type)}-${t.id}`} value={t.id}>
                         {englishMenuTitleCase(t.title)}
-                        {t.category ? ` (${englishMenuTitleCase(t.category)})` : ""}
                       </option>
                     ))}
                     <option value="__custom__">{englishMenuTitleCase("Other (custom)…")}</option>
