@@ -1,22 +1,17 @@
 /**
  * In-app handbook agenda templates for stake meetings.
  *
- * Each meeting type maps to a list of {@link AgendaItemConfig} rows. The detail
- * page renders the right input(s) based on `field_type`:
+ * Each template mirrors the structure of the corresponding Google-Doc agenda
+ * the stake currently uses, rendered with native in-app input fields. The
+ * detail page picks the right input(s) based on `field_type`:
  *
  *   - "person"        → single name input (prayers)
  *   - "hymn"          → hymn number + hymn name side-by-side
  *   - "trainer"       → person name + section/topic side-by-side
- *   - "sub_items"     → numbered list with + button (action items, callings, council topics, etc.)
+ *   - "sub_items"     → numbered list with + button (action items, council topics, callings, etc.)
  *   - "readonly"      → title only, no editable fields (stake vision)
  *   - "notes"         → single multi-line notes input
  *   - "person_notes"  → person + notes side-by-side (closing thoughts/remarks)
- *
- * The structure is informed by the live Google-Doc agendas the stake currently
- * uses, plus light reorganization for accountability:
- *   • "Action Item Review" appears early to drive follow-through on prior assignments
- *   • Every meeting closes with "New Assignments" so commitments are explicit
- *   • Closing thoughts/remarks are captured before the closing prayer
  */
 
 export type AgendaFieldType =
@@ -60,8 +55,16 @@ const calendarReview: AgendaItemConfig = {
   title: "Calendar Review",
   field_type: "sub_items",
   duration_minutes: 5,
-  sub_item_placeholder: "Add upcoming event (date, time, where)",
-  description: "Upcoming meetings, conferences, ministering visits, and stake events",
+  sub_item_placeholder: "Date — time — event",
+  description: "Upcoming meetings, conferences, and stake events",
+}
+
+const calendarItems: AgendaItemConfig = {
+  title: "Calendar Items",
+  field_type: "sub_items",
+  duration_minutes: 5,
+  sub_item_placeholder: "Date — time — event",
+  description: "Calendar items for your information",
 }
 
 const openingHymn: AgendaItemConfig = {
@@ -82,14 +85,21 @@ const stakeVision: AgendaItemConfig = {
   field_type: "readonly",
   duration_minutes: 3,
   description:
-    "Read the stake vision aloud to anchor the meeting on Christ and on becoming Zion.",
+    "We are centered on Jesus Christ and His atonement and are establishing Zion by loving God and our neighbors as ourselves.",
 }
 
 const handbookTraining: AgendaItemConfig = {
   title: "Handbook Training",
   field_type: "trainer",
   duration_minutes: 10,
-  description: "Trainer + section/topic from the General Handbook",
+  description: "Trainer + handbook section / topic",
+}
+
+const handbookInstruction: AgendaItemConfig = {
+  title: "Handbook Instruction",
+  field_type: "trainer",
+  duration_minutes: 10,
+  description: "Trainer + handbook section / topic",
 }
 
 const closingThoughts: AgendaItemConfig = {
@@ -113,82 +123,56 @@ const closingPrayer: AgendaItemConfig = {
   placeholder: "Who is giving the prayer?",
 }
 
-const actionItemReview: AgendaItemConfig = {
-  title: "Action Item Review",
-  field_type: "sub_items",
-  duration_minutes: 10,
-  sub_item_placeholder: "Owner — assignment — status",
-  description: "Status of assignments from the previous meeting",
-}
-
-const newAssignments: AgendaItemConfig = {
-  title: "New Assignments",
-  field_type: "sub_items",
-  duration_minutes: 5,
-  sub_item_placeholder: "Owner — assignment — due",
-  description: "Capture every commitment so it can be tracked next meeting",
-}
-
-const coordinatingCouncilUpdates: AgendaItemConfig = {
-  title: "Coordinating Council Updates",
-  field_type: "sub_items",
-  duration_minutes: 10,
-  sub_item_placeholder: "Add direction or note from coordinating council",
-  description: "Cascade items from the most recent area / coordinating council",
-}
-
 // -------- Templates ----------------------------------------------------------
 
 export const AGENDA_TEMPLATES: Record<string, AgendaTemplateConfig> = {
   // ---------- Stake Presidency Meeting -------------------------------------
+  // Source: "Stake Pres Mtg Agenda Perpetual" Google Doc
   stake_presidency: {
     label: "Stake Presidency Meeting",
     meeting_types: ["stake_presidency", "stake_presidency_meeting"],
     presiding_field: true,
     conducting_field: true,
     items: [
-      calendarReview,
+      {
+        title: "Review Calendar Items / Announcements",
+        field_type: "sub_items",
+        duration_minutes: 5,
+        sub_item_placeholder: "Date — time — event",
+      },
       openingPrayer,
       stakeVision,
       handbookTraining,
       {
         title: "Agenda Planning",
         field_type: "notes",
-        duration_minutes: 10,
+        duration_minutes: 15,
         placeholder:
-          "Items to add to upcoming HC, Stake Council, or coordinating council agendas",
+          "Items for the next high council, stake council, and coordinating council agendas",
         description:
-          "Decide what goes on the next high council, stake council, and presidents' council agendas",
+          "Agenda Planning, Stake Planning Calendar, HC Return & Report Survey, TR Interviews Schedule",
       },
       {
         title: "Callings, Sustainings & Priesthood Advancement",
         field_type: "sub_items",
         duration_minutes: 15,
-        sub_item_placeholder: "Name — calling/ordination — ward — status",
+        sub_item_placeholder: "Person — ward — calling/ordination — status",
         description:
-          "Calling tracker review, new submissions, sustainings to be set apart/ordained/recorded",
-      },
-      {
-        title: "Stake Business",
-        field_type: "sub_items",
-        duration_minutes: 10,
-        sub_item_placeholder: "Add stake business item",
-        description: "Standing items requiring presidency decision or action",
+          "Calling Tracker, New Calling Submissions, Sustained-to-be-Set-Apart, Stake Business",
       },
       {
         title: "God's Work of Salvation & Exaltation",
         field_type: "sub_items",
-        duration_minutes: 30,
-        sub_item_placeholder: "Topic — owner — desired result (TBD/Decision/Action)",
-        description: "Administration, ward & member needs, and ministry decisions",
+        duration_minutes: 45,
+        sub_item_placeholder: "Core area — item — result (TBD/Decision/Action)",
+        description: "Administration items, decisions, and actions",
       },
-      actionItemReview,
-      newAssignments,
       closingPrayer,
     ],
   },
 
   // ---------- High Council & Stake Council ---------------------------------
+  // Source: "2026 High Council & Stake Council_perpetual" Google Doc
   high_council: {
     label: "High Council / Stake Council Meeting",
     meeting_types: [
@@ -209,11 +193,10 @@ export const AGENDA_TEMPLATES: Record<string, AgendaTemplateConfig> = {
         title: "Returned Missionary Reports",
         field_type: "sub_items",
         duration_minutes: 10,
-        sub_item_placeholder: "Missionary name — mission — testimony/highlights",
-        description: "Recently returned missionaries report and the council asks questions",
+        sub_item_placeholder: "Missionary — mission — highlights",
       },
       {
-        title: "Action Item Review",
+        title: "Action Items",
         field_type: "sub_items",
         duration_minutes: 10,
         sub_item_placeholder: "Who — status — assignment",
@@ -224,8 +207,14 @@ export const AGENDA_TEMPLATES: Record<string, AgendaTemplateConfig> = {
         title: "The Work of Salvation & Exaltation",
         field_type: "sub_items",
         duration_minutes: 30,
-        sub_item_placeholder: "Core area — item — result (TBD/Decision/Action)",
-        description: "Administration items, decisions, and actions",
+        sub_item_placeholder: "Divinely appointed responsibility — item — result",
+        description: "Administration / Assign — item & result (TBD/Decision/Action)",
+      },
+      {
+        title: "Agenda Planning",
+        field_type: "notes",
+        duration_minutes: 5,
+        placeholder: "Items for the next high council / stake council agenda",
       },
       {
         title: "Callings & Ordinations",
@@ -237,9 +226,9 @@ export const AGENDA_TEMPLATES: Record<string, AgendaTemplateConfig> = {
         title: "Assignment Reports",
         field_type: "sub_items",
         duration_minutes: 10,
-        sub_item_placeholder: "Stewardship — how it furthers the stake vision",
+        sub_item_placeholder: "High councilor — stewardship — report",
         description:
-          "Rotating high councilor reports tied to ward stewardship and the stake vision",
+          "How does your stewardship help to further the vision of the stake?",
       },
       {
         title: "Quarterly Report Indicators (ICCG)",
@@ -248,62 +237,43 @@ export const AGENDA_TEMPLATES: Record<string, AgendaTemplateConfig> = {
         sub_item_placeholder: "Indicator — observation",
       },
       {
-        title: "Agenda Planning",
-        field_type: "notes",
+        title: "Additional Items",
+        field_type: "sub_items",
         duration_minutes: 5,
-        placeholder: "Items for the next high council / stake council agenda",
+        sub_item_placeholder: "Add additional item",
       },
-      newAssignments,
       closingThoughts,
       closingPrayer,
     ],
   },
 
   // ---------- Bishops' Council ---------------------------------------------
+  // Source: "Stake Bishops' Council Meeting" Google Doc
   bishops_council: {
     label: "Stake Bishops' Council Meeting",
     meeting_types: ["bishops_council", "stake_bishops_council"],
     presiding_field: true,
     conducting_field: true,
     items: [
-      calendarReview,
+      calendarItems,
       openingHymn,
       openingPrayer,
       stakeVision,
-      coordinatingCouncilUpdates,
       {
-        title: "Council Topics",
+        title: "Agenda — Council Topics",
         field_type: "sub_items",
-        duration_minutes: 35,
-        sub_item_placeholder: "Topic — desired result (discussion / decision / action)",
-        description: "Stake president-led counsel with bishops on ward matters",
+        duration_minutes: 60,
+        sub_item_placeholder: "Topic — desired result (Council/Decision/Action)",
+        description: "Core area — item & result; capture notes for each topic",
       },
-      {
-        title: "Worthiness, Recommends & Priesthood Advancement",
-        field_type: "sub_items",
-        duration_minutes: 10,
-        sub_item_placeholder: "Bishop / ward — interview or advancement note",
-        description:
-          "Coordinate Melchizedek priesthood advancements, recommend renewals, and timing of interviews",
-      },
-      {
-        title: "Sacrament Meeting Coordination",
-        field_type: "sub_items",
-        duration_minutes: 10,
-        sub_item_placeholder: "Date — speakers/topic — ward",
-        description:
-          "Plan upcoming joint sacrament meeting topics, speakers, and special events",
-      },
-      actionItemReview,
-      newAssignments,
-      closingThoughts,
       closingPrayer,
     ],
   },
 
   // ---------- Elders Quorum Presidents' Council ----------------------------
+  // Source: "Stake Elders Quorum Council" Google Doc
   elders_quorum_presidents_council: {
-    label: "Elders Quorum Presidents' Council Meeting",
+    label: "Stake Elders Quorum Presidents' Council",
     meeting_types: [
       "elders_quorum_presidents_council",
       "stake_elders_quorum_council",
@@ -312,43 +282,25 @@ export const AGENDA_TEMPLATES: Record<string, AgendaTemplateConfig> = {
     presiding_field: true,
     conducting_field: true,
     items: [
-      calendarReview,
+      calendarItems,
       openingHymn,
       openingPrayer,
       stakeVision,
-      coordinatingCouncilUpdates,
       {
-        title: "Council Topics",
+        title: "Agenda — Council Topics",
         field_type: "sub_items",
-        duration_minutes: 30,
-        sub_item_placeholder: "Topic — desired result",
-        description: "Counsel together on quorum work across the stake",
+        duration_minutes: 60,
+        sub_item_placeholder: "Topic — desired result (Council/Decision/Action)",
+        description: "Core area — item & result; capture notes for each topic",
       },
-      {
-        title: "Ministering & Quorum Health",
-        field_type: "sub_items",
-        duration_minutes: 15,
-        sub_item_placeholder: "Ward — what's working / what to improve",
-        description: "Ministering interviews, prospective elders, quorum activation",
-      },
-      {
-        title: "Missionary Work & Ward Mission Plan",
-        field_type: "sub_items",
-        duration_minutes: 10,
-        sub_item_placeholder: "Ward — observation or assignment",
-        description:
-          "Coordinate with WMLs and full-time missionaries; review the ward mission plan",
-      },
-      actionItemReview,
-      newAssignments,
-      closingThoughts,
       closingPrayer,
     ],
   },
 
   // ---------- Relief Society Presidents' Council ---------------------------
+  // Source: "Stake Relief Society Council" Google Doc
   relief_society_presidents_council: {
-    label: "Relief Society Presidents' Council Meeting",
+    label: "Stake Relief Society Presidents' Council",
     meeting_types: [
       "relief_society_presidents_council",
       "stake_relief_society_council",
@@ -356,41 +308,23 @@ export const AGENDA_TEMPLATES: Record<string, AgendaTemplateConfig> = {
     presiding_field: true,
     conducting_field: true,
     items: [
-      calendarReview,
+      calendarItems,
       openingHymn,
       openingPrayer,
       stakeVision,
-      coordinatingCouncilUpdates,
       {
-        title: "Council Topics",
+        title: "Agenda — Council Topics",
         field_type: "sub_items",
-        duration_minutes: 30,
-        sub_item_placeholder: "Topic — desired result",
-        description: "Counsel together on Relief Society work across the stake",
+        duration_minutes: 60,
+        sub_item_placeholder: "Topic — desired result (Council/Decision/Action)",
+        description: "Core area — item & result; capture notes for each topic",
       },
-      {
-        title: "Ministering Discussion",
-        field_type: "sub_items",
-        duration_minutes: 15,
-        sub_item_placeholder: "Ward — what's working / what to improve",
-        description: "Ministering interviews, sister activation, ward needs",
-      },
-      {
-        title: "Stake Activities & Conferences",
-        field_type: "sub_items",
-        duration_minutes: 10,
-        sub_item_placeholder: "Activity — date — owner",
-        description:
-          "Plan upcoming stake RS events, women's session, and ward conference participation",
-      },
-      actionItemReview,
-      newAssignments,
-      closingThoughts,
       closingPrayer,
     ],
   },
 
-  // ---------- Stake Relief Society (Presidency / Coordination) ------------
+  // ---------- Stake Relief Society (Coordination) -------------------------
+  // Source: "Relief Society Coordination Meeting Agenda_perpetual" Google Doc
   stake_relief_society_presidency: {
     label: "Stake Relief Society Coordination Meeting",
     meeting_types: [
@@ -404,33 +338,39 @@ export const AGENDA_TEMPLATES: Record<string, AgendaTemplateConfig> = {
       calendarReview,
       openingPrayer,
       stakeVision,
+      handbookInstruction,
       {
-        title: "Handbook Instruction",
-        field_type: "trainer",
+        title: "Action Item: Reports",
+        field_type: "sub_items",
         duration_minutes: 10,
-        description: "Trainer + handbook section",
+        sub_item_placeholder: "Assigned to — status — assignment",
+        description: "Brief reports on assignments and action items",
       },
-      actionItemReview,
+      {
+        title: "Training",
+        field_type: "trainer",
+        duration_minutes: 15,
+        description: "Conducted by + topic",
+      },
       {
         title: "Group Discussion",
         field_type: "sub_items",
         duration_minutes: 25,
-        sub_item_placeholder: "Topic — discussion notes",
-        description: "Coordinated planning across stake auxiliaries and wards",
+        sub_item_placeholder: "Topic — notes",
       },
       {
-        title: "Ward Reports",
+        title: "Action Item: New Assignments",
         field_type: "sub_items",
-        duration_minutes: 10,
-        sub_item_placeholder: "Ward — report or need",
+        duration_minutes: 5,
+        sub_item_placeholder: "Assigned to — status — assignment",
       },
-      newAssignments,
       closingRemarks,
       closingPrayer,
     ],
   },
 
   // ---------- Stake Missionary Correlation Meeting -------------------------
+  // Source: "Stake Missionary Coordination Meeting" Google Doc
   missionary_correlation: {
     label: "Stake Missionary Correlation Meeting",
     meeting_types: [
@@ -444,35 +384,33 @@ export const AGENDA_TEMPLATES: Record<string, AgendaTemplateConfig> = {
       calendarReview,
       openingPrayer,
       stakeVision,
-      actionItemReview,
+      {
+        title: "Action Item: Reports",
+        field_type: "sub_items",
+        duration_minutes: 10,
+        sub_item_placeholder: "Assigned to — status — assignment",
+        description: "Brief reports on assignments and action items",
+      },
       {
         title: "Discussion / Training",
         field_type: "trainer",
         duration_minutes: 15,
-        description: "Trainer + topic (e.g., generating non-member interest)",
+        description: "Conducted by + topic",
       },
       {
-        title: "Ward Mission Plan Reports",
+        title: "Action Item: New Assignments",
         field_type: "sub_items",
-        duration_minutes: 20,
-        sub_item_placeholder: "Ward — WML report — what's working / needs",
-        description: "Each ward briefly reports on their ward mission plan and key indicators",
+        duration_minutes: 5,
+        sub_item_placeholder: "Assigned to — status — assignment",
+        description: "Brief reports on new assignments and action items",
       },
-      {
-        title: "Convert Baptisms & New Member Retention",
-        field_type: "sub_items",
-        duration_minutes: 10,
-        sub_item_placeholder: "Ward — name — first-week temple visit / assignment",
-        description:
-          "Coordinate to get every new convert to the temple within their first week",
-      },
-      newAssignments,
       closingRemarks,
       closingPrayer,
     ],
   },
 
   // ---------- Stake Temple & Family History Correlation Meeting ------------
+  // Source: "Temple & Family History Coordination Meeting" Google Doc
   temple_family_history: {
     label: "Stake Temple & Family History Correlation Meeting",
     meeting_types: [
@@ -487,36 +425,32 @@ export const AGENDA_TEMPLATES: Record<string, AgendaTemplateConfig> = {
       openingHymn,
       openingPrayer,
       stakeVision,
-      actionItemReview,
+      {
+        title: "Action Items",
+        field_type: "sub_items",
+        duration_minutes: 10,
+        sub_item_placeholder: "Assigned to — status — assignment",
+        description: "Brief reports on assignments and action items",
+      },
       {
         title: "Training",
         field_type: "trainer",
         duration_minutes: 15,
-        description: "Trainer + topic (handbook/manual or video resource)",
+        description: "Conducted by + topic",
       },
       {
-        title: "Convert Baptism Coordination",
+        title: "Group Discussion",
         field_type: "sub_items",
-        duration_minutes: 10,
-        sub_item_placeholder: "Ward — convert name — temple visit plan",
-        description:
-          "Help every new convert find a name and attend the temple in their first week",
+        duration_minutes: 20,
+        sub_item_placeholder: "Topic — notes",
       },
-      {
-        title: "Ward Reports",
-        field_type: "sub_items",
-        duration_minutes: 15,
-        sub_item_placeholder: "Ward — consultants — temple/FH activity",
-        description:
-          "Ward T&FH leaders share the status of their plan and youth consultants",
-      },
-      newAssignments,
       closingRemarks,
       closingPrayer,
     ],
   },
 
   // ---------- Stake Finance Meeting ----------------------------------------
+  // No source doc — handbook-aligned default outline.
   stake_finance_meeting: {
     label: "Stake Finance Meeting",
     meeting_types: ["stake_finance_meeting", "stake_finance"],
@@ -528,7 +462,6 @@ export const AGENDA_TEMPLATES: Record<string, AgendaTemplateConfig> = {
         field_type: "sub_items",
         duration_minutes: 5,
         sub_item_placeholder: "Date — finance/audit deadline or event",
-        description: "Audits, tithing settlement window, year-end deadlines",
       },
       openingPrayer,
       stakeVision,
@@ -536,33 +469,26 @@ export const AGENDA_TEMPLATES: Record<string, AgendaTemplateConfig> = {
         title: "Audit Status",
         field_type: "sub_items",
         duration_minutes: 10,
-        sub_item_placeholder: "Ward / unit — audit finding — corrective action",
-        description: "Most recent audit results and outstanding corrective actions",
+        sub_item_placeholder: "Ward / unit — finding — corrective action",
       },
       {
         title: "Stake Budget Review",
         field_type: "sub_items",
         duration_minutes: 15,
         sub_item_placeholder: "Category — variance — action",
-        description:
-          "Year-to-date stake budget vs. plan; reallocations and large upcoming spends",
       },
       {
         title: "Ward Budget & Activity Funding",
         field_type: "sub_items",
         duration_minutes: 10,
         sub_item_placeholder: "Ward — request / concern — decision",
-        description: "Decisions on requests from ward bishoprics and clerks",
       },
       {
         title: "Donations & Tithing Settlement",
         field_type: "sub_items",
         duration_minutes: 10,
         sub_item_placeholder: "Topic — owner",
-        description: "Coordination of donations workflow and tithing settlement",
       },
-      actionItemReview,
-      newAssignments,
       closingPrayer,
     ],
   },
@@ -598,13 +524,18 @@ export function getFieldTypeForTitle(
 
   if (lower.includes("hymn")) return "hymn"
   if (lower.includes("prayer")) return "person"
-  if (lower.includes("handbook training") || lower.includes("handbook instruction"))
+  if (
+    lower.includes("handbook training") ||
+    lower.includes("handbook instruction") ||
+    lower.includes("training / handbook")
+  )
     return "trainer"
   if (
     lower === "training" ||
     lower.startsWith("training ") ||
+    lower.startsWith("training:") ||
     lower.includes("discussion / training") ||
-    lower.includes("training / handbook")
+    lower.includes("discussion/training")
   )
     return "trainer"
   if (lower.includes("stake vision") || lower.includes("vision / goal"))
@@ -625,20 +556,16 @@ export function getFieldTypeForTitle(
     lower.includes("salvation") ||
     lower.includes("ward & member") ||
     lower.includes("ward report") ||
-    lower.includes("ward mission") ||
     lower.includes("ministering") ||
     lower.includes("council topic") ||
-    lower.includes("coordinating council") ||
-    lower.includes("convert baptism") ||
+    lower.includes("topic") ||
+    lower.includes("returned missionary") ||
     lower.includes("audit") ||
     lower.includes("budget") ||
     lower.includes("donation") ||
     lower.includes("tithing") ||
     lower.includes("group discussion") ||
-    lower.includes("returned missionary") ||
-    lower.includes("worthiness") ||
-    lower.includes("sacrament meeting coordination") ||
-    lower.includes("stake activities") ||
+    lower.includes("additional items") ||
     lower.includes("deadlines")
   ) {
     return "sub_items"
@@ -650,11 +577,10 @@ export function getFieldTypeForTitle(
 export function getSubItemPlaceholder(title: string): string {
   const lower = title.toLowerCase()
   if (lower.includes("calendar") || lower.includes("deadline"))
-    return "Add upcoming event or date"
-  if (lower.includes("action item review")) return "Owner — assignment — status"
-  if (lower.includes("new assignment")) return "Owner — assignment — due"
-  if (lower.includes("action item")) return "Owner — assignment — status"
-  if (lower.includes("salvation")) return "Topic — owner — desired result"
+    return "Date — time — event"
+  if (lower.includes("action item")) return "Assigned to — status — assignment"
+  if (lower.includes("salvation"))
+    return "Divinely appointed responsibility — item — result"
   if (
     lower.includes("calling") ||
     lower.includes("ordination") ||
@@ -662,25 +588,18 @@ export function getSubItemPlaceholder(title: string): string {
   )
     return "Person — ward — proposed calling"
   if (lower.includes("assignment report"))
-    return "Stewardship — how it furthers the stake vision"
+    return "High councilor — stewardship — report"
   if (lower.includes("quarterly") || lower.includes("indicator"))
     return "Indicator — observation"
-  if (lower.includes("ward & member")) return "Add ward or member need"
-  if (lower.includes("ward mission")) return "Ward — WML report — what's working / needs"
-  if (lower.includes("ward report") || lower.includes("ward rs")) return "Ward — report or need"
-  if (lower.includes("ministering")) return "Ward — what's working / what to improve"
-  if (lower.includes("council topic")) return "Topic — desired result"
-  if (lower.includes("coordinating council")) return "Add direction or note from coordinating council"
-  if (lower.includes("convert baptism")) return "Ward — convert — temple plan"
-  if (lower.includes("returned missionary")) return "Missionary — mission — highlights"
+  if (lower.includes("returned missionary"))
+    return "Missionary — mission — highlights"
   if (lower.includes("audit")) return "Ward / unit — finding — corrective action"
   if (lower.includes("budget")) return "Category — variance — action"
   if (lower.includes("donation") || lower.includes("tithing")) return "Topic — owner"
-  if (lower.includes("group discussion")) return "Topic — discussion notes"
-  if (lower.includes("stake activities")) return "Activity — date — owner"
-  if (lower.includes("worthiness") || lower.includes("recommend"))
-    return "Bishop / ward — interview or advancement"
-  if (lower.includes("sacrament meeting coordination"))
-    return "Date — speakers/topic — ward"
+  if (lower.includes("group discussion") || lower.includes("topic"))
+    return "Topic — notes"
+  if (lower.includes("additional items")) return "Add additional item"
+  if (lower.includes("council topic"))
+    return "Topic — desired result (Council/Decision/Action)"
   return "Add item"
 }

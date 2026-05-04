@@ -222,6 +222,47 @@ export default function MeetingDetailPage() {
     else await loadAgenda()
   }
 
+  /**
+   * Replace the current meeting's agenda with a fresh copy from the handbook
+   * template. Used when an older template was previously seeded and we want
+   * the latest structure to take its place.
+   */
+  const resetAgendaToTemplate = async () => {
+    if (!meeting) return
+    const tmpl = getTemplateForMeetingType(meeting.meeting_type)
+    if (!tmpl) return
+    if (
+      !confirm(
+        "Replace the current agenda with the handbook template? Any unsaved notes on existing items will be lost."
+      )
+    )
+      return
+
+    const { error: delErr } = await supabase
+      .from("meeting_agendas")
+      .delete()
+      .eq("meeting_id", meetingId)
+    if (delErr) {
+      alert("Error clearing agenda: " + delErr.message)
+      return
+    }
+    const rows = tmpl.items.map((cfg, idx) => ({
+      meeting_id: meetingId,
+      item_order: idx + 1,
+      title: cfg.title,
+      description: null,
+      duration_minutes: cfg.duration_minutes ?? null,
+    }))
+    const { error: insErr } = await supabase.from("meeting_agendas").insert(rows)
+    if (insErr) {
+      alert("Error inserting template: " + insErr.message)
+      return
+    }
+    setEditingItems({})
+    setSubItemInputs({})
+    await loadAgenda()
+  }
+
   const moveAgendaItem = async (index: number, direction: "up" | "down") => {
     if (direction === "up" && index === 0) return
     if (direction === "down" && index === agendaItems.length - 1) return
@@ -999,6 +1040,16 @@ export default function MeetingDetailPage() {
                     <span className="text-sm font-normal text-gray-500 flex items-center">
                       <Clock className="h-4 w-4 mr-1" /> {totalDuration} min
                     </span>
+                  )}
+                  {meetingWriteAllowed && templateConfig && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={resetAgendaToTemplate}
+                      title="Replace the current agenda with the handbook template"
+                    >
+                      Reset to template
+                    </Button>
                   )}
                   {hasUnsavedEdits && (
                     <Button size="sm" onClick={saveAllEdits} disabled={savingAll}>
