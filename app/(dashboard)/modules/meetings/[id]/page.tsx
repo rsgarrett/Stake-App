@@ -8,14 +8,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import Link from "next/link"
 import {
   ArrowLeft, Plus, Trash2, Save, Clock, FileText, ListOrdered,
-  User, MapPin, ExternalLink, ChevronDown, ChevronUp, Music,
+  User, MapPin, ChevronDown, ChevronUp, Music,
   BookOpen, CheckCircle2, Users, MessageSquare, CalendarDays,
 } from "lucide-react"
-import { getAgendaTemplateUrl } from "@/lib/meetings/agenda-templates"
 import {
   getFieldTypeForTitle, getSubItemPlaceholder, getTemplateForMeetingType,
   type AgendaFieldType,
 } from "@/lib/meetings/agenda-field-config"
+import { canManageStakeMeetings } from "@/lib/meetings/meeting-permissions"
 
 interface Meeting {
   id: string
@@ -117,7 +117,28 @@ export default function MeetingDetailPage() {
   const [minutesContent, setMinutesContent] = useState("")
   const [minutesSaving, setMinutesSaving] = useState(false)
 
+  const [userMeetingRole, setUserMeetingRole] = useState<string | null>(null)
+  const meetingWriteAllowed = canManageStakeMeetings(userMeetingRole)
+
   const supabase = createClient()
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) {
+        if (!cancelled) setUserMeetingRole(null)
+        return
+      }
+      const { data } = await supabase.from("users").select("role").eq("id", user.id).maybeSingle()
+      if (!cancelled) setUserMeetingRole(data?.role ?? null)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [supabase])
 
   useEffect(() => { loadAll() }, [meetingId]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -340,7 +361,6 @@ export default function MeetingDetailPage() {
   if (!meeting) return <div className="p-6"><div className="text-center py-12 text-gray-500">Meeting not found</div></div>
 
   const totalDuration = agendaItems.reduce((sum, a) => sum + (a.duration_minutes || 0), 0)
-  const agendaTemplateUrl = getAgendaTemplateUrl(meeting.meeting_type)
   const templateConfig = getTemplateForMeetingType(meeting.meeting_type)
 
   // --- Sub-item list renderer ---
@@ -568,17 +588,6 @@ export default function MeetingDetailPage() {
               )}
             </p>
           </div>
-          {agendaTemplateUrl && !isSimpleView && (
-            <a
-              href={agendaTemplateUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-3 py-1.5 rounded-md hover:bg-indigo-100 transition-colors shrink-0"
-            >
-              <ExternalLink className="h-4 w-4" />
-              Google Doc
-            </a>
-          )}
         </div>
       </div>
 
@@ -607,18 +616,23 @@ export default function MeetingDetailPage() {
                       <input
                         type="text"
                         value={name}
+                        readOnly={!meetingWriteAllowed}
                         onChange={(e) => editVisitName(i, e.target.value)}
                         className="flex-1 bg-transparent text-sm text-gray-900 focus:outline-none"
                       />
                     </div>
+                    {meetingWriteAllowed && (
                     <button
+                      type="button"
                       onClick={() => removeVisitName(i)}
                       className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all p-0.5"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
+                    )}
                   </div>
                 ))}
+                {meetingWriteAllowed && (
                 <div className="flex items-center gap-2 pt-1">
                   <span className="w-6 shrink-0" />
                   <div className="flex items-center gap-2 flex-1 px-3 py-2 border border-dashed border-gray-300 rounded-lg">
@@ -633,6 +647,7 @@ export default function MeetingDetailPage() {
                     />
                   </div>
                   <button
+                    type="button"
                     onClick={addVisitName}
                     disabled={!visitInput.trim()}
                     className="flex items-center justify-center w-8 h-8 rounded-md bg-indigo-50 text-indigo-500 hover:bg-indigo-100 hover:text-indigo-700 disabled:opacity-30 transition-colors"
@@ -640,8 +655,9 @@ export default function MeetingDetailPage() {
                     <Plus className="h-4 w-4" />
                   </button>
                 </div>
+                )}
               </div>
-              {visitDirty && (
+              {meetingWriteAllowed && visitDirty && (
                 <div className="flex justify-end mt-4 pt-4 border-t">
                   <Button onClick={saveVisitNames} disabled={visitSaving}>
                     <Save className="h-4 w-4 mr-2" />{visitSaving ? "Saving..." : "Save"}
@@ -718,18 +734,23 @@ export default function MeetingDetailPage() {
                           <input
                             type="text"
                             value={name}
+                            readOnly={!meetingWriteAllowed}
                             onChange={(e) => editVisitName(i, e.target.value)}
                             className="flex-1 bg-transparent text-sm text-gray-900 focus:outline-none"
                           />
                         </div>
+                        {meetingWriteAllowed && (
                         <button
+                          type="button"
                           onClick={() => removeVisitName(i)}
                           className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all p-0.5"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
+                        )}
                       </div>
                     ))}
+                    {meetingWriteAllowed && (
                     <div className="flex items-center gap-2 pt-1">
                       <span className="w-6 shrink-0" />
                       <div className="flex items-center gap-2 flex-1 px-3 py-2 border border-dashed border-gray-300 rounded-lg">
@@ -744,6 +765,7 @@ export default function MeetingDetailPage() {
                         />
                       </div>
                       <button
+                        type="button"
                         onClick={addVisitName}
                         disabled={!visitInput.trim()}
                         className="flex items-center justify-center w-8 h-8 rounded-md bg-purple-50 text-purple-500 hover:bg-purple-100 hover:text-purple-700 disabled:opacity-30 transition-colors"
@@ -751,8 +773,9 @@ export default function MeetingDetailPage() {
                         <Plus className="h-4 w-4" />
                       </button>
                     </div>
+                    )}
                   </div>
-                  {visitDirty && (
+                  {meetingWriteAllowed && visitDirty && (
                     <div className="flex justify-end mt-4 pt-4 border-t">
                       <Button onClick={saveVisitNames} disabled={visitSaving}>
                         <Save className="h-4 w-4 mr-2" />{visitSaving ? "Saving..." : "Save"}
@@ -817,7 +840,11 @@ export default function MeetingDetailPage() {
                   <ListOrdered className="h-4 w-4 mr-2 text-indigo-600" />
                   Agenda Overview
                 </CardTitle>
-                <CardDescription>Click the Agenda tab to edit items</CardDescription>
+                <CardDescription>
+                  {meetingWriteAllowed
+                    ? "Click the Agenda tab to edit items"
+                    : "Your account can view this meeting; schedule changes require stake leadership"}
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
@@ -854,7 +881,54 @@ export default function MeetingDetailPage() {
       )}
 
       {/* Agenda Tab */}
-      {activeTab === "agenda" && (
+      {activeTab === "agenda" &&
+        (!meetingWriteAllowed ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ListOrdered className="h-4 w-4 text-indigo-600" />
+                Agenda
+              </CardTitle>
+              <CardDescription>View only — contact stake leadership to request changes.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {agendaItems.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">No agenda items.</p>
+              ) : (
+                <div className="space-y-2">
+                  {agendaItems.map((item, idx) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center space-x-3 py-2 border-b border-gray-100 last:border-0"
+                    >
+                      <span className="text-xs font-bold text-gray-400 w-6 text-right">{idx + 1}.</span>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium text-gray-900">{item.title}</span>
+                      </div>
+                      {(item.presenter || item.assigned_to) && (
+                        <span className="text-xs text-indigo-600 flex items-center shrink-0">
+                          <User className="h-3 w-3 mr-1" />
+                          {item.presenter || item.assigned_to}
+                        </span>
+                      )}
+                      {item.duration_minutes ? (
+                        <span className="text-xs text-gray-400 flex items-center shrink-0">
+                          <Clock className="h-3 w-3 mr-1" />
+                          {item.duration_minutes}m
+                        </span>
+                      ) : null}
+                    </div>
+                  ))}
+                  {totalDuration > 0 && (
+                    <div className="mt-3 pt-2 border-t text-sm text-gray-500 flex items-center">
+                      <Clock className="h-4 w-4 mr-1" /> Total: {totalDuration} minutes
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
         <div className="space-y-6">
           {/* Presiding / Conducting header for structured meetings */}
           {templateConfig && (templateConfig.presiding_field || templateConfig.conducting_field) && (
@@ -924,10 +998,10 @@ export default function MeetingDetailPage() {
                         {/* Header row */}
                         <div className="flex items-center px-3 py-2.5 gap-2">
                           <div className="flex flex-col">
-                            <button onClick={() => moveAgendaItem(idx, "up")} disabled={idx === 0} className="text-gray-400 hover:text-gray-600 disabled:opacity-20 p-0.5">
+                            <button type="button" onClick={() => moveAgendaItem(idx, "up")} disabled={idx === 0} className="text-gray-400 hover:text-gray-600 disabled:opacity-20 p-0.5">
                               <ChevronUp className="h-3.5 w-3.5" />
                             </button>
-                            <button onClick={() => moveAgendaItem(idx, "down")} disabled={idx === agendaItems.length - 1} className="text-gray-400 hover:text-gray-600 disabled:opacity-20 p-0.5">
+                            <button type="button" onClick={() => moveAgendaItem(idx, "down")} disabled={idx === agendaItems.length - 1} className="text-gray-400 hover:text-gray-600 disabled:opacity-20 p-0.5">
                               <ChevronDown className="h-3.5 w-3.5" />
                             </button>
                           </div>
@@ -950,7 +1024,7 @@ export default function MeetingDetailPage() {
                                 <Save className="h-3 w-3 mr-1" />{isSaving ? "..." : "Save"}
                               </Button>
                             )}
-                            <button onClick={() => deleteAgendaItem(item.id)} className="text-gray-300 hover:text-red-500 p-0.5 transition-colors">
+                            <button type="button" onClick={() => deleteAgendaItem(item.id)} className="text-gray-300 hover:text-red-500 p-0.5 transition-colors">
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           </div>
@@ -993,7 +1067,7 @@ export default function MeetingDetailPage() {
             </CardContent>
           </Card>
         </div>
-      )}
+        ))}
 
       {/* Minutes Tab */}
       {activeTab === "minutes" && (
@@ -1008,15 +1082,18 @@ export default function MeetingDetailPage() {
             <textarea
               rows={16}
               value={minutesContent}
-              onChange={(e) => setMinutesContent(e.target.value)}
-              className={inputClass}
+              readOnly={!meetingWriteAllowed}
+              onChange={(e) => meetingWriteAllowed && setMinutesContent(e.target.value)}
+              className={`${inputClass}${!meetingWriteAllowed ? " bg-gray-50 text-gray-700" : ""}`}
               placeholder={"Record meeting minutes here...\n\nDiscussion Items:\n- ...\n\nAction Items:\n- [ ] ...\n\nDecisions Made:\n- ..."}
             />
+            {meetingWriteAllowed && (
             <div className="flex justify-end mt-4">
               <Button onClick={saveMinutes} disabled={minutesSaving}>
                 <Save className="h-4 w-4 mr-2" />{minutesSaving ? "Saving..." : "Save Minutes"}
               </Button>
             </div>
+            )}
           </CardContent>
         </Card>
       )}

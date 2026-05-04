@@ -36,6 +36,14 @@ export interface AgendaTemplateConfig {
   items: AgendaItemConfig[]
 }
 
+/** Match DB slugs permissively (case, spaces, hyphen vs underscore). */
+function slugNorm(mt: string): string {
+  return String(mt ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_")
+}
+
 export const AGENDA_TEMPLATES: Record<string, AgendaTemplateConfig> = {
   high_council: {
     label: "High Council / Stake Council Meeting",
@@ -96,8 +104,10 @@ export const AGENDA_TEMPLATES: Record<string, AgendaTemplateConfig> = {
 
 export function getTemplateForMeetingType(meetingType: string): AgendaTemplateConfig | undefined {
   if (!meetingType) return undefined
+  const wanted = slugNorm(meetingType)
+  if (!wanted) return undefined
   for (const config of Object.values(AGENDA_TEMPLATES)) {
-    if (config.meeting_types.includes(meetingType)) return config
+    if (config.meeting_types.some((mt) => slugNorm(mt) === wanted)) return config
   }
   return undefined
 }

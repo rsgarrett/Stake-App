@@ -1,10 +1,14 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ExternalLink } from "lucide-react"
-import { getAgendaTemplateUrl } from "@/lib/meetings/agenda-templates"
+import { ClipboardList } from "lucide-react"
+import {
+  getDefaultAgendaDraftForMeetingType,
+  hasInAppAgendaTemplate,
+  type AgendaDraftRow,
+} from "@/lib/meetings/agenda-templates"
 import {
   dedupeSchedulingStandardTemplates,
   normalizeMeetingTypeSlug,
@@ -39,6 +43,8 @@ interface MeetingFormProps {
   existingMeetingNames?: string[]
   /** Opt-in full handbook picker (every `standard_meeting_templates` row). Default: narrowed coordinating-council catalog only. */
   allowFullStandardCatalog?: boolean
+  /** When omitted, edit mode is inferred only if both `initialData.title` and `initialData.meeting_type` are set (a date-only preset is still “schedule”). Pass `true` when updating an existing meeting row. */
+  isEditingMeeting?: boolean
 }
 
 export interface MeetingFormData {
@@ -56,6 +62,8 @@ export interface MeetingFormData {
   editable_by_roles: string[]
   color: string
   description?: string
+  /** Populated when creating a meeting with an in-app template outline */
+  agendaDraft?: AgendaDraftRow[]
 }
 
 const RECURRENCE_OPTIONS = [
@@ -85,7 +93,9 @@ const MEETING_TYPE_ROLES: Record<string, string[]> = {
   stake_council_meeting: ["stake_presidency", "high_council", "stake_council"],
   stake_finance_meeting: ["stake_presidency", "bishops"],
   bishopric_meeting: ["stake_presidency"],
-  bishops_council: ["stake_presidency"],
+  bishops_council: ["stake_presidency", "bishops"],
+  elders_quorum_presidents_council: ["stake_presidency", "high_council", "elders_quorum"],
+  relief_society_presidents_council: ["stake_presidency", "high_council", "relief_society"],
   stake_conference: ["all"],
   ward_conference: ["all"],
   sacrament_meeting: ["all"],
@@ -130,7 +140,12 @@ export function MeetingForm({
   standardTemplates = [],
   existingMeetingNames = [],
   allowFullStandardCatalog = false,
+  isEditingMeeting: isEditingMeetingProp,
 }: MeetingFormProps) {
+  const editingMeeting = useMemo(() => {
+    if (typeof isEditingMeetingProp === "boolean") return isEditingMeetingProp
+    return Boolean(initialData?.title?.trim() && initialData?.meeting_type?.trim())
+  }, [isEditingMeetingProp, initialData?.title, initialData?.meeting_type])
   const [formData, setFormData] = useState<MeetingFormData>({
     title: initialData?.title || "",
     meeting_type: initialData?.meeting_type || initialData?.title || "",
@@ -174,8 +189,33 @@ export function MeetingForm({
 
   const sortedStandardTemplates = catalogTemplates
 
-  const agendaTemplateUrl = getAgendaTemplateUrl(formData.meeting_type)
+  const [draftAgendaRows, setDraftAgendaRows] = useState<AgendaDraftRow[]>([])
+  const agendaDraftSlugRef = useRef("")
+
   const preserveScheduleOnTemplate = Boolean(initialData?.scheduled_date)
+
+  /** Clear user edits when handbook meeting slug changes; defaults come from templates until the user edits. */
+  useLayoutEffect(() => {
+    if (editingMeeting) {
+      agendaDraftSlugRef.current = ""
+      setDraftAgendaRows([])
+      return
+    }
+    const mtSlug = normalizeMeetingTypeSlug(formData.meeting_type)
+    if (
+      !mtSlug ||
+      formData.meeting_type === "custom" ||
+      !hasInAppAgendaTemplate(formData.meeting_type)
+    ) {
+      agendaDraftSlugRef.current = ""
+      setDraftAgendaRows([])
+      return
+    }
+    if (agendaDraftSlugRef.current !== mtSlug) {
+      agendaDraftSlugRef.current = mtSlug
+      setDraftAgendaRows([])
+    }
+  }, [editingMeeting, formData.meeting_type])
 
   useEffect(() => {
     if (!catalogTemplates.length || !initialData?.meeting_type) return
@@ -186,22 +226,6 @@ export function MeetingForm({
     if (t) setSelectedCatalogId(t.id)
     else setSelectedCatalogId("__custom__")
   }, [catalogTemplates, initialData?.meeting_type])
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (catalogTemplates.length > 0) {
-      if (!selectedCatalogId) {
-        alert("Please select a meeting type.")
-        return
-      }
-      if (selectedCatalogId === "__custom__" && !formData.title.trim()) {
-        alert("Please enter a meeting title.")
-        return
-      }
-    }
-    const roles = getRolesForMeetingType(formData.meeting_type || formData.title)
-    onSubmit({ ...formData, viewable_by_roles: roles, editable_by_roles: roles })
-  }
 
   const toggleDayOfWeek = (day: number) => {
     setFormData((prev) => ({
@@ -268,10 +292,62 @@ export function MeetingForm({
     setSelectedCatalogId(template.id)
   }
 
+  const showAgendaOutline =
+    !editingMeeting &&
+    (formData.meeting_type || "").trim() !== "" &&
+    formData.meeting_type !== "custom" &&
+    hasInAppAgendaTemplate(formData.meeting_type)
+
+  const scheduleAgendaRows =
+    showAgendaOutline &&
+    (draftAgendaRows.length > 0 ||
+      getDefaultAgendaDraftForMeetingType(formData.meeting_type).length > 0)
+      ? draftAgendaRows.length > 0
+        ? draftAgendaRows
+        : getDefaultAgendaDraftForMeetingType(formData.meeting_type)
+      : []
+
+  const patchDraftAgendaRow = (index: number, patch: Partial<AgendaDraftRow>) => {
+    const mt = (formData.meeting_type || "").trim()
+    setDraftAgendaRows((prev) => {
+      const base =
+        prev.length > 0
+          ? prev
+          : showAgendaOutline && mt !== "custom"
+            ? getDefaultAgendaDraftForMeetingType(mt)
+            : []
+      if (!base.length) return prev
+      return base.map((row, i) => (i === index ? { ...row, ...patch } : row))
+    })
+  }
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (catalogTemplates.length > 0) {
+      if (!selectedCatalogId) {
+        alert("Please select a meeting type.")
+        return
+      }
+      if (selectedCatalogId === "__custom__" && !formData.title.trim()) {
+        alert("Please enter a meeting title.")
+        return
+      }
+    }
+    const roles = getRolesForMeetingType(formData.meeting_type || formData.title)
+    const agendaDraftToSave =
+      !editingMeeting && scheduleAgendaRows.length > 0 ? scheduleAgendaRows : undefined
+    onSubmit({
+      ...formData,
+      viewable_by_roles: roles,
+      editable_by_roles: roles,
+      agendaDraft: agendaDraftToSave,
+    })
+  }
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{initialData ? "Edit Meeting" : "Schedule New Meeting"}</CardTitle>
+        <CardTitle>{editingMeeting ? "Edit Meeting" : "Schedule New Meeting"}</CardTitle>
         <CardDescription>Attendees are automatically assigned per the General Handbook</CardDescription>
       </CardHeader>
       <CardContent>
@@ -321,25 +397,6 @@ export function MeetingForm({
                     Standard stake meetings from the handbook catalog.
                   </p>
                 </div>
-
-                {agendaTemplateUrl && (
-                  <div className="rounded-md border border-indigo-200 bg-indigo-50 p-3 text-sm text-gray-800">
-                    <a
-                      href={agendaTemplateUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center font-medium text-indigo-700 hover:text-indigo-900 hover:underline"
-                    >
-                      <ExternalLink className="h-4 w-4 mr-1.5 shrink-0" aria-hidden />
-                      Open agenda template (Google Doc)
-                    </a>
-                    <p className="text-gray-600 mt-2 text-xs leading-relaxed">
-                      Use this document as your perpetual agenda outline. In Google Docs you can use{" "}
-                      <span className="font-medium">File → Make a copy</span> for a specific week, then add
-                      line items under the Agenda tab in this app when you are ready.
-                    </p>
-                  </div>
-                )}
 
                 {selectedCatalogId && (
                   <div>
@@ -429,6 +486,65 @@ export function MeetingForm({
                     )}
                   </div>
                 )}
+              </div>
+            )}
+
+            {showAgendaOutline && scheduleAgendaRows.length > 0 && (
+              <div className="rounded-lg border-2 border-indigo-400 bg-gradient-to-br from-white to-indigo-50/50 shadow-md p-4 text-sm text-gray-800">
+                <div className="flex items-start gap-2 mb-3">
+                  <ClipboardList className="h-5 w-5 text-indigo-600 shrink-0 mt-0.5" aria-hidden />
+                  <div>
+                    <p className="font-semibold text-gray-900 text-base">Meeting agenda outline</p>
+                    <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+                      Handbook-style items for this meeting type. Fill in presenter and topics; these save with your
+                      meeting and appear under the Agenda tab.
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-3 max-h-[min(24rem,50vh)] overflow-y-auto rounded-md bg-white border border-indigo-200 p-3">
+                  {scheduleAgendaRows.map((row, idx) => (
+                    <div
+                      key={`${row.title}-${idx}`}
+                      className="rounded-md border border-gray-100 bg-gray-50/80 p-3"
+                    >
+                      <div className="flex flex-wrap items-baseline gap-2 gap-y-1">
+                        <span className="text-xs font-semibold text-gray-500 w-8 shrink-0">{idx + 1}.</span>
+                        <span className="text-sm font-medium text-gray-900 flex-1 min-w-[8rem]">{row.title}</span>
+                        <label className="flex items-center gap-1.5 text-xs text-gray-600 shrink-0">
+                          Minutes
+                          <input
+                            type="number"
+                            min={1}
+                            value={row.duration_minutes ?? ""}
+                            onChange={(e) => {
+                              const raw = e.target.value
+                              patchDraftAgendaRow(idx, {
+                                duration_minutes:
+                                  raw === ""
+                                    ? null
+                                    : Number.isFinite(parseInt(raw, 10))
+                                      ? Math.max(1, parseInt(raw, 10))
+                                      : row.duration_minutes,
+                              })
+                            }}
+                            placeholder="—"
+                            className="w-14 px-2 py-1 border border-gray-300 rounded-md text-gray-900 text-xs"
+                          />
+                        </label>
+                      </div>
+                      {row.sectionHint && (
+                        <p className="text-xs text-gray-500 mt-1.5 ml-8 italic">{row.sectionHint}</p>
+                      )}
+                      <textarea
+                        rows={2}
+                        value={row.notes}
+                        onChange={(e) => patchDraftAgendaRow(idx, { notes: e.target.value })}
+                        placeholder="Presenter, topic, hymn number, bullets…"
+                        className="mt-2 ml-8 w-[calc(100%-2rem)] px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y min-h-[2.75rem]"
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -605,7 +721,7 @@ export function MeetingForm({
 
           {/* Actions */}
           <div className="flex items-center justify-between pt-4 border-t">
-            {initialData && onDelete ? (
+            {editingMeeting && onDelete ? (
               <Button
                 type="button"
                 variant="outline"

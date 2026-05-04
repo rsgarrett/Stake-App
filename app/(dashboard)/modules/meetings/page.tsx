@@ -7,15 +7,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { CalendarView, type CalendarEvent } from "@/components/meetings/CalendarView"
 import { MeetingForm, MeetingFormData } from "@/components/meetings/MeetingForm"
+import { getDefaultAgendaDraftForMeetingType } from "@/lib/meetings/agenda-templates"
 import { Calendar, List, BookOpen, ArrowLeft, Plus, Clock, MapPin, ExternalLink, Repeat, Edit, User, Trash2, Loader2 } from "lucide-react"
 import { format, isSameDay, eachDayOfInterval, parseISO, startOfDay } from "date-fns"
-import { getAgendaTemplateUrl, hasAgendaTemplate } from "@/lib/meetings/agenda-templates"
 import {
   dedupeSchedulingStandardTemplates,
   templateAllowedInStakeMeetingScheduler,
 } from "@/lib/meetings/schedulable-standard-templates"
 import { formatInterviewType } from "@/lib/interviews/interview-types"
 import { navigateInterviewSelection } from "@/lib/interviews/navigate-mission-interview"
+import { canManageStakeMeetings } from "@/lib/meetings/meeting-permissions"
 
 type ViewMode = "calendar" | "list" | "templates"
 
@@ -342,8 +343,12 @@ export default function MeetingsPage() {
   const [loading, setLoading] = useState(true)
   /** Tracks an in-flight delete from list view (interview or meeting). */
   const [deletingListItem, setDeletingListItem] = useState<{ kind: "interview" | "meeting"; id: string } | null>(null)
+  /** `public.users.role` — used to hide add/edit for high council (view-only on HC + stake council). */
+  const [userMeetingRole, setUserMeetingRole] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
+
+  const meetingWriteAllowed = canManageStakeMeetings(userMeetingRole)
 
   const schedulableStandardTemplates = useMemo(() => {
     const narrowed = standardTemplates.filter((t) =>
@@ -361,6 +366,39 @@ export default function MeetingsPage() {
     loadScheduleDetails()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) {
+        if (!cancelled) setUserMeetingRole(null)
+        return
+      }
+      const { data } = await supabase.from("users").select("role").eq("id", user.id).maybeSingle()
+      if (!cancelled) setUserMeetingRole(data?.role ?? null)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [supabase])
+
+  useEffect(() => {
+    if (showForm && !meetingWriteAllowed) {
+      setShowForm(false)
+      setSelectedMeeting(null)
+      setSelectedDate(null)
+    }
+  }, [showForm, meetingWriteAllowed])
+
+  useEffect(() => {
+    if (userMeetingRole === null) return
+    if (!canManageStakeMeetings(userMeetingRole) && viewMode === "templates") {
+      setViewMode("calendar")
+    }
+  }, [userMeetingRole, viewMode])
 
   const loadMeetings = async () => {
     try {
@@ -617,53 +655,51 @@ export default function MeetingsPage() {
           throw error
         }
       } else {
-        // Create new meeting
-        const { error, data } = await supabase
-          .from("meetings")
-          .insert([meetingData])
-          .select()
+        const runInsert = async (payload: Record<string, unknown>) =>
+          await supabase.from("meetings").insert([payload]).select()
+
+        let { data: insertedRows, error } = await runInsert(meetingData)
+
+        if (error && hasExtendedFields) {
+          console.warn("Columns may not exist yet, retrying with basic fields only...")
+          const basicData: Record<string, unknown> = {
+            title: formData.title,
+            meeting_type: formData.meeting_type,
+            scheduled_date: scheduledDate,
+          }
+          if (formData.end_date) {
+            basicData.end_date = formData.end_date.includes("T")
+              ? new Date(formData.end_date).toISOString()
+              : formData.end_date
+          }
+          if (formData.location) basicData.location = formData.location
+          const retry = await runInsert(basicData)
+          error = retry.error
+          insertedRows = retry.data
+        }
 
         if (error) {
           console.error("Insert error details:", error)
-          console.error("Error code:", error.code)
-          console.error("Error message:", error.message)
-          console.error("Error details:", error.details)
-          console.error("Meeting data attempted:", JSON.stringify(meetingData, null, 2))
-          
-          // If we tried to use extended fields and got a 400 error, retry with basic fields only
-          // 400 errors often mean columns don't exist
-          
           const errorMessage = error.message || error.details || JSON.stringify(error)
-          
-          // If we used extended fields and got an error, always retry with basic fields
-          // This handles the case where the migration hasn't been run yet
-          if (hasExtendedFields) {
-            console.warn("Columns may not exist yet, retrying with basic fields only...")
-            // Try with only the original table columns (before migration 014)
-            const basicData: any = {
-              title: formData.title,
-              meeting_type: formData.meeting_type,
-              scheduled_date: scheduledDate,
-            }
-            if (formData.end_date) {
-              basicData.end_date = formData.end_date.includes('T')
-                ? new Date(formData.end_date).toISOString()
-                : formData.end_date
-            }
-            if (formData.location) basicData.location = formData.location
-            
-            const { error: retryError, data: retryData } = await supabase
-              .from("meetings")
-              .insert([basicData])
-              .select()
-            
-            if (retryError) {
-              console.error("Retry also failed:", retryError)
-              throw new Error(`Failed to save meeting. ${retryError.message || retryError.details || JSON.stringify(retryError)}`)
-            }
-            console.log("Meeting saved successfully with basic fields")
-          } else {
-            throw new Error(`Failed to save meeting: ${errorMessage}`)
+          throw new Error(`Failed to save meeting: ${errorMessage}`)
+        }
+
+        const newMeetingId = insertedRows?.[0]?.id as string | undefined
+
+        if (newMeetingId && formData.agendaDraft?.length) {
+          const agendaRows = formData.agendaDraft.map((row, idx) => ({
+            meeting_id: newMeetingId,
+            item_order: idx + 1,
+            title: row.title,
+            description: row.notes.trim() || null,
+            duration_minutes: row.duration_minutes,
+          }))
+          const { error: agendaError } = await supabase.from("meeting_agendas").insert(agendaRows)
+          if (agendaError) {
+            console.error("Agenda insert error:", agendaError)
+            alert(
+              `Meeting was saved but the agenda outline could not be saved: ${agendaError.message}\nOpen the meeting and rebuild the Agenda tab if needed.`
+            )
           }
         }
       }
@@ -711,6 +747,7 @@ export default function MeetingsPage() {
         editable_by_roles: [],
         color: "#3b82f6",
         description: template.description || "",
+        agendaDraft: getDefaultAgendaDraftForMeetingType(template.meeting_type),
       }
 
       await handleSubmitMeeting(meetingData)
@@ -872,6 +909,7 @@ export default function MeetingsPage() {
           }}
           initialData={initialData}
           standardTemplates={standardTemplates}
+          isEditingMeeting={Boolean(selectedMeeting)}
         />
       </div>
     )
@@ -911,6 +949,7 @@ export default function MeetingsPage() {
               <List className="h-4 w-4 mr-2" />
               List
             </Button>
+            {meetingWriteAllowed && (
             <Button
               variant={viewMode === "templates" ? "default" : "ghost"}
               size="sm"
@@ -920,6 +959,7 @@ export default function MeetingsPage() {
               <BookOpen className="h-4 w-4 mr-2" />
               Standard meetings
             </Button>
+            )}
           </div>
         </div>
       </div>
@@ -932,7 +972,7 @@ export default function MeetingsPage() {
             onDateClick={handleDateClick}
             onTodayClick={handleTodayFromCalendar}
             onEventClick={handleEventClick}
-            onAddEvent={() => setShowForm(true)}
+            onAddEvent={meetingWriteAllowed ? () => setShowForm(true) : undefined}
           />
         </div>
       )}
@@ -970,6 +1010,7 @@ export default function MeetingsPage() {
                   Show all upcoming
                 </Button>
               )}
+              {meetingWriteAllowed && (
               <Button
                 size="sm"
                 onClick={() => {
@@ -981,6 +1022,7 @@ export default function MeetingsPage() {
                 <Plus className="h-4 w-4 mr-1.5" />
                 Add meeting
               </Button>
+              )}
             </div>
           </div>
 
@@ -1025,8 +1067,6 @@ export default function MeetingsPage() {
                               <div className="mt-4 space-y-4">
                                 {visits.map((r, vi) => {
                                   const meeting = r.meeting
-                                  const meetingColor = meeting.color || "#0f766e"
-                                  const agendaUrl = getAgendaTemplateUrl(meeting.meeting_type)
                                   const startDate = new Date(meeting.scheduled_date)
                                   const endDate = meeting.end_date ? new Date(meeting.end_date) : null
                                   const items = agendaItems[meeting.id] || []
@@ -1063,49 +1103,40 @@ export default function MeetingsPage() {
                                           </span>
                                         </button>
                                         <div className="flex items-center gap-1.5 shrink-0">
-                                          {agendaUrl && (
-                                            <a
-                                              href={agendaUrl}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors bg-white/80 text-teal-900 border border-teal-200/80 hover:bg-white"
-                                              style={{ color: meetingColor }}
-                                              title="Open Google Doc agenda"
-                                            >
-                                              <ExternalLink className="h-3.5 w-3.5" />
-                                              Doc
-                                            </a>
+                                          {meetingWriteAllowed && (
+                                            <>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setSelectedMeeting(meeting)
+                                                  setShowForm(true)
+                                                }}
+                                                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-teal-900/80 bg-white/60 border border-teal-200/60 hover:bg-white/90 transition-colors"
+                                                title="Edit meeting"
+                                              >
+                                                <Edit className="h-3.5 w-3.5" />
+                                                Edit
+                                              </button>
+                                              <button
+                                                type="button"
+                                                title="Delete meeting"
+                                                aria-label="Delete meeting"
+                                                disabled={
+                                                  deletingListItem?.kind === "meeting" &&
+                                                  deletingListItem.id === meeting.id
+                                                }
+                                                onClick={() => void deleteListMeeting(meeting.id)}
+                                                className="inline-flex items-center justify-center rounded-md px-2 py-1 text-gray-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100 disabled:opacity-50 disabled:pointer-events-none"
+                                              >
+                                                {deletingListItem?.kind === "meeting" &&
+                                                deletingListItem.id === meeting.id ? (
+                                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                ) : (
+                                                  <Trash2 className="h-3.5 w-3.5" />
+                                                )}
+                                              </button>
+                                            </>
                                           )}
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              setSelectedMeeting(meeting)
-                                              setShowForm(true)
-                                            }}
-                                            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-teal-900/80 bg-white/60 border border-teal-200/60 hover:bg-white/90 transition-colors"
-                                            title="Edit meeting"
-                                          >
-                                            <Edit className="h-3.5 w-3.5" />
-                                            Edit
-                                          </button>
-                                          <button
-                                            type="button"
-                                            title="Delete meeting"
-                                            aria-label="Delete meeting"
-                                            disabled={
-                                              deletingListItem?.kind === "meeting" &&
-                                              deletingListItem.id === meeting.id
-                                            }
-                                            onClick={() => void deleteListMeeting(meeting.id)}
-                                            className="inline-flex items-center justify-center rounded-md px-2 py-1 text-gray-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100 disabled:opacity-50 disabled:pointer-events-none"
-                                          >
-                                            {deletingListItem?.kind === "meeting" &&
-                                            deletingListItem.id === meeting.id ? (
-                                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                            ) : (
-                                              <Trash2 className="h-3.5 w-3.5" />
-                                            )}
-                                          </button>
                                         </div>
                                       </div>
                                       {meeting.location && (
@@ -1141,8 +1172,6 @@ export default function MeetingsPage() {
                               <div className="mt-4 space-y-4">
                                 {teachings.map((r, ti) => {
                                   const meeting = r.meeting
-                                  const meetingColor = meeting.color || "#5b21b6"
-                                  const agendaUrl = getAgendaTemplateUrl(meeting.meeting_type)
                                   const startDate = new Date(meeting.scheduled_date)
                                   const endDate = meeting.end_date ? new Date(meeting.end_date) : null
                                   const items = agendaItems[meeting.id] || []
@@ -1179,49 +1208,40 @@ export default function MeetingsPage() {
                                           </span>
                                         </button>
                                         <div className="flex items-center gap-1.5 shrink-0">
-                                          {agendaUrl && (
-                                            <a
-                                              href={agendaUrl}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors bg-white/80 text-violet-900 border border-violet-200/80 hover:bg-white"
-                                              style={{ color: meetingColor }}
-                                              title="Open Google Doc agenda"
-                                            >
-                                              <ExternalLink className="h-3.5 w-3.5" />
-                                              Doc
-                                            </a>
+                                          {meetingWriteAllowed && (
+                                            <>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setSelectedMeeting(meeting)
+                                                  setShowForm(true)
+                                                }}
+                                                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-violet-900/80 bg-white/60 border border-violet-200/60 hover:bg-white/90 transition-colors"
+                                                title="Edit meeting"
+                                              >
+                                                <Edit className="h-3.5 w-3.5" />
+                                                Edit
+                                              </button>
+                                              <button
+                                                type="button"
+                                                title="Delete meeting"
+                                                aria-label="Delete meeting"
+                                                disabled={
+                                                  deletingListItem?.kind === "meeting" &&
+                                                  deletingListItem.id === meeting.id
+                                                }
+                                                onClick={() => void deleteListMeeting(meeting.id)}
+                                                className="inline-flex items-center justify-center rounded-md px-2 py-1 text-gray-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100 disabled:opacity-50 disabled:pointer-events-none"
+                                              >
+                                                {deletingListItem?.kind === "meeting" &&
+                                                deletingListItem.id === meeting.id ? (
+                                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                ) : (
+                                                  <Trash2 className="h-3.5 w-3.5" />
+                                                )}
+                                              </button>
+                                            </>
                                           )}
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              setSelectedMeeting(meeting)
-                                              setShowForm(true)
-                                            }}
-                                            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-violet-900/80 bg-white/60 border border-violet-200/60 hover:bg-white/90 transition-colors"
-                                            title="Edit meeting"
-                                          >
-                                            <Edit className="h-3.5 w-3.5" />
-                                            Edit
-                                          </button>
-                                          <button
-                                            type="button"
-                                            title="Delete meeting"
-                                            aria-label="Delete meeting"
-                                            disabled={
-                                              deletingListItem?.kind === "meeting" &&
-                                              deletingListItem.id === meeting.id
-                                            }
-                                            onClick={() => void deleteListMeeting(meeting.id)}
-                                            className="inline-flex items-center justify-center rounded-md px-2 py-1 text-gray-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100 disabled:opacity-50 disabled:pointer-events-none"
-                                          >
-                                            {deletingListItem?.kind === "meeting" &&
-                                            deletingListItem.id === meeting.id ? (
-                                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                            ) : (
-                                              <Trash2 className="h-3.5 w-3.5" />
-                                            )}
-                                          </button>
                                         </div>
                                       </div>
                                       {meeting.location && (
@@ -1383,7 +1403,6 @@ export default function MeetingsPage() {
 
                 const meeting = row.meeting
                 const meetingColor = meeting.color || "#3b82f6"
-                const agendaUrl = getAgendaTemplateUrl(meeting.meeting_type)
                 const startDate = new Date(meeting.scheduled_date)
                 const endDate = meeting.end_date ? new Date(meeting.end_date) : null
                 const items = agendaItems[meeting.id] || []
@@ -1420,54 +1439,41 @@ export default function MeetingsPage() {
 
                         {/* Action buttons */}
                         <div className="flex items-center gap-1.5 shrink-0">
-                          {agendaUrl && (
-                            <a
-                              href={agendaUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-                              style={{
-                                backgroundColor: `${meetingColor}15`,
-                                color: meetingColor,
-                              }}
-                              title="Open Google Doc agenda"
-                            >
-                              <ExternalLink className="h-3.5 w-3.5" />
-                              Doc
-                            </a>
+                          {meetingWriteAllowed && (
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setSelectedMeeting(meeting)
+                                  setShowForm(true)
+                                }}
+                                className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                                title="Edit meeting"
+                              >
+                                <Edit className="h-3.5 w-3.5" />
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                title="Delete meeting"
+                                aria-label="Delete meeting"
+                                disabled={
+                                  deletingListItem?.kind === "meeting" && deletingListItem.id === meeting.id
+                                }
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  void deleteListMeeting(meeting.id)
+                                }}
+                                className="inline-flex items-center justify-center rounded-md p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:pointer-events-none"
+                              >
+                                {deletingListItem?.kind === "meeting" && deletingListItem.id === meeting.id ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                )}
+                              </button>
+                            </>
                           )}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setSelectedMeeting(meeting)
-                              setShowForm(true)
-                            }}
-                            className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-                            title="Edit meeting"
-                          >
-                            <Edit className="h-3.5 w-3.5" />
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            title="Delete meeting"
-                            aria-label="Delete meeting"
-                            disabled={
-                              deletingListItem?.kind === "meeting" && deletingListItem.id === meeting.id
-                            }
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              void deleteListMeeting(meeting.id)
-                            }}
-                            className="inline-flex items-center justify-center rounded-md p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:pointer-events-none"
-                          >
-                            {deletingListItem?.kind === "meeting" && deletingListItem.id === meeting.id ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Trash2 className="h-3.5 w-3.5" />
-                            )}
-                          </button>
                         </div>
                       </div>
 
@@ -1559,6 +1565,7 @@ export default function MeetingsPage() {
               <p className="text-gray-500">
                 {listDayFilter ? "No meetings or conferences on this day" : "No upcoming meetings or conferences"}
               </p>
+              {meetingWriteAllowed && (
               <Button
                 variant="outline"
                 size="sm"
@@ -1572,6 +1579,7 @@ export default function MeetingsPage() {
                 <Plus className="h-4 w-4 mr-1.5" />
                 {listDayFilter ? "Add meeting for this day" : "Schedule a meeting"}
               </Button>
+              )}
             </div>
           )}
           </div>

@@ -1,25 +1,31 @@
+import {
+  type AgendaItemConfig,
+  getTemplateForMeetingType,
+} from "@/lib/meetings/agenda-field-config"
+
 /**
- * Perpetual agenda templates (e.g. Google Docs) keyed by `meetings.meeting_type` /
- * `standard_meeting_templates.meeting_type`.
- *
- * Add more entries here as new agenda docs are created.
+ * Editable agenda rows shown when scheduling a meeting (saved as `meeting_agendas`).
  */
-export const MEETING_AGENDA_TEMPLATE_URLS: Record<string, string> = {
-  stake_presidency_meeting:
-    "https://docs.google.com/document/d/1lrYGFxacWwvf-ZyyqdlWNywsoJeBPwzg-s1U3oRrpik/edit",
-  high_council_meeting:
-    "https://docs.google.com/document/d/1AZ36CXBEvNPKdQEQLINznylIE2BxvNee8wuM4R7Hz8c/edit",
-  stake_council:
-    "https://docs.google.com/document/d/1AZ36CXBEvNPKdQEQLINznylIE2BxvNee8wuM4R7Hz8c/edit",
-  stake_relief_society_presidency:
-    "https://docs.google.com/document/d/1BWeg_S86u15LKXDzt3u5_gNy0dp1-UI-xLbU-sygw4Q/edit",
+export type AgendaDraftRow = {
+  title: string
+  /** Handbook / template note for this agenda item */
+  sectionHint?: string | null
+  notes: string
+  duration_minutes: number | null
 }
 
-export function getAgendaTemplateUrl(meetingType: string): string | undefined {
-  if (!meetingType) return undefined
-  return MEETING_AGENDA_TEMPLATE_URLS[meetingType]
+export function hasInAppAgendaTemplate(meetingType: string): boolean {
+  return Boolean(meetingType && getTemplateForMeetingType(meetingType))
 }
 
-export function hasAgendaTemplate(meetingType: string): boolean {
-  return Boolean(meetingType && MEETING_AGENDA_TEMPLATE_URLS[meetingType])
+/** Default outline for a handbook meeting type (same structure as meeting detail Agenda tab). */
+export function getDefaultAgendaDraftForMeetingType(meetingType: string): AgendaDraftRow[] {
+  const t = getTemplateForMeetingType(meetingType)
+  if (!t) return []
+  return t.items.map((item: AgendaItemConfig) => ({
+    title: item.title,
+    sectionHint: item.description ?? null,
+    notes: "",
+    duration_minutes: item.duration_minutes ?? null,
+  }))
 }
