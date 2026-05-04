@@ -119,6 +119,7 @@ export default function MeetingDetailPage() {
 
   const [userMeetingRole, setUserMeetingRole] = useState<string | null>(null)
   const meetingWriteAllowed = canManageStakeMeetings(userMeetingRole)
+  const [seededTemplateForMeetingId, setSeededTemplateForMeetingId] = useState<string | null>(null)
 
   const supabase = createClient()
 
@@ -165,6 +166,36 @@ export default function MeetingDetailPage() {
       setMinutesContent(data.content)
     }
   }
+
+  /**
+   * Backfill: meetings scheduled before in-app templates existed have no agenda rows.
+   * On first view by a user with write permission, seed the agenda from the handbook
+   * template so clicking a calendar event always opens a usable agenda.
+   */
+  useEffect(() => {
+    if (loading) return
+    if (!meeting) return
+    if (seededTemplateForMeetingId === meetingId) return
+    if (agendaItems.length > 0) return
+    if (!meetingWriteAllowed) return
+    const tmpl = getTemplateForMeetingType(meeting.meeting_type)
+    if (!tmpl) return
+
+    setSeededTemplateForMeetingId(meetingId)
+    ;(async () => {
+      const rows = tmpl.items.map((cfg, idx) => ({
+        meeting_id: meetingId,
+        item_order: idx + 1,
+        title: cfg.title,
+        description: null,
+        duration_minutes: cfg.duration_minutes ?? null,
+      }))
+      const { error } = await supabase.from("meeting_agendas").insert(rows)
+      if (!error) await loadAgenda()
+    })()
+    // Intentionally only re-run when the relevant inputs settle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, meeting?.id, meeting?.meeting_type, agendaItems.length, meetingWriteAllowed, meetingId, seededTemplateForMeetingId])
 
   const addAgendaItem = async () => {
     if (!newAgendaTitle.trim()) return
