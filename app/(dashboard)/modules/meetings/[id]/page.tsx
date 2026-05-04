@@ -987,6 +987,9 @@ export default function MeetingDetailPage() {
                     const isSaving = savingItems.has(item.id)
                     const ft = getFieldTypeForTitle(item.title, meeting?.meeting_type)
                     const isReadOnly = ft === "readonly"
+                    const sectionHint = templateConfig?.items.find(
+                      (cfg) => cfg.title.toLowerCase() === item.title.toLowerCase()
+                    )?.description
 
                     return (
                       <div
@@ -1030,7 +1033,12 @@ export default function MeetingDetailPage() {
                           </div>
                         </div>
 
-                        {/* Editable fields */}
+                        {sectionHint && (
+                          <p className="px-3 pb-2 ml-[3.25rem] -mt-1 text-xs italic text-gray-500">
+                            {sectionHint}
+                          </p>
+                        )}
+
                         {!isReadOnly && (
                           <div className="px-3 pb-3 ml-[3.25rem]">
                             {renderItemFields(item)}
