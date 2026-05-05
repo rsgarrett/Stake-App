@@ -168,21 +168,15 @@ export default function MeetingDetailPage() {
   }
 
   /**
-   * Backfill: meetings scheduled before in-app templates existed have no agenda rows.
-   * On first view by a user with write permission, seed the agenda from the handbook
-   * template so clicking a calendar event always opens a usable agenda.
+   * Insert the handbook template's items as the meeting's agenda. Used by both
+   * the silent auto-seed (on first view) and the explicit "Use template" /
+   * "Reset to template" buttons.
    */
-  useEffect(() => {
-    if (loading) return
-    if (!meeting) return
-    if (seededTemplateForMeetingId === meetingId) return
-    if (agendaItems.length > 0) return
-    if (!meetingWriteAllowed) return
-    const tmpl = getTemplateForMeetingType(meeting.meeting_type)
-    if (!tmpl) return
-
-    setSeededTemplateForMeetingId(meetingId)
-    ;(async () => {
+  const applyHandbookTemplate = useCallback(
+    async (opts: { silent?: boolean } = {}): Promise<boolean> => {
+      if (!meeting) return false
+      const tmpl = getTemplateForMeetingType(meeting.meeting_type)
+      if (!tmpl) return false
       const rows = tmpl.items.map((cfg, idx) => ({
         meeting_id: meetingId,
         item_order: idx + 1,
@@ -191,8 +185,39 @@ export default function MeetingDetailPage() {
         duration_minutes: cfg.duration_minutes ?? null,
       }))
       const { error } = await supabase.from("meeting_agendas").insert(rows)
-      if (!error) await loadAgenda()
+      if (error) {
+        if (!opts.silent) {
+          alert("Could not load handbook agenda: " + error.message)
+        }
+        return false
+      }
+      await loadAgenda()
+      return true
+    },
+    [meeting, meetingId, supabase] // loadAgenda is stable enough; intentionally narrow deps
+  )
+
+  /**
+   * Backfill: meetings scheduled before in-app templates existed have no agenda
+   * rows. On first view by a user with write permission, seed the agenda from
+   * the handbook template so clicking a calendar event opens a usable agenda.
+   */
+  useEffect(() => {
+    if (loading) return
+    if (!meeting) return
+    if (seededTemplateForMeetingId === meetingId) return
+    if (agendaItems.length > 0) return
+    if (!meetingWriteAllowed) return
+    if (!getTemplateForMeetingType(meeting.meeting_type)) return
+
+    let cancelled = false
+    ;(async () => {
+      const ok = await applyHandbookTemplate({ silent: true })
+      if (!cancelled && ok) setSeededTemplateForMeetingId(meetingId)
     })()
+    return () => {
+      cancelled = true
+    }
     // Intentionally only re-run when the relevant inputs settle.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, meeting?.id, meeting?.meeting_type, agendaItems.length, meetingWriteAllowed, meetingId, seededTemplateForMeetingId])
@@ -229,38 +254,30 @@ export default function MeetingDetailPage() {
    */
   const resetAgendaToTemplate = async () => {
     if (!meeting) return
-    const tmpl = getTemplateForMeetingType(meeting.meeting_type)
-    if (!tmpl) return
+    if (!getTemplateForMeetingType(meeting.meeting_type)) return
     if (
+      agendaItems.length > 0 &&
       !confirm(
         "Replace the current agenda with the handbook template? Any unsaved notes on existing items will be lost."
       )
-    )
-      return
-
-    const { error: delErr } = await supabase
-      .from("meeting_agendas")
-      .delete()
-      .eq("meeting_id", meetingId)
-    if (delErr) {
-      alert("Error clearing agenda: " + delErr.message)
+    ) {
       return
     }
-    const rows = tmpl.items.map((cfg, idx) => ({
-      meeting_id: meetingId,
-      item_order: idx + 1,
-      title: cfg.title,
-      description: null,
-      duration_minutes: cfg.duration_minutes ?? null,
-    }))
-    const { error: insErr } = await supabase.from("meeting_agendas").insert(rows)
-    if (insErr) {
-      alert("Error inserting template: " + insErr.message)
-      return
+
+    if (agendaItems.length > 0) {
+      const { error: delErr } = await supabase
+        .from("meeting_agendas")
+        .delete()
+        .eq("meeting_id", meetingId)
+      if (delErr) {
+        alert("Error clearing agenda: " + delErr.message)
+        return
+      }
     }
     setEditingItems({})
     setSubItemInputs({})
-    await loadAgenda()
+    const ok = await applyHandbookTemplate()
+    if (ok) setSeededTemplateForMeetingId(meetingId)
   }
 
   const moveAgendaItem = async (index: number, direction: "up" | "down") => {
@@ -1061,7 +1078,26 @@ export default function MeetingDetailPage() {
             </CardHeader>
             <CardContent>
               {agendaItems.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">No agenda items yet. Add one below.</p>
+                <div className="py-8 text-center">
+                  {templateConfig && meetingWriteAllowed ? (
+                    <>
+                      <p className="text-gray-600 mb-3">
+                        No agenda items yet. Load the handbook agenda for this meeting type to get started.
+                      </p>
+                      <Button onClick={resetAgendaToTemplate}>
+                        <FileText className="h-4 w-4 mr-2" />
+                        Use {templateConfig.label} template
+                      </Button>
+                      <p className="text-xs text-gray-400 mt-3">
+                        You can edit, reorder, or delete any item afterwards.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-gray-500">
+                      No agenda items yet{meetingWriteAllowed ? ". Add one below." : "."}
+                    </p>
+                  )}
+                </div>
               ) : (
                 <div className="space-y-2">
                   {agendaItems.map((item, idx) => {
