@@ -632,6 +632,12 @@ export interface HighCouncilMember {
   stake_id?: string
   assigned_wards?: string
   stewardships?: string
+  /** Spreadsheet Column A — presidency steward for this assignment row. */
+  presidency_oversight?: string | null
+  /** ALC, YLC, ALC/YLC, etc. */
+  program_assignment?: string | null
+  /** Additional duties (building scheduler, ushering, seminary, …). */
+  stewardship_notes?: string | null
   status: "active" | "released"
   called_date?: string
   released_date?: string

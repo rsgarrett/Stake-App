@@ -14,6 +14,7 @@ import {
 
 import type { HighCouncilMember, HCWeeklyReport, HCReportResponse } from "@/types"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
+import { getHcPresidencyOnlyAssignmentLines } from "@/lib/leadership/hc-presidency-only-assignments"
 
 type TabView = "reports" | "roster"
 
@@ -56,7 +57,15 @@ export default function HCCommunicationPage() {
 
   // Roster form
   const [showAddMember, setShowAddMember] = useState(false)
-  const [memberForm, setMemberForm] = useState({ member_name: "", email: "", stewardships: "", assigned_wards: "" })
+  const [memberForm, setMemberForm] = useState({
+    member_name: "",
+    email: "",
+    stewardships: "",
+    assigned_wards: "",
+    presidency_oversight: "",
+    program_assignment: "",
+    stewardship_notes: "",
+  })
   const [editingMember, setEditingMember] = useState<string | null>(null)
   const [editMemberForm, setEditMemberForm] = useState<Partial<HighCouncilMember>>({})
 
@@ -127,12 +136,23 @@ export default function HCCommunicationPage() {
       email: memberForm.email.trim() || null,
       stewardships: memberForm.stewardships.trim() || null,
       assigned_wards: memberForm.assigned_wards.trim() || null,
+      presidency_oversight: memberForm.presidency_oversight.trim() || null,
+      program_assignment: memberForm.program_assignment.trim() || null,
+      stewardship_notes: memberForm.stewardship_notes.trim() || null,
       stake_id: stakeId,
       status: "active",
       called_date: new Date().toISOString().split("T")[0],
       display_order: maxOrder + 1,
     })
-    setMemberForm({ member_name: "", email: "", stewardships: "", assigned_wards: "" })
+    setMemberForm({
+      member_name: "",
+      email: "",
+      stewardships: "",
+      assigned_wards: "",
+      presidency_oversight: "",
+      program_assignment: "",
+      stewardship_notes: "",
+    })
     setShowAddMember(false)
     await loadData()
   }
@@ -160,6 +180,9 @@ export default function HCCommunicationPage() {
       email: editMemberForm.email || null,
       stewardships: editMemberForm.stewardships || null,
       assigned_wards: editMemberForm.assigned_wards || null,
+      presidency_oversight: editMemberForm.presidency_oversight ?? null,
+      program_assignment: editMemberForm.program_assignment ?? null,
+      stewardship_notes: editMemberForm.stewardship_notes ?? null,
     }).eq("id", id)
     setEditingMember(null)
     setEditMemberForm({})
@@ -225,7 +248,7 @@ export default function HCCommunicationPage() {
   if (loading) return <div className="p-4 sm:p-6"><div className="text-center py-12">Loading...</div></div>
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-6xl mx-auto">
       <Link href="/modules/leadership" className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center mb-4">
         <ArrowLeft className="h-4 w-4 mr-1" /> Back to Leadership
       </Link>
@@ -244,7 +267,7 @@ export default function HCCommunicationPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex space-x-1 border-b mb-6">
+      <div className="flex gap-2 overflow-x-auto border-b pb-px mb-6 -mx-1 px-1 sm:mx-0 sm:px-0">
         {([
           { key: "reports" as const, label: "Weekly Reports", icon: MessageSquare },
           { key: "roster" as const, label: `Roster (${activeMembers.length})`, icon: Users },
@@ -344,7 +367,12 @@ export default function HCCommunicationPage() {
                       <div>
                         <div className="font-semibold text-gray-900">{report.member?.member_name || "Unknown"}</div>
                         <div className="text-xs text-gray-500">
-                          {report.member?.stewardships && <span>{report.member.stewardships}</span>}
+                          {[
+                            report.member?.presidency_oversight,
+                            report.member?.program_assignment,
+                            report.member?.stewardships,
+                            report.member?.assigned_wards,
+                          ].filter(Boolean).join(" · ") || ""}
                           {report.meetings_attended && <span> &middot; Attended: {report.meetings_attended}</span>}
                         </div>
                       </div>
@@ -438,26 +466,100 @@ export default function HCCommunicationPage() {
       {/* ==================== ROSTER TAB ==================== */}
       {tabView === "roster" && (
         <div className="space-y-4">
+          {/* Presidency-only stewardship lines from the HC assignment spreadsheet (editable in code until a DB column exists). */}
+          <Card className="border-slate-200 bg-slate-50/70">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Presidency stewardship (sheet reference)</CardTitle>
+              <CardDescription className="text-xs">
+                These items are stewarded directly by presidency members rather than roster lines here. Clerks can tweak the wording in{" "}
+                <code className="rounded bg-white px-1 py-0.5 text-[11px]">lib/leadership/hc-presidency-only-assignments.ts</code>{" "}
+                or we can add a stake-setting field later.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 sm:grid-cols-2">
+              {getHcPresidencyOnlyAssignmentLines().map((blk) =>
+                blk.lines.length === 0 ? null : (
+                  <div key={blk.title}>
+                    <p className="text-sm font-semibold text-slate-800">{blk.title}</p>
+                    <ul className="mt-1.5 list-inside list-disc text-sm text-slate-700 space-y-0.5">
+                      {blk.lines.map((line) => (
+                        <li key={line}>{line}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
                   <CardTitle>Active High Councilors</CardTitle>
-                  <CardDescription>Manage the high council roster. Release members when callings change — their report history is preserved.</CardDescription>
+                  <CardDescription>Manage the roster and assignment details — use Edit under each row. Release members when callings change; report history stays.</CardDescription>
                 </div>
-                <Button onClick={() => setShowAddMember(true)}><UserPlus className="h-4 w-4 mr-2" />Add Member</Button>
+                <Button className="w-full shrink-0 sm:w-auto" onClick={() => setShowAddMember(true)}><UserPlus className="h-4 w-4 mr-2" />Add Member</Button>
               </div>
             </CardHeader>
             <CardContent>
               {showAddMember && (
-                <div className="mb-4 p-4 border border-indigo-200 rounded-lg bg-indigo-50">
+                <div className="mb-6 p-4 border border-indigo-200 rounded-lg bg-indigo-50 space-y-3">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <input type="text" placeholder="Name *" value={memberForm.member_name} onChange={(e) => setMemberForm({ ...memberForm, member_name: e.target.value })} className={inputClass} autoFocus />
                     <input type="email" placeholder="Email" value={memberForm.email} onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })} className={inputClass} />
-                    <input type="text" placeholder="Stewardships (e.g., Stake Music, 8th Ward)" value={memberForm.stewardships} onChange={(e) => setMemberForm({ ...memberForm, stewardships: e.target.value })} className={inputClass} />
-                    <input type="text" placeholder="Assigned Wards" value={memberForm.assigned_wards} onChange={(e) => setMemberForm({ ...memberForm, assigned_wards: e.target.value })} className={inputClass} />
                   </div>
-                  <div className="flex space-x-2 mt-3">
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600">Primary assignment title</label>
+                  <textarea
+                    placeholder="e.g. Missionary work, Physical facilities representative, Stake music coordinator..."
+                    rows={2}
+                    value={memberForm.stewardships}
+                    onChange={(e) => setMemberForm({ ...memberForm, stewardships: e.target.value })}
+                    className={inputClass}
+                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600 mb-1">Presidency oversight</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. President Garrett"
+                        value={memberForm.presidency_oversight}
+                        onChange={(e) => setMemberForm({ ...memberForm, presidency_oversight: e.target.value })}
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600 mb-1">Program (ALC / YLC …)</label>
+                      <input
+                        type="text"
+                        placeholder="ALC · YLC · ALC / YLC"
+                        value={memberForm.program_assignment}
+                        onChange={(e) => setMemberForm({ ...memberForm, program_assignment: e.target.value })}
+                        className={inputClass}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600 mb-1">Wards / coordinating context</label>
+                    <textarea
+                      rows={2}
+                      placeholder="Which wards or ALC grouping (e.g. Coordinating 12th Ward …)"
+                      value={memberForm.assigned_wards}
+                      onChange={(e) => setMemberForm({ ...memberForm, assigned_wards: e.target.value })}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600 mb-1">Additional notes</label>
+                    <textarea
+                      rows={3}
+                      placeholder="Building scheduler, ushering, seminary, institute, ward baptisms coordination, stake camp, etc."
+                      value={memberForm.stewardship_notes}
+                      onChange={(e) => setMemberForm({ ...memberForm, stewardship_notes: e.target.value })}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
                     <Button onClick={addMember} disabled={!memberForm.member_name.trim()}>Add</Button>
                     <Button variant="outline" onClick={() => setShowAddMember(false)}>Cancel</Button>
                   </div>
@@ -467,22 +569,58 @@ export default function HCCommunicationPage() {
               {activeMembers.length === 0 ? (
                 <p className="text-center text-gray-500 py-8">No active high councilors.</p>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {activeMembers.map((m) => {
                     const isEditing = editingMember === m.id
                     const memberReportCount = reports.filter((r) => r.member_id === m.id).length
                     const hasReportedThisWeek = reportedMemberIds.has(m.id)
 
+                    const startEdit = () => {
+                      setEditingMember(m.id)
+                      setEditMemberForm({
+                        member_name: m.member_name,
+                        email: m.email,
+                        stewardships: m.stewardships,
+                        assigned_wards: m.assigned_wards,
+                        presidency_oversight: m.presidency_oversight ?? "",
+                        program_assignment: m.program_assignment ?? "",
+                        stewardship_notes: m.stewardship_notes ?? "",
+                      })
+                    }
+
                     if (isEditing) {
                       return (
-                        <div key={m.id} className="p-4 border border-indigo-300 rounded-lg bg-indigo-50">
+                        <div key={m.id} className="rounded-lg border border-indigo-300 bg-indigo-50 p-4 space-y-3">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <input type="text" value={editMemberForm.member_name || ""} onChange={(e) => setEditMemberForm({ ...editMemberForm, member_name: e.target.value })} className={inputClass} />
                             <input type="email" value={editMemberForm.email || ""} onChange={(e) => setEditMemberForm({ ...editMemberForm, email: e.target.value })} className={inputClass} />
-                            <input type="text" value={editMemberForm.stewardships || ""} onChange={(e) => setEditMemberForm({ ...editMemberForm, stewardships: e.target.value })} className={inputClass} placeholder="Stewardships" />
-                            <input type="text" value={editMemberForm.assigned_wards || ""} onChange={(e) => setEditMemberForm({ ...editMemberForm, assigned_wards: e.target.value })} className={inputClass} placeholder="Assigned Wards" />
                           </div>
-                          <div className="flex space-x-2 mt-3">
+                          <textarea
+                            rows={2}
+                            placeholder="Primary assignment title(s)"
+                            value={editMemberForm.stewardships || ""}
+                            onChange={(e) => setEditMemberForm({ ...editMemberForm, stewardships: e.target.value })}
+                            className={inputClass}
+                          />
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <input type="text" placeholder="Presidency oversight" value={editMemberForm.presidency_oversight ?? ""} onChange={(e) => setEditMemberForm({ ...editMemberForm, presidency_oversight: e.target.value })} className={inputClass} />
+                            <input type="text" placeholder="Program (ALC / YLC)" value={editMemberForm.program_assignment ?? ""} onChange={(e) => setEditMemberForm({ ...editMemberForm, program_assignment: e.target.value })} className={inputClass} />
+                          </div>
+                          <textarea
+                            rows={2}
+                            placeholder="Wards / coordinating context"
+                            value={editMemberForm.assigned_wards || ""}
+                            onChange={(e) => setEditMemberForm({ ...editMemberForm, assigned_wards: e.target.value })}
+                            className={inputClass}
+                          />
+                          <textarea
+                            rows={3}
+                            placeholder="Additional duties / notes"
+                            value={editMemberForm.stewardship_notes ?? ""}
+                            onChange={(e) => setEditMemberForm({ ...editMemberForm, stewardship_notes: e.target.value })}
+                            className={inputClass}
+                          />
+                          <div className="flex flex-wrap gap-2">
                             <Button size="sm" onClick={() => updateMember(m.id)}><Save className="h-3.5 w-3.5 mr-1" />Save</Button>
                             <Button size="sm" variant="outline" onClick={() => { setEditingMember(null); setEditMemberForm({}) }}>Cancel</Button>
                           </div>
@@ -491,34 +629,62 @@ export default function HCCommunicationPage() {
                     }
 
                     return (
-                      <div key={m.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 group">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center space-x-2">
-                            <span className="font-medium text-gray-900">{m.member_name}</span>
+                      <div key={m.id} className="flex flex-col gap-3 rounded-lg border border-gray-200 p-4 hover:bg-gray-50 sm:flex-row sm:items-start sm:justify-between group">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-semibold text-gray-900">{m.member_name}</span>
+                            {m.program_assignment ? (
+                              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">{m.program_assignment}</span>
+                            ) : null}
                             {hasReportedThisWeek ? (
-                              <span title="Reported this week" className="inline-flex">
+                              <span title="Reported this week" className="inline-flex items-center">
                                 <CheckCircle2 className="h-4 w-4 text-green-500" aria-hidden />
                               </span>
                             ) : (
-                              <span title="Not yet reported this week" className="inline-flex">
+                              <span title="Not yet reported this week" className="inline-flex items-center">
                                 <Clock className="h-4 w-4 text-amber-400" aria-hidden />
                               </span>
                             )}
                           </div>
-                          <div className="text-sm text-gray-500">
-                            {m.stewardships && <span>{m.stewardships}</span>}
-                            {m.email && <span className="text-gray-400"> &middot; {m.email}</span>}
+                          <dl className="mt-2 space-y-1.5 text-sm text-gray-700">
+                            {m.presidency_oversight ? (
+                              <div className="flex flex-col gap-0.5">
+                                <dt className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Presidency oversight</dt>
+                                <dd>{m.presidency_oversight}</dd>
+                              </div>
+                            ) : null}
+                            {m.stewardships ? (
+                              <div className="flex flex-col gap-0.5">
+                                <dt className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Assignment</dt>
+                                <dd className="whitespace-pre-wrap">{m.stewardships}</dd>
+                              </div>
+                            ) : null}
+                            {m.assigned_wards ? (
+                              <div className="flex flex-col gap-0.5">
+                                <dt className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Wards / coordinating</dt>
+                                <dd className="whitespace-pre-wrap">{m.assigned_wards}</dd>
+                              </div>
+                            ) : null}
+                            {m.stewardship_notes ? (
+                              <div className="flex flex-col gap-0.5">
+                                <dt className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Additional duties</dt>
+                                <dd className="text-gray-600 whitespace-pre-wrap">{m.stewardship_notes}</dd>
+                              </div>
+                            ) : null}
+                          </dl>
+                          <div className="mt-2 space-y-0.5">
+                            {m.email ? <p className="text-xs text-gray-500">{m.email}</p> : null}
+                            <p className="text-xs text-gray-400">{memberReportCount} total reports</p>
                           </div>
-                          <div className="text-xs text-gray-400">{memberReportCount} total reports</div>
                         </div>
-                        <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => { setEditingMember(m.id); setEditMemberForm({ member_name: m.member_name, email: m.email, stewardships: m.stewardships, assigned_wards: m.assigned_wards }) }} className="text-indigo-400 hover:text-indigo-600 p-1.5" title="Edit">
+                        <div className="flex shrink-0 items-center gap-1 border-t pt-3 sm:border-0 sm:pt-0 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
+                          <button type="button" onClick={() => startEdit()} className="tap-target rounded-md text-indigo-600 hover:bg-indigo-50 p-2" title="Edit">
                             <Edit2 className="h-4 w-4" />
                           </button>
-                          <button onClick={() => releaseMember(m.id)} className="text-amber-400 hover:text-amber-600 p-1.5" title="Release">
+                          <button type="button" onClick={() => releaseMember(m.id)} className="tap-target rounded-md text-amber-600 hover:bg-amber-50 p-2" title="Release">
                             <UserMinus className="h-4 w-4" />
                           </button>
-                          <button onClick={() => deleteMember(m.id)} className="text-red-400 hover:text-red-600 p-1.5" title="Delete permanently">
+                          <button type="button" onClick={() => deleteMember(m.id)} className="tap-target rounded-md text-red-600 hover:bg-red-50 p-2" title="Delete permanently">
                             <Trash2 className="h-4 w-4" />
                           </button>
                         </div>
@@ -540,15 +706,19 @@ export default function HCCommunicationPage() {
               <CardContent>
                 <div className="space-y-2">
                   {releasedMembers.map((m) => (
-                    <div key={m.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg opacity-60">
-                      <div>
+                    <div key={m.id} className="flex flex-col gap-2 border border-gray-200 rounded-lg p-3 opacity-60 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
                         <div className="font-medium text-gray-700">{m.member_name}</div>
                         <div className="text-xs text-gray-400">
                           Released {m.released_date ? new Date(m.released_date).toLocaleDateString() : ""}
-                          {m.stewardships && ` · ${m.stewardships}`}
                         </div>
+                        {m.presidency_oversight || m.stewardships ? (
+                          <p className="text-xs text-gray-500 mt-1 whitespace-pre-wrap">
+                            {[m.presidency_oversight, m.stewardships, m.assigned_wards].filter(Boolean).join("\n")}
+                          </p>
+                        ) : null}
                       </div>
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center shrink-0">
                         <Button size="sm" variant="outline" onClick={() => reactivateMember(m.id)}>Reactivate</Button>
                       </div>
                     </div>
