@@ -118,7 +118,7 @@ export function ConferenceProgramMobile({
 
   if (isPresidencyMeeting) {
     return (
-      <div className="space-y-3 pb-4 md:hidden">
+      <div className="space-y-3 pb-4 lg:hidden">
         {sortedProgramItems.map((item, idx) => {
           const isEditing = editingItem === item.id
           if (isEditing) {
@@ -242,7 +242,7 @@ export function ConferenceProgramMobile({
   }
 
   return (
-    <div className="space-y-3 pb-4 md:hidden">
+    <div className="space-y-3 pb-4 lg:hidden">
       {sortedProgramItems.map((item, idx) => {
         const isEditing = editingItem === item.id
         const showAddBefore =

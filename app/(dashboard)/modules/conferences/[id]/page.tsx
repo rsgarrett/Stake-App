@@ -1052,7 +1052,7 @@ export default function ConferenceDetailPage() {
                           )}
                           {showAddVisit ? (
                             <div className="mb-4 p-4 border border-emerald-200 rounded-lg bg-emerald-50">
-                              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
+                              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                                 <input type="text" placeholder="Name being visited *" value={visitForm.visitee_name} onChange={(e) => setVisitForm({ ...visitForm, visitee_name: e.target.value })} className={inputClass} />
                                 <input type="text" placeholder="Who is making the visit" value={visitForm.presidency_member} onChange={(e) => setVisitForm({ ...visitForm, presidency_member: e.target.value })} className={inputClass} />
                                 <input type="text" placeholder="Ward" value={visitForm.ward} onChange={(e) => setVisitForm({ ...visitForm, ward: e.target.value })} className={inputClass} />
@@ -1068,7 +1068,7 @@ export default function ConferenceDetailPage() {
                               <Plus className="h-3.5 w-3.5 mr-1" /> Add name
                             </button>
                           )}
-                          <div className="md:hidden space-y-3 pb-2">
+                          <div className="lg:hidden space-y-3 pb-2">
                             {visits.map((v) => (
                               <div key={v.id} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
                                 <p className="text-base font-semibold text-gray-900">{v.visitee_name}</p>
@@ -1094,7 +1094,7 @@ export default function ConferenceDetailPage() {
                               </div>
                             ))}
                           </div>
-                          <div className="hidden md:block overflow-x-auto rounded-lg border [-webkit-overflow-scrolling:touch]">
+                          <div className="hidden lg:block overflow-x-auto rounded-lg border [-webkit-overflow-scrolling:touch]">
                             <table className="w-full text-sm">
                               <thead>
                                 <tr className="bg-gray-50 border-b text-left">
@@ -1181,7 +1181,7 @@ export default function ConferenceDetailPage() {
                           inputClass={inputClass}
                           selectClass={selectClass}
                         />
-                        <div className="hidden md:block overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]">
+                        <div className="hidden lg:block overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]">
                         <table className={`w-full text-sm ${isPresidencyMeeting ? "min-w-0" : "min-w-[720px]"}`}>
                           <thead>
                             <tr className="bg-gray-50 border-b text-left">

@@ -94,7 +94,7 @@ export default function MissionReadyDetailPage() {
   const currentStatus = STATUS_OPTIONS.find((s) => s.value === missionary.status) || STATUS_OPTIONS[0]
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-5xl mx-auto">
       <Link href="/modules/missionary" className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center mb-4">
         <ArrowLeft className="h-4 w-4 mr-1" /> Back to Missionary Work
       </Link>
@@ -116,16 +116,16 @@ export default function MissionReadyDetailPage() {
       )}
 
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">{missionary.missionary_name}</h1>
-          <p className="mt-1 text-gray-600">Mission Ready Tracker</p>
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="break-words text-2xl sm:text-3xl font-bold text-gray-900">{missionary.missionary_name}</h1>
+          <p className="mt-1 text-sm sm:text-base text-gray-600">Mission Ready Tracker</p>
         </div>
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center">
           <select
             value={missionary.status}
             onChange={(e) => updateMissionaryStatus(e.target.value)}
-            className={`px-3 py-1.5 text-sm rounded-full border-0 font-medium ${currentStatus.bg} ${currentStatus.text} cursor-pointer`}
+            className={`w-full sm:w-auto px-3 py-1.5 text-sm rounded-full border-0 font-medium ${currentStatus.bg} ${currentStatus.text} cursor-pointer`}
           >
             {STATUS_OPTIONS.map((s) => (
               <option key={s.value} value={s.value}>
@@ -159,7 +159,84 @@ export default function MissionReadyDetailPage() {
           <CardDescription>Track each step of missionary preparation. Click the circle to mark complete.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          {/* Mobile card layout (phones / small tablets) */}
+          <div className="space-y-3 md:hidden">
+            {progress.map((item) => {
+              const isEditingNote = editingNote === item.id
+              return (
+                <div
+                  key={item.id}
+                  className={`rounded-xl border p-4 shadow-sm ${item.completed ? "border-green-200 bg-green-50/40" : "border-gray-200 bg-white"}`}
+                >
+                  <div className="flex items-start gap-3">
+                    <button
+                      onClick={() => toggleCompleted(item)}
+                      className="mt-0.5 shrink-0 focus:outline-none"
+                      aria-label={item.completed ? "Mark incomplete" : "Mark complete"}
+                    >
+                      {item.completed ? (
+                        <CheckCircle2 className="h-6 w-6 text-green-600" />
+                      ) : (
+                        <Circle className="h-6 w-6 text-gray-300" />
+                      )}
+                    </button>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                        Step {item.task_number}
+                      </div>
+                      <p
+                        className={`mt-0.5 break-words text-base font-semibold leading-snug ${
+                          item.completed ? "text-gray-400 line-through" : "text-gray-900"
+                        }`}
+                      >
+                        {item.task_name}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-1 gap-3">
+                    <label className="block text-xs text-gray-500">
+                      Completed date
+                      <input
+                        type="date"
+                        value={item.completed_date || ""}
+                        onChange={(e) => updateCompletedDate(item.id, e.target.value)}
+                        className="mt-1 w-full rounded border border-gray-200 bg-white px-2 py-2 text-sm text-gray-700"
+                      />
+                    </label>
+
+                    <div>
+                      <span className="block text-xs text-gray-500">Notes</span>
+                      {isEditingNote ? (
+                        <div className="mt-1 flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={noteText}
+                            onChange={(e) => setNoteText(e.target.value)}
+                            className="flex-1 rounded border border-gray-300 px-2 py-2 text-sm"
+                            autoFocus
+                            onKeyDown={(e) => { if (e.key === "Enter") updateNote(item.id); if (e.key === "Escape") setEditingNote(null) }}
+                          />
+                          <button onClick={() => updateNote(item.id)} className="text-green-600 p-2" aria-label="Save note"><Save className="h-4 w-4" /></button>
+                          <button onClick={() => setEditingNote(null)} className="text-gray-400 p-2" aria-label="Cancel"><X className="h-4 w-4" /></button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => { setEditingNote(item.id); setNoteText(item.notes || "") }}
+                          className="mt-1 block w-full text-left text-sm text-gray-700 break-words min-h-[24px]"
+                        >
+                          {item.notes || <span className="italic text-gray-400">Tap to add a note…</span>}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Desktop table */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left">
@@ -176,10 +253,8 @@ export default function MissionReadyDetailPage() {
 
                   return (
                     <tr key={item.id} className={`border-b hover:bg-gray-50 ${item.completed ? "bg-green-50/50" : ""}`}>
-                      {/* Task Number */}
                       <td className="px-3 py-3 text-gray-400 font-medium">{item.task_number}</td>
 
-                      {/* Checkbox */}
                       <td className="px-3 py-3">
                         <button onClick={() => toggleCompleted(item)} className="focus:outline-none">
                           {item.completed ? (
@@ -190,12 +265,10 @@ export default function MissionReadyDetailPage() {
                         </button>
                       </td>
 
-                      {/* Task Name */}
                       <td className={`px-3 py-3 font-medium ${item.completed ? "text-gray-400 line-through" : "text-gray-900"}`}>
                         {item.task_name}
                       </td>
 
-                      {/* Completed Date */}
                       <td className="px-3 py-3">
                         <input
                           type="date"
@@ -205,7 +278,6 @@ export default function MissionReadyDetailPage() {
                         />
                       </td>
 
-                      {/* Notes */}
                       <td className="px-3 py-3">
                         {isEditingNote ? (
                           <div className="flex items-center space-x-1">

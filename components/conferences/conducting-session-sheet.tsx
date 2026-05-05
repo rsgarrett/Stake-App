@@ -53,11 +53,34 @@ export function ConductingSessionSheet({
     broadcast_url: session.broadcast_url,
   })
 
+  // The fit logic forces the inner content element to a fixed letter-page
+  // width so each session prints to one page. On phones that fixed width
+  // (~693px) is wider than the viewport and clips the right side of the
+  // sheet. On small screens we skip the fit and let the sheet flow.
+  const isSmallScreen = useCallback(() => {
+    if (typeof window === "undefined") return false
+    return window.innerWidth < 768
+  }, [])
+
+  const clearFitStyles = useCallback(() => {
+    if (contentRef.current) {
+      contentRef.current.style.width = ""
+      contentRef.current.style.zoom = ""
+      contentRef.current.style.transform = ""
+      contentRef.current.style.transformOrigin = ""
+    }
+  }, [])
+
   const measure = useCallback(() => {
     if (!contentRef.current) return
+    if (isSmallScreen()) {
+      clearFitStyles()
+      setFit({ paddingIn: 0.16, zoom: 1 })
+      return
+    }
     const result = fitConductingSheet(contentRef.current)
     setFit(result)
-  }, [])
+  }, [isSmallScreen, clearFitStyles])
 
   useEffect(() => {
     measure()
@@ -78,15 +101,19 @@ export function ConductingSessionSheet({
 
   useEffect(() => {
     const onBeforePrint = () => {
-      measure()
-      if (clipRef.current && contentRef.current) {
+      // Always run the actual page fit before print, even on phones, so the
+      // printed sheet is identical regardless of the on-screen viewport.
+      if (!contentRef.current) return
+      const result = fitConductingSheet(contentRef.current)
+      setFit(result)
+      if (clipRef.current) {
         const pageH = (11 - 2 * CONDUCTING_PAGE_MARGIN_IN) * 96
-        const padPx = fit.paddingIn * 96 * 2
+        const padPx = result.paddingIn * 96 * 2
         clipRef.current.style.height = `${pageH - padPx}px`
         clipRef.current.style.overflow = "hidden"
-        if (fit.zoom < 1) {
-          contentRef.current.style.zoom = `${fit.zoom}`
-          contentRef.current.style.transform = `scale(${fit.zoom})`
+        if (result.zoom < 1) {
+          contentRef.current.style.zoom = `${result.zoom}`
+          contentRef.current.style.transform = `scale(${result.zoom})`
           contentRef.current.style.transformOrigin = "top left"
         }
       }
@@ -96,11 +123,10 @@ export function ConductingSessionSheet({
         clipRef.current.style.height = ""
         clipRef.current.style.overflow = ""
       }
-      if (contentRef.current) {
-        contentRef.current.style.zoom = ""
-        contentRef.current.style.transform = ""
-        contentRef.current.style.transformOrigin = ""
-      }
+      clearFitStyles()
+      // Re-measure so the on-screen view returns to its responsive state
+      // (especially important on phones where the print fit forced a width).
+      measure()
     }
     window.addEventListener("beforeprint", onBeforePrint)
     window.addEventListener("afterprint", onAfterPrint)
@@ -108,7 +134,7 @@ export function ConductingSessionSheet({
       window.removeEventListener("beforeprint", onBeforePrint)
       window.removeEventListener("afterprint", onAfterPrint)
     }
-  }, [measure, fit])
+  }, [measure, clearFitStyles])
 
   const zoomStyle: React.CSSProperties =
     fit.zoom < 1
@@ -118,11 +144,11 @@ export function ConductingSessionSheet({
   return (
     <article
       ref={articleRef}
-      className="conducting-sheet-page w-full min-w-0 max-w-full break-words bg-white text-slate-900"
+      className="conducting-sheet-page w-full min-w-0 max-w-full overflow-hidden break-words bg-white text-slate-900"
       style={{ padding: `${fit.paddingIn}in`, pageBreakAfter: "always", breakAfter: "page" }}
     >
-      <div ref={clipRef}>
-        <div ref={contentRef} className="conducting-doc mx-auto max-w-3xl font-serif" style={zoomStyle}>
+      <div ref={clipRef} className="min-w-0">
+        <div ref={contentRef} className="conducting-doc mx-auto w-full max-w-3xl min-w-0 font-serif" style={zoomStyle}>
           <header className="text-center font-serif">
             <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500">
               Stake conference

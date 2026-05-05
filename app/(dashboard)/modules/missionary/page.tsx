@@ -138,11 +138,9 @@ export default function MissionaryPage() {
 
   return (
     <div className="p-4 sm:p-6">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Missionary Work</h1>
-          <p className="mt-2 text-gray-600">Mission readiness tracking, currently serving, and returned missionaries</p>
-        </div>
+      <div className="mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Missionary Work</h1>
+        <p className="mt-2 text-sm sm:text-base text-gray-600">Mission readiness tracking, currently serving, and returned missionaries</p>
       </div>
 
       {/* Stats */}
@@ -174,19 +172,19 @@ export default function MissionaryPage() {
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
                   <CardTitle>Mission Ready Tracker</CardTitle>
                   <CardDescription>Track each prospective missionary through the 20-step preparation process. When all tasks are complete, they automatically move to Currently Serving.</CardDescription>
                 </div>
-                <Button onClick={() => setShowAddReady(true)}><Plus className="h-4 w-4 mr-2" />Add Missionary</Button>
+                <Button className="w-full shrink-0 sm:w-auto" onClick={() => setShowAddReady(true)}><Plus className="h-4 w-4 mr-2" />Add Missionary</Button>
               </div>
             </CardHeader>
             <CardContent>
               {showAddReady && (
                 <div className="mb-4 p-4 border border-indigo-200 rounded-lg bg-indigo-50">
-                  <div className="flex items-end gap-3">
-                    <div className="flex-1">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                    <div className="flex-1 min-w-0">
                       <label className="block text-sm font-medium text-gray-700 mb-1">Missionary Name</label>
                       <input
                         type="text"
@@ -198,10 +196,12 @@ export default function MissionaryPage() {
                         autoFocus
                       />
                     </div>
-                    <Button onClick={addReadyMissionary} disabled={addingReady || !newReadyName.trim()}>
-                      {addingReady ? "Adding..." : "Add"}
-                    </Button>
-                    <Button variant="outline" onClick={() => { setShowAddReady(false); setNewReadyName("") }}>Cancel</Button>
+                    <div className="flex gap-2">
+                      <Button className="flex-1 sm:flex-none" onClick={addReadyMissionary} disabled={addingReady || !newReadyName.trim()}>
+                        {addingReady ? "Adding..." : "Add"}
+                      </Button>
+                      <Button className="flex-1 sm:flex-none" variant="outline" onClick={() => { setShowAddReady(false); setNewReadyName("") }}>Cancel</Button>
+                    </div>
                   </div>
                   <p className="text-xs text-gray-500 mt-2">
                     A full 20-step preparation checklist will be created automatically.
