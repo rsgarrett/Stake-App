@@ -117,5 +117,19 @@ export function useAutosave({
     }
   }, [flushOnUnload, flush])
 
+  // Final flush on component unmount. This is critical for Next.js client-side
+  // navigation (clicking a <Link>) — that does NOT trigger beforeunload, so
+  // without this, any keystrokes within the debounce window before navigating
+  // away would be dropped on the floor. The fetch keeps running in the
+  // background after unmount and completes successfully.
+  useEffect(() => {
+    return () => {
+      if (timer.current) clearTimeout(timer.current)
+      if (pendingRef.current && !inFlight.current) {
+        void saveRef.current()
+      }
+    }
+  }, [])
+
   return { state, flush }
 }

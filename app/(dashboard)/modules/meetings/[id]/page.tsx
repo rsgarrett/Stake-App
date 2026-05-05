@@ -503,6 +503,7 @@ export default function MeetingDetailPage() {
             value={inputVal}
             onChange={(e) => setSubItemInputs((prev) => ({ ...prev, [item.id]: e.target.value }))}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSubItem(item, inputVal) } }}
+            onBlur={(e) => { if (e.target.value.trim()) addSubItem(item, e.target.value) }}
             className={`${inputClass} text-sm flex-1 py-1.5 border-dashed border-gray-300`}
           />
           <button
