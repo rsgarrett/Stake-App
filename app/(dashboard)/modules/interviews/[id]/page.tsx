@@ -1,12 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { AutosaveBadge } from "@/components/ui/autosave-badge"
+import { useAutosave } from "@/lib/hooks/use-autosave"
 import Link from "next/link"
-import { ArrowLeft, Save, CheckCircle2, Clock, XCircle } from "lucide-react"
+import { ArrowLeft, CheckCircle2, XCircle } from "lucide-react"
 import { formatInterviewType } from "@/lib/interviews/interview-types"
 
 interface Interview {
@@ -30,8 +32,11 @@ export default function InterviewDetailPage() {
 
   const [interview, setInterview] = useState<Interview | null>(null)
   const [notes, setNotes] = useState("")
+  // The most recent notes value the server has confirmed. Used as the
+  // baseline for autosave's "do I have unsaved changes?" check so a value
+  // freshly loaded from the server doesn't immediately re-trigger a save.
+  const [savedNotes, setSavedNotes] = useState("")
   const [loading, setLoading] = useState(true)
-  const [savingNotes, setSavingNotes] = useState(false)
   const [updatingStatus, setUpdatingStatus] = useState(false)
 
   useEffect(() => { loadData() }, [id])
@@ -49,7 +54,9 @@ export default function InterviewDetailPage() {
         body: JSON.stringify({ action: "get_note", interview_id: id }),
       })
       const noteData = await res.json()
-      if (noteData.note) setNotes(noteData.note.note_content || "")
+      const loadedNotes = noteData.note?.note_content || ""
+      setNotes(loadedNotes)
+      setSavedNotes(loadedNotes)
     } catch (err: any) {
       console.error("Error loading interview:", err)
     } finally {
@@ -57,22 +64,23 @@ export default function InterviewDetailPage() {
     }
   }
 
-  const saveNotes = async () => {
-    setSavingNotes(true)
-    try {
-      const res = await fetch("/api/interviews", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "save_note", interview_id: id, note_content: notes }),
-      })
-      const data = await res.json()
-      if (!data.success) throw new Error(data.error || "Failed to save")
-    } catch (err: any) {
-      alert("Error saving notes: " + err.message)
-    } finally {
-      setSavingNotes(false)
-    }
-  }
+  const persistNotes = useCallback(async () => {
+    const snapshot = notes
+    const res = await fetch("/api/interviews", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "save_note", interview_id: id, note_content: snapshot }),
+    })
+    const data = await res.json()
+    if (!data.success) throw new Error(data.error || "Failed to save")
+    setSavedNotes(snapshot)
+  }, [id, notes])
+
+  const notesAutosave = useAutosave({
+    hasPending: !loading && notes !== savedNotes,
+    save: persistNotes,
+    debounceMs: 800,
+  })
 
   const updateStatus = async (newStatus: "completed" | "cancelled") => {
     if (!interview) return
@@ -158,17 +166,15 @@ export default function InterviewDetailPage() {
         {/* Notes */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle className="text-base">Interview Notes</CardTitle>
-            <CardDescription>Notes are stored securely. Only you can view them.</CardDescription>
+            <CardTitle className="text-base flex items-center justify-between">
+              <span>Interview Notes</span>
+              <AutosaveBadge state={notesAutosave.state} />
+            </CardTitle>
+            <CardDescription>Notes are stored securely and saved automatically as you type.</CardDescription>
           </CardHeader>
           <CardContent>
             <textarea rows={12} value={notes} onChange={(e) => setNotes(e.target.value)} className={inputClass}
               placeholder="Record interview notes here...&#10;&#10;These notes are encrypted and only accessible by authorized leaders." />
-            <div className="flex justify-end mt-4">
-              <Button onClick={saveNotes} disabled={savingNotes}>
-                <Save className="h-4 w-4 mr-2" />{savingNotes ? "Saving..." : "Save Notes"}
-              </Button>
-            </div>
           </CardContent>
         </Card>
       </div>

@@ -5,9 +5,11 @@ import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { AutosaveBadge } from "@/components/ui/autosave-badge"
+import { useAutosave } from "@/lib/hooks/use-autosave"
 import Link from "next/link"
 import {
-  ArrowLeft, Plus, Trash2, Save, Clock, FileText, ListOrdered,
+  ArrowLeft, Plus, Trash2, Clock, FileText, ListOrdered,
   User, MapPin, ChevronDown, ChevronUp, Music,
   BookOpen, CheckCircle2, Users, MessageSquare, CalendarDays,
 } from "lucide-react"
@@ -105,9 +107,7 @@ export default function MeetingDetailPage() {
   const [loading, setLoading] = useState(true)
 
   const [editingItems, setEditingItems] = useState<Record<string, Partial<AgendaItem>>>({})
-  const [savingItems, setSavingItems] = useState<Set<string>>(new Set())
   const [subItemInputs, setSubItemInputs] = useState<Record<string, string>>({})
-  const [savingAll, setSavingAll] = useState(false)
 
   const [newAgendaTitle, setNewAgendaTitle] = useState("")
   const [newAgendaAssigned, setNewAgendaAssigned] = useState("")
@@ -115,7 +115,6 @@ export default function MeetingDetailPage() {
   const [newAgendaDesc, setNewAgendaDesc] = useState("")
 
   const [minutesContent, setMinutesContent] = useState("")
-  const [minutesSaving, setMinutesSaving] = useState(false)
 
   const [userMeetingRole, setUserMeetingRole] = useState<string | null>(null)
   const meetingWriteAllowed = canManageStakeMeetings(userMeetingRole)
@@ -314,34 +313,40 @@ export default function MeetingDetailPage() {
     }))
   }
 
-  const saveAgendaItem = async (item: AgendaItem) => {
-    const edits = editingItems[item.id]
-    if (!edits || Object.keys(edits).length === 0) return
-    setSavingItems((prev) => new Set(prev).add(item.id))
-    const payload: Record<string, unknown> = {}
-    for (const [key, val] of Object.entries(edits)) {
-      payload[key] = val === "" ? null : val
-    }
-    const { error } = await supabase.from("meeting_agendas").update(payload).eq("id", item.id)
-    if (error) {
-      alert("Error saving: " + error.message)
-    } else {
-      setEditingItems((prev) => { const next = { ...prev }; delete next[item.id]; return next })
-      await loadAgenda()
-    }
-    setSavingItems((prev) => { const next = new Set(prev); next.delete(item.id); return next })
-  }
+  /**
+   * Persist all pending agenda-item edits in one pass. Driven by the
+   * `useAutosave` hook below and also called on unload by that same hook.
+   */
+  const persistAgendaEdits = useCallback(async () => {
+    const snapshot = editingItems
+    const ids = Object.keys(snapshot)
+    if (ids.length === 0) return
+    const results = await Promise.all(
+      ids.map((id) => {
+        const edits = snapshot[id]
+        if (!edits || Object.keys(edits).length === 0) return null
+        const payload: Record<string, unknown> = {}
+        for (const [key, val] of Object.entries(edits)) {
+          payload[key] = val === "" ? null : val
+        }
+        return supabase.from("meeting_agendas").update(payload).eq("id", id)
+      })
+    )
+    const firstError = results.find((r) => r && r.error)?.error
+    if (firstError) throw firstError
+    setEditingItems((prev) => {
+      const next = { ...prev }
+      for (const id of ids) delete next[id]
+      return next
+    })
+    await loadAgenda()
+  }, [editingItems, supabase])
 
-  const saveAllEdits = async () => {
-    setSavingAll(true)
-    const ids = Object.keys(editingItems)
-    if (ids.length === 0) { setSavingAll(false); return }
-    const items = agendaItems.filter((a) => ids.includes(a.id))
-    await Promise.all(items.map((item) => saveAgendaItem(item)))
-    setSavingAll(false)
-  }
-
-  const hasUnsavedEdits = Object.keys(editingItems).length > 0
+  const agendaAutosave = useAutosave({
+    hasPending: Object.keys(editingItems).length > 0,
+    save: persistAgendaEdits,
+    debounceMs: 600,
+  })
 
   // --- Sub-item helpers (stored as newline-separated text in description) ---
 
@@ -375,27 +380,35 @@ export default function MeetingDetailPage() {
     updateSubItems(item.id, current)
   }
 
-  // --- Minutes ---
+  // --- Minutes (autosaved) ---
 
-  const saveMinutes = async () => {
-    setMinutesSaving(true)
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error("Not authenticated")
-      if (minutes) {
-        const { error } = await supabase.from("meeting_minutes").update({ content: minutesContent }).eq("id", minutes.id)
-        if (error) throw error
-      } else {
-        const { error } = await supabase.from("meeting_minutes").insert({ meeting_id: meetingId, content: minutesContent, created_by: user.id })
-        if (error) throw error
-      }
-      await loadMinutes()
-    } catch (err: any) {
-      alert("Error saving minutes: " + err.message)
-    } finally {
-      setMinutesSaving(false)
+  const persistMinutes = useCallback(async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) throw new Error("Not authenticated")
+    if (minutes) {
+      const { error } = await supabase
+        .from("meeting_minutes")
+        .update({ content: minutesContent })
+        .eq("id", minutes.id)
+      if (error) throw error
+    } else if (minutesContent.trim().length > 0) {
+      const { error } = await supabase
+        .from("meeting_minutes")
+        .insert({ meeting_id: meetingId, content: minutesContent, created_by: user.id })
+      if (error) throw error
+    } else {
+      return // empty + no row yet — nothing to save
     }
-  }
+    await loadMinutes()
+  }, [minutes, minutesContent, meetingId, supabase])
+
+  const minutesAutosave = useAutosave({
+    hasPending: minutesContent !== (minutes?.content ?? ""),
+    save: persistMinutes,
+    debounceMs: 800,
+  })
 
   // --- Ministering visit names (stored in meeting.description as newline-separated) ---
 
@@ -410,7 +423,6 @@ export default function MeetingDetailPage() {
   }
 
   const [visitInput, setVisitInput] = useState("")
-  const [visitSaving, setVisitSaving] = useState(false)
   const [visitNames, setVisitNames] = useState<string[]>([])
   const [visitDirty, setVisitDirty] = useState(false)
 
@@ -435,18 +447,22 @@ export default function MeetingDetailPage() {
     setVisitDirty(true)
   }
 
-  const saveVisitNames = async () => {
-    setVisitSaving(true)
+  const persistVisitNames = useCallback(async () => {
     const joined = visitNames.filter((n) => n.trim()).join("\n") || null
-    const { error } = await supabase.from("meetings").update({ description: joined }).eq("id", meetingId)
-    if (error) {
-      alert("Error saving: " + error.message)
-    } else {
-      setVisitDirty(false)
-      await loadMeeting()
-    }
-    setVisitSaving(false)
-  }
+    const { error } = await supabase
+      .from("meetings")
+      .update({ description: joined })
+      .eq("id", meetingId)
+    if (error) throw error
+    setVisitDirty(false)
+    await loadMeeting()
+  }, [visitNames, meetingId, supabase])
+
+  const visitsAutosave = useAutosave({
+    hasPending: visitDirty,
+    save: persistVisitNames,
+    debounceMs: 600,
+  })
 
   // --- Render ---
 
@@ -750,17 +766,17 @@ export default function MeetingDetailPage() {
                 </div>
                 )}
               </div>
-              {meetingWriteAllowed && visitDirty && (
-                <div className="flex justify-end mt-4 pt-4 border-t">
-                  <Button onClick={saveVisitNames} disabled={visitSaving}>
-                    <Save className="h-4 w-4 mr-2" />{visitSaving ? "Saving..." : "Save"}
-                  </Button>
-                </div>
-              )}
-              {visitNames.length > 0 && !visitDirty && (
-                <div className="mt-4 pt-3 border-t flex items-center text-sm text-gray-500">
-                  <CheckCircle2 className="h-4 w-4 mr-1.5 text-green-500" />
-                  {visitNames.length} {visitNames.length === 1 ? "person" : "people"} visited
+              {(visitsAutosave.state !== "idle" || visitNames.length > 0) && (
+                <div className="mt-4 pt-3 border-t flex items-center justify-between text-sm text-gray-500">
+                  <div className="flex items-center">
+                    {visitNames.length > 0 && (
+                      <>
+                        <CheckCircle2 className="h-4 w-4 mr-1.5 text-green-500" />
+                        {visitNames.length} {visitNames.length === 1 ? "person" : "people"} visited
+                      </>
+                    )}
+                  </div>
+                  {meetingWriteAllowed && <AutosaveBadge state={visitsAutosave.state} />}
                 </div>
               )}
             </CardContent>
@@ -868,11 +884,9 @@ export default function MeetingDetailPage() {
                     </div>
                     )}
                   </div>
-                  {meetingWriteAllowed && visitDirty && (
-                    <div className="flex justify-end mt-4 pt-4 border-t">
-                      <Button onClick={saveVisitNames} disabled={visitSaving}>
-                        <Save className="h-4 w-4 mr-2" />{visitSaving ? "Saving..." : "Save"}
-                      </Button>
+                  {meetingWriteAllowed && visitsAutosave.state !== "idle" && (
+                    <div className="flex justify-end mt-4 pt-3 border-t">
+                      <AutosaveBadge state={visitsAutosave.state} />
                     </div>
                   )}
                 </div>
@@ -1062,6 +1076,7 @@ export default function MeetingDetailPage() {
                       <Clock className="h-4 w-4 mr-1" /> {totalDuration} min
                     </span>
                   )}
+                  {meetingWriteAllowed && <AutosaveBadge state={agendaAutosave.state} />}
                   {meetingWriteAllowed && templateConfig && (
                     <Button
                       size="sm"
@@ -1070,11 +1085,6 @@ export default function MeetingDetailPage() {
                       title="Replace the current agenda with the handbook template"
                     >
                       Reset to template
-                    </Button>
-                  )}
-                  {hasUnsavedEdits && (
-                    <Button size="sm" onClick={saveAllEdits} disabled={savingAll}>
-                      <Save className="h-4 w-4 mr-1" /> {savingAll ? "Saving..." : "Save All"}
                     </Button>
                   )}
                 </div>
@@ -1106,7 +1116,6 @@ export default function MeetingDetailPage() {
                 <div className="space-y-2">
                   {agendaItems.map((item, idx) => {
                     const isDirty = Boolean(editingItems[item.id] && Object.keys(editingItems[item.id]).length > 0)
-                    const isSaving = savingItems.has(item.id)
                     const ft = getFieldTypeForTitle(item.title, meeting?.meeting_type)
                     const isReadOnly = ft === "readonly"
                     const sectionHint = templateConfig?.items.find(
@@ -1118,7 +1127,7 @@ export default function MeetingDetailPage() {
                         key={item.id}
                         className={`border rounded-lg transition-all ${
                           isDirty ? "border-indigo-400 bg-indigo-50/40 shadow-sm" : "border-gray-200 hover:border-gray-300"
-                        } ${isSaving ? "opacity-60" : ""}`}
+                        }`}
                       >
                         {/* Header row */}
                         <div className="flex items-center px-3 py-2.5 gap-2">
@@ -1143,11 +1152,6 @@ export default function MeetingDetailPage() {
                               <span className="text-xs text-gray-400 flex items-center bg-gray-50 px-1.5 py-0.5 rounded">
                                 <Clock className="h-3 w-3 mr-0.5" />{item.duration_minutes}m
                               </span>
-                            )}
-                            {isDirty && (
-                              <Button size="sm" variant="outline" onClick={() => saveAgendaItem(item)} disabled={isSaving} className="h-6 text-xs px-2">
-                                <Save className="h-3 w-3 mr-1" />{isSaving ? "..." : "Save"}
-                              </Button>
                             )}
                             <button type="button" onClick={() => deleteAgendaItem(item.id)} className="text-gray-300 hover:text-red-500 p-0.5 transition-colors">
                               <Trash2 className="h-3.5 w-3.5" />
@@ -1203,9 +1207,12 @@ export default function MeetingDetailPage() {
       {activeTab === "minutes" && (
         <Card>
           <CardHeader>
-            <CardTitle>Meeting Minutes</CardTitle>
+            <CardTitle className="flex items-center justify-between">
+              <span>Meeting Minutes</span>
+              {meetingWriteAllowed && <AutosaveBadge state={minutesAutosave.state} />}
+            </CardTitle>
             <CardDescription>
-              {minutes ? `Last updated ${new Date(minutes.updated_at).toLocaleString()}` : "No minutes recorded yet"}
+              {minutes ? `Last updated ${new Date(minutes.updated_at).toLocaleString()}` : "Type below — your notes are saved automatically as you go."}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1217,13 +1224,6 @@ export default function MeetingDetailPage() {
               className={`${inputClass}${!meetingWriteAllowed ? " bg-gray-50 text-gray-700" : ""}`}
               placeholder={"Record meeting minutes here...\n\nDiscussion Items:\n- ...\n\nAction Items:\n- [ ] ...\n\nDecisions Made:\n- ..."}
             />
-            {meetingWriteAllowed && (
-            <div className="flex justify-end mt-4">
-              <Button onClick={saveMinutes} disabled={minutesSaving}>
-                <Save className="h-4 w-4 mr-2" />{minutesSaving ? "Saving..." : "Save Minutes"}
-              </Button>
-            </div>
-            )}
           </CardContent>
         </Card>
       )}
