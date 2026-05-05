@@ -30,6 +30,8 @@ interface Meeting {
   recurrence_type?: string | null
   source_type?: string | null
   color?: string | null
+  presiding?: string | null
+  conducting?: string | null
 }
 
 interface AgendaItem {
@@ -481,6 +483,37 @@ export default function MeetingDetailPage() {
     setVisitDirty(false)
     await loadMeeting()
   }, [visitNames, meetingId, supabase])
+
+  // --- Presiding / Conducting (autosaved on the meetings row) ---
+
+  const [presiding, setPresiding] = useState("")
+  const [conducting, setConducting] = useState("")
+
+  useEffect(() => {
+    if (!meeting) return
+    setPresiding(meeting.presiding ?? "")
+    setConducting(meeting.conducting ?? "")
+  }, [meeting?.id, meeting?.presiding, meeting?.conducting])
+
+  const persistPresidingConducting = useCallback(async () => {
+    const { error } = await supabase
+      .from("meetings")
+      .update({
+        presiding: presiding.trim() || null,
+        conducting: conducting.trim() || null,
+      })
+      .eq("id", meetingId)
+    if (error) throw error
+  }, [presiding, conducting, meetingId, supabase])
+
+  const presidingConductingAutosave = useAutosave({
+    hasPending:
+      Boolean(meeting) &&
+      ((presiding ?? "") !== (meeting?.presiding ?? "") ||
+        (conducting ?? "") !== (meeting?.conducting ?? "")),
+    save: persistPresidingConducting,
+    debounceMs: 600,
+  })
 
   const visitsAutosave = useAutosave({
     hasPending: visitDirty,
@@ -1080,16 +1113,39 @@ export default function MeetingDetailPage() {
                   {templateConfig.presiding_field && (
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Presiding</label>
-                      <input type="text" placeholder="Who is presiding?" className={`${inputClass} text-sm py-1.5`} />
+                      <input
+                        type="text"
+                        placeholder="Who is presiding?"
+                        value={presiding}
+                        readOnly={!meetingWriteAllowed}
+                        onChange={(e) => setPresiding(e.target.value)}
+                        className={`${inputClass} text-sm py-1.5`}
+                      />
                     </div>
                   )}
                   {templateConfig.conducting_field && (
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Conducting</label>
-                      <input type="text" placeholder="Who is conducting?" className={`${inputClass} text-sm py-1.5`} />
+                      <input
+                        type="text"
+                        placeholder="Who is conducting?"
+                        value={conducting}
+                        readOnly={!meetingWriteAllowed}
+                        onChange={(e) => setConducting(e.target.value)}
+                        className={`${inputClass} text-sm py-1.5`}
+                      />
                     </div>
                   )}
                 </div>
+                {meetingWriteAllowed && (
+                  <div className="mt-3 flex justify-end">
+                    <AutosaveBadge
+                      state={presidingConductingAutosave.state}
+                      errorMessage={presidingConductingAutosave.errorMessage}
+                      onRetry={() => void presidingConductingAutosave.flush()}
+                    />
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
