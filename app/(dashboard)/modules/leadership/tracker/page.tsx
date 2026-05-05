@@ -109,7 +109,7 @@ export default function CallingTrackerPage() {
   if (loading) return <div className="p-6 text-center py-12 text-gray-500">Loading...</div>
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <Link href="/modules/leadership" className="inline-flex items-center text-sm text-indigo-600 hover:underline mb-2">

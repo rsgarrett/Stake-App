@@ -1519,7 +1519,7 @@ export default function MeetingsPage() {
                       {/* Stake Presidency schedule details */}
                       {schedDetail && (
                         <div className="mt-3 pt-3 border-t border-gray-100">
-                          <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
                             <div><span className="text-gray-400">Conducting:</span> <span className="text-gray-700">{schedDetail.conducting}</span></div>
                             <div><span className="text-gray-400">Goal:</span> <span className="text-gray-700">{schedDetail.goal}</span></div>
                             <div><span className="text-gray-400">Opening Prayer:</span> <span className="text-gray-700">{schedDetail.opening_prayer}</span></div>

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Bell, Menu, MessageSquare } from "lucide-react"
+import { Bell, LogOut, Menu, MessageSquare } from "lucide-react"
 import Link from "next/link"
 
 export function Header({ onMenuToggle }: { onMenuToggle?: () => void }) {
@@ -95,8 +95,14 @@ export function Header({ onMenuToggle }: { onMenuToggle?: () => void }) {
               </span>
             )}
           </Link>
-          <Button variant="outline" onClick={handleSignOut}>
-            Sign Out
+          <Button
+            variant="outline"
+            onClick={handleSignOut}
+            className="h-10 px-2.5 sm:px-4"
+            aria-label="Sign out"
+          >
+            <LogOut className="h-4 w-4 sm:mr-2" aria-hidden />
+            <span className="hidden sm:inline">Sign Out</span>
           </Button>
         </div>
       </div>

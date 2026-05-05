@@ -688,8 +688,8 @@ export default function ConferenceDetailPage() {
     return lines.join("\n")
   }
 
-  if (loading) return <div className="p-6"><div className="text-center py-12">Loading...</div></div>
-  if (!event) return <div className="p-6"><div className="text-center py-12 text-gray-500">Event not found</div></div>
+  if (loading) return <div className="p-4 sm:p-6"><div className="text-center py-12">Loading...</div></div>
+  if (!event) return <div className="p-4 sm:p-6"><div className="text-center py-12 text-gray-500">Event not found</div></div>
 
   const HANDBOOK_URL = "https://www.churchofjesuschrist.org/study/manual/general-handbook/29-meetings-in-the-church?lang=eng"
 

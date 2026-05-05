@@ -40,13 +40,13 @@ export default async function DashboardPage() {
   // }
 
   return (
-    <div className="p-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="mt-2 text-gray-600">Welcome to the Stake President Management App</p>
+    <div className="p-4 sm:p-6">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h1>
+        <p className="mt-2 text-sm sm:text-base text-gray-600">Welcome to the Stake President Management App</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
         {modules.map((module) => (
           <Link key={module.name} href={module.href}>
             <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">

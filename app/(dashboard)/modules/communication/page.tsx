@@ -62,10 +62,10 @@ export default function CommunicationPage() {
 
   const unreadCount = messages.filter((m) => !m.read).length
 
-  if (loading) return <div className="p-6"><div className="text-center py-12">Loading...</div></div>
+  if (loading) return <div className="p-4 sm:p-6"><div className="text-center py-12">Loading...</div></div>
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Communication</h1>

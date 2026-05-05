@@ -168,7 +168,7 @@ export default function CallingWorkflowPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <Link href="/modules/leadership" className="inline-flex items-center text-sm text-indigo-600 hover:underline mb-2">
@@ -180,7 +180,7 @@ export default function CallingWorkflowPage() {
       </div>
 
       {/* Stage Summary */}
-      <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 mb-6">
         {WORKFLOW_STEPS.map((step, i) => {
           const count = callings.filter((c) => getStepIndex(c) === i + 1).length
           return (
@@ -323,7 +323,7 @@ export default function CallingWorkflowPage() {
 
                     {/* Dates & details */}
                     {(calling.presidency_approval_date || calling.bishop_approval_date || calling.high_council_approval_date || calling.sustained_date || calling.set_apart_date || calling.assigned_to_extend || calling.notes) && (
-                      <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
                         {calling.presidency_approval_date && (
                           <div className="bg-white rounded p-2 border">
                             <span className="text-gray-500">SP Considered:</span>{" "}

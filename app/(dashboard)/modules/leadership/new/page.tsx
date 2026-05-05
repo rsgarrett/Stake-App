@@ -110,7 +110,7 @@ export default function NewCallingPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Add New Calling</h1>
         <p className="mt-2 text-gray-600">Record a new calling, release, assignment, or priesthood action</p>
@@ -130,7 +130,7 @@ export default function NewCallingPage() {
             )}
 
             {/* Row 1: Type & Status */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label htmlFor="type" className="block text-sm font-medium text-gray-700 mb-1">
                   Type <span className="text-red-500">*</span>
@@ -194,7 +194,7 @@ export default function NewCallingPage() {
             </div>
 
             {/* Dates */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label htmlFor="extended_date" className="block text-sm font-medium text-gray-700 mb-1">Extended Date</label>
                 <input type="date" id="extended_date" value={formData.extended_date} onChange={(e) => setFormData({ ...formData, extended_date: e.target.value })} className={inputClass} />
@@ -205,7 +205,7 @@ export default function NewCallingPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label htmlFor="set_apart_date" className="block text-sm font-medium text-gray-700 mb-1">Set Apart Date</label>
                 <input type="date" id="set_apart_date" value={formData.set_apart_date} onChange={(e) => setFormData({ ...formData, set_apart_date: e.target.value })} className={inputClass} />

@@ -88,8 +88,8 @@ export default function MissionReadyDetailPage() {
   const totalCount = progress.length
   const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
 
-  if (loading) return <div className="p-6"><div className="text-center py-12">Loading...</div></div>
-  if (!missionary) return <div className="p-6"><div className="text-center py-12 text-gray-500">Missionary not found</div></div>
+  if (loading) return <div className="p-4 sm:p-6"><div className="text-center py-12">Loading...</div></div>
+  if (!missionary) return <div className="p-4 sm:p-6"><div className="text-center py-12 text-gray-500">Missionary not found</div></div>
 
   const currentStatus = STATUS_OPTIONS.find((s) => s.value === missionary.status) || STATUS_OPTIONS[0]
 

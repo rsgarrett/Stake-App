@@ -56,6 +56,49 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /*
+   * Mobile-first input sizing.
+   *
+   * iOS Safari aggressively zooms the viewport when the user focuses an
+   * input whose computed font-size is below 16px, which makes the rest of
+   * our UI un-tappable until they manually zoom back out. We force a
+   * minimum 16px font on form controls at <=640px (Tailwind's sm
+   * breakpoint) and let the design system override above that width via
+   * Tailwind utilities.
+   */
+  @media (max-width: 640px) {
+    input:not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea {
+      font-size: 16px;
+    }
+  }
+
+  /*
+   * On any pointer that isn't a mouse (touch screens, stylus on mobile
+   * browsers), reveal controls that desktop users only see on hover. The
+   * codebase uses Tailwind's `opacity-0 group-hover:opacity-100` pattern
+   * for delete/edit affordances; without this, those controls would be
+   * permanently invisible to phone users.
+   */
+  @media (hover: none) {
+    .opacity-0.group-hover\:opacity-100,
+    .group-hover\:opacity-100 {
+      opacity: 1 !important;
+    }
+  }
+}
+
+@layer utilities {
+  /*
+   * Generous tap target — 44px is the iOS HIG recommendation. Apply with
+   * `tap-target` to small icon buttons that are otherwise ~16-24px.
+   */
+  .tap-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
 }
 
 @media print {

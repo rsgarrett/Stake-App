@@ -165,7 +165,7 @@ export default function SubmitNamePage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="mb-6">
         <Link href="/modules/leadership" className="inline-flex items-center text-sm text-indigo-600 hover:underline mb-3">
           <ArrowLeft className="h-4 w-4 mr-1" />Back to Callings
@@ -191,7 +191,7 @@ export default function SubmitNamePage() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Type <span className="text-red-500">*</span>

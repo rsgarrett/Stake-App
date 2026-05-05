@@ -89,7 +89,7 @@ export default function CallingsDashboard() {
   ]
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="mb-6">
         <Link href="/modules/leadership" className="inline-flex items-center text-sm text-indigo-600 hover:underline mb-2">
           <ArrowLeft className="h-4 w-4 mr-1" />Back to Callings
@@ -125,7 +125,7 @@ export default function CallingsDashboard() {
 
       {/* Pipeline Stages */}
       <h2 className="text-lg font-semibold text-gray-900 mb-3">Pipeline Stages</h2>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-6">
         {stages.map((s) => (
           <Link key={s.label} href={s.link}>
             <Card className={`${s.color} hover:shadow-md transition-shadow cursor-pointer`}>

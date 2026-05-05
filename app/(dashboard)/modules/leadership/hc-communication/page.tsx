@@ -222,7 +222,7 @@ export default function HCCommunicationPage() {
     weekOptions.push(d.toISOString().split("T")[0])
   }
 
-  if (loading) return <div className="p-6"><div className="text-center py-12">Loading...</div></div>
+  if (loading) return <div className="p-4 sm:p-6"><div className="text-center py-12">Loading...</div></div>
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -236,7 +236,7 @@ export default function HCCommunicationPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-4 mb-6 max-w-xl">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 max-w-xl">
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-gray-500">Active Members</CardTitle></CardHeader>
           <CardContent><div className="text-2xl font-bold text-indigo-600">{activeMembers.length}</div></CardContent></Card>
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-gray-500">Reported This Week</CardTitle></CardHeader>

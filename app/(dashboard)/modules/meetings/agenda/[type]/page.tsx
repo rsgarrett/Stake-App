@@ -77,7 +77,7 @@ export default function AgendaPage() {
 
   if (!config) {
     return (
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <div className="text-center py-12">
           <h2 className="text-xl font-bold text-gray-900 mb-2">Unknown Agenda Type</h2>
           <p className="text-gray-500">No agenda template found for &quot;{type}&quot;.</p>

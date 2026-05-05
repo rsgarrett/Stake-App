@@ -250,10 +250,10 @@ export default function InterviewsPage() {
   const servingMissionaries = readyMissionaries.filter((m) => m.status === "serving")
   const returnedMissionaries = readyMissionaries.filter((m) => m.status === "completed")
 
-  if (loading && missionLoading) return <div className="p-6"><div className="text-center py-12">Loading...</div></div>
+  if (loading && missionLoading) return <div className="p-4 sm:p-6"><div className="text-center py-12">Loading...</div></div>
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Interviews</h1>

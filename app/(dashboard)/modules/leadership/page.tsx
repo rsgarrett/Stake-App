@@ -148,13 +148,13 @@ export default function LeadershipPage() {
   if (loading) return <div className="p-6 text-center py-12 text-gray-500">Loading...</div>
 
   return (
-    <div className="p-6">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Calling Tracker</h1>
-          <p className="mt-1 text-gray-600">Manage callings through each stage of the process</p>
+    <div className="p-4 sm:p-6">
+      <div className="mb-4 sm:mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Calling Tracker</h1>
+          <p className="mt-1 text-sm sm:text-base text-gray-600">Manage callings through each stage of the process</p>
         </div>
-        <Link href="/modules/leadership/recommend" className={buttonVariants()}>
+        <Link href="/modules/leadership/recommend" className={`${buttonVariants()} shrink-0 self-start sm:self-auto`}>
           <Plus className="h-4 w-4 mr-2" />Submit Name
         </Link>
       </div>

@@ -171,15 +171,15 @@ export default function UnifiedCalendarPage() {
 
   const upcomingList = filteredEvents.filter((e) => e.start >= new Date()).slice(0, 50)
 
-  if (loading) return <div className="p-6"><div className="text-center py-12">Loading calendar...</div></div>
+  if (loading) return <div className="p-4 sm:p-6"><div className="text-center py-12">Loading calendar...</div></div>
 
   const daysInMonth = getDaysInMonth(currentMonth)
   const firstDay = getFirstDayOfMonth(currentMonth)
   const monthName = currentMonth.toLocaleString("default", { month: "long", year: "numeric" })
 
   return (
-    <div className="p-6">
-      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <div className="p-4 sm:p-6">
+      <div className="mb-4 sm:mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">Unified Calendar</h1>
           <p className="mt-2 text-sm text-gray-600 sm:text-base">All stake events in one view</p>
@@ -230,26 +230,29 @@ export default function UnifiedCalendarPage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-7 gap-px bg-gray-200 border border-gray-200 rounded-lg overflow-hidden">
-              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-                <div key={d} className="bg-gray-50 p-2 text-center text-xs font-medium text-gray-500">{d}</div>
+              {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
+                <div key={i} className="bg-gray-50 p-1 sm:p-2 text-center text-[10px] sm:text-xs font-medium text-gray-500">
+                  <span className="sm:hidden">{d}</span>
+                  <span className="hidden sm:inline">{["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][i]}</span>
+                </div>
               ))}
               {Array.from({ length: firstDay }).map((_, i) => (
-                <div key={`empty-${i}`} className="bg-white p-2 min-h-[80px]" />
+                <div key={`empty-${i}`} className="bg-white p-1 sm:p-2 min-h-[60px] sm:min-h-[80px]" />
               ))}
               {Array.from({ length: daysInMonth }).map((_, i) => {
                 const day = i + 1
                 const dayEvents = getEventsForDay(day)
                 const isToday = new Date().getDate() === day && new Date().getMonth() === currentMonth.getMonth() && new Date().getFullYear() === currentMonth.getFullYear()
                 return (
-                  <div key={day} className={`bg-white p-1 min-h-[80px] ${isToday ? "ring-2 ring-indigo-500 ring-inset" : ""}`}>
-                    <div className={`text-xs font-medium mb-1 ${isToday ? "text-indigo-600" : "text-gray-700"}`}>{day}</div>
+                  <div key={day} className={`bg-white p-0.5 sm:p-1 min-h-[60px] sm:min-h-[80px] ${isToday ? "ring-2 ring-indigo-500 ring-inset" : ""}`}>
+                    <div className={`text-[10px] sm:text-xs font-medium mb-0.5 sm:mb-1 ${isToday ? "text-indigo-600" : "text-gray-700"}`}>{day}</div>
                     <div className="space-y-0.5">
                       {dayEvents.slice(0, 3).map((e) => (
-                        <div key={e.id} className="text-xs px-1 py-0.5 rounded truncate text-white" style={{ backgroundColor: e.color }}>
+                        <div key={e.id} className="text-[9px] sm:text-xs px-0.5 sm:px-1 py-0.5 rounded truncate text-white" style={{ backgroundColor: e.color }}>
                           {e.title}
                         </div>
                       ))}
-                      {dayEvents.length > 3 && <div className="text-xs text-gray-500 px-1">+{dayEvents.length - 3} more</div>}
+                      {dayEvents.length > 3 && <div className="text-[9px] sm:text-xs text-gray-500 px-0.5 sm:px-1">+{dayEvents.length - 3}</div>}
                     </div>
                   </div>
                 )

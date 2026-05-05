@@ -220,7 +220,7 @@ export default function EditCallingPage() {
   const currentStep = getStepIndex()
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="mb-6">
         <Link href="/modules/leadership" className="inline-flex items-center text-sm text-indigo-600 hover:underline mb-3">
           <ArrowLeft className="h-4 w-4 mr-1" />Back to Callings
@@ -271,7 +271,7 @@ export default function EditCallingPage() {
             )}
 
             {/* Basic Info */}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
                 <select value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value })} className={inputClass}>
@@ -302,7 +302,7 @@ export default function EditCallingPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Person Name <span className="text-red-500">*</span></label>
                 <input type="text" required value={formData.person_name} onChange={(e) => setFormData({ ...formData, person_name: e.target.value })} className={inputClass} />
@@ -329,7 +329,7 @@ export default function EditCallingPage() {
             <div className="border-t pt-4">
               <h3 className="text-sm font-semibold text-gray-900 mb-3">Calling Workflow (6 Steps)</h3>
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-4 items-end">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
                   <label className="flex items-center space-x-2">
                     <input type="checkbox" checked={formData.presidency_approval} onChange={(e) => setFormData({ ...formData, presidency_approval: e.target.checked, presidency_approval_date: e.target.checked && !formData.presidency_approval_date ? new Date().toISOString().split("T")[0] : formData.presidency_approval_date })} className="h-4 w-4 text-indigo-600 border-gray-300 rounded" />
                     <span className="text-sm text-gray-700">1. SP Considered</span>
@@ -339,7 +339,7 @@ export default function EditCallingPage() {
                     <input type="date" value={formData.presidency_approval_date} onChange={(e) => setFormData({ ...formData, presidency_approval_date: e.target.value })} className={inputClass} />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4 items-end">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
                   <label className="flex items-center space-x-2">
                     <input type="checkbox" checked={formData.bishop_approval} onChange={(e) => setFormData({ ...formData, bishop_approval: e.target.checked, bishop_approval_date: e.target.checked && !formData.bishop_approval_date ? new Date().toISOString().split("T")[0] : formData.bishop_approval_date })} className="h-4 w-4 text-indigo-600 border-gray-300 rounded" />
                     <span className="text-sm text-gray-700">2. Bishop Approved</span>
@@ -349,7 +349,7 @@ export default function EditCallingPage() {
                     <input type="date" value={formData.bishop_approval_date} onChange={(e) => setFormData({ ...formData, bishop_approval_date: e.target.value })} className={inputClass} />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4 items-end">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
                   <label className="flex items-center space-x-2">
                     <input type="checkbox" checked={formData.high_council_approval} onChange={(e) => setFormData({ ...formData, high_council_approval: e.target.checked, high_council_approval_date: e.target.checked && !formData.high_council_approval_date ? new Date().toISOString().split("T")[0] : formData.high_council_approval_date })} className="h-4 w-4 text-indigo-600 border-gray-300 rounded" />
                     <span className="text-sm text-gray-700">3. HC Sustained</span>
@@ -359,7 +359,7 @@ export default function EditCallingPage() {
                     <input type="date" value={formData.high_council_approval_date} onChange={(e) => setFormData({ ...formData, high_council_approval_date: e.target.value })} className={inputClass} />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4 items-end">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
                   <label className="flex items-center space-x-2">
                     <input type="checkbox" checked={formData.ward_sustained} onChange={(e) => setFormData({ ...formData, ward_sustained: e.target.checked, sustained_date: e.target.checked && !formData.sustained_date ? new Date().toISOString().split("T")[0] : formData.sustained_date })} className="h-4 w-4 text-indigo-600 border-gray-300 rounded" />
                     <span className="text-sm text-gray-700">4. Ward / Stake Sustained</span>
@@ -369,7 +369,7 @@ export default function EditCallingPage() {
                     <input type="date" value={formData.sustained_date} onChange={(e) => setFormData({ ...formData, sustained_date: e.target.value })} className={inputClass} />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4 items-end">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
                   <label className="flex items-center space-x-2">
                     <input type="checkbox" checked={formData.calling_extended} onChange={(e) => setFormData({ ...formData, calling_extended: e.target.checked, extended_date: e.target.checked && !formData.extended_date ? new Date().toISOString().split("T")[0] : formData.extended_date })} className="h-4 w-4 text-indigo-600 border-gray-300 rounded" />
                     <span className="text-sm text-gray-700">5. Calling Extended</span>
@@ -379,7 +379,7 @@ export default function EditCallingPage() {
                     <input type="date" value={formData.extended_date} onChange={(e) => setFormData({ ...formData, extended_date: e.target.value })} className={inputClass} />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4 items-end">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">6. Set Apart Date</label>
                     <input type="date" value={formData.set_apart_date} onChange={(e) => setFormData({ ...formData, set_apart_date: e.target.value })} className={inputClass} />
@@ -404,7 +404,7 @@ export default function EditCallingPage() {
                     {/* Extend */}
                     <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                       <h4 className="text-sm font-medium text-blue-900 mb-3">Who Extends the Calling</h4>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-xs font-medium text-blue-800 mb-1">Authority Level (Handbook)</label>
                           <select
@@ -438,7 +438,7 @@ export default function EditCallingPage() {
                     {/* Set Apart */}
                     <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
                       <h4 className="text-sm font-medium text-green-900 mb-3">Who Sets Apart</h4>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-xs font-medium text-green-800 mb-1">Authority Level (Handbook)</label>
                           <select
@@ -476,7 +476,7 @@ export default function EditCallingPage() {
             {/* Compliance */}
             <div className="border-t pt-4">
               <h3 className="text-sm font-semibold text-gray-900 mb-3">Compliance & Records</h3>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {[
                   { key: "previous_release_verified", label: "Previous release verified" },
                   { key: "updated_in_lcr", label: "Updated in LCR" },

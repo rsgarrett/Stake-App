@@ -189,7 +189,7 @@ export default function NewEventPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <Link href="/modules/conferences" className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center mb-4">
         <ArrowLeft className="h-4 w-4 mr-1" /> Back to Conferences
       </Link>
@@ -286,7 +286,7 @@ export default function NewEventPage() {
               <textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className={inputClass} rows={2} placeholder="Optional notes or description..." />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Start Date <span className="text-red-500">*</span></label>
                 <input

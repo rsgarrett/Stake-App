@@ -99,11 +99,11 @@ export default function InterviewDetailPage() {
     }
   }
 
-  if (loading) return <div className="p-6"><div className="text-center py-12">Loading...</div></div>
-  if (!interview) return <div className="p-6"><div className="text-center py-12 text-gray-500">Interview not found</div></div>
+  if (loading) return <div className="p-4 sm:p-6"><div className="text-center py-12">Loading...</div></div>
+  if (!interview) return <div className="p-4 sm:p-6"><div className="text-center py-12 text-gray-500">Interview not found</div></div>
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <Link href="/modules/interviews" className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center mb-4">
         <ArrowLeft className="h-4 w-4 mr-1" /> Back to Interviews
       </Link>

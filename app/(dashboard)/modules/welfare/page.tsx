@@ -58,11 +58,11 @@ export default function WelfarePage() {
   const pendingCases = cases.filter((c) => c.status === "pending")
   const enrolledParticipants = participants.filter((p) => p.status === "enrolled")
 
-  if (loading) return <div className="p-6"><div className="text-center py-12">Loading...</div></div>
+  if (loading) return <div className="p-4 sm:p-6"><div className="text-center py-12">Loading...</div></div>
 
   if (!canViewCases) {
     return (
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900">Welfare & Self-Reliance</h1>
           <p className="mt-2 text-gray-600">Self-reliance programs and course tracking</p>
@@ -84,7 +84,7 @@ export default function WelfarePage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Welfare & Self-Reliance</h1>

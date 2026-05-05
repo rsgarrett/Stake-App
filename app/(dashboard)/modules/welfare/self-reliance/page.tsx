@@ -79,10 +79,10 @@ export default function SelfReliancePage() {
   const filtered = courseFilter === "all" ? participants : participants.filter((p) => p.course_name === courseFilter)
   const uniqueCourses = Array.from(new Set(participants.map((p) => p.course_name))).sort()
 
-  if (loading) return <div className="p-6"><div className="text-center py-12">Loading...</div></div>
+  if (loading) return <div className="p-4 sm:p-6"><div className="text-center py-12">Loading...</div></div>
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <Link href="/modules/welfare" className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center mb-4">
         <ArrowLeft className="h-4 w-4 mr-1" /> Back to Welfare
       </Link>

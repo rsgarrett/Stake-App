@@ -317,7 +317,7 @@ function SPMeetingAgendaContent() {
 
   if (loading) {
     return (
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <div className="text-center py-12 text-gray-500">Loading agenda...</div>
       </div>
     )
@@ -458,7 +458,7 @@ function SPMeetingAgendaContent() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Time</label>
                 <input
@@ -614,7 +614,7 @@ function SPMeetingAgendaContent() {
                 {agenda.gods_work_items.map((item, idx) => (
                   <div key={idx} className="border border-gray-200 rounded-lg p-4 space-y-3">
                     <div className="flex items-start justify-between">
-                      <div className="grid grid-cols-3 gap-3 flex-1 mr-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1 mr-2">
                         <div>
                           <label className="block text-xs font-medium text-gray-500 mb-1">
                             Core Area

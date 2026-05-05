@@ -67,7 +67,7 @@ export default function CompletedCallingsPage() {
   if (loading) return <div className="p-6 text-center py-12 text-gray-500">Loading...</div>
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="mb-6">
         <Link href="/modules/leadership" className="inline-flex items-center text-sm text-indigo-600 hover:underline mb-3">
           <ArrowLeft className="h-4 w-4 mr-1" />Back to Calling Tracker

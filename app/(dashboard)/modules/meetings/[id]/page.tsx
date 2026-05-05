@@ -523,8 +523,8 @@ export default function MeetingDetailPage() {
 
   // --- Render ---
 
-  if (loading) return <div className="p-6"><div className="text-center py-12">Loading...</div></div>
-  if (!meeting) return <div className="p-6"><div className="text-center py-12 text-gray-500">Meeting not found</div></div>
+  if (loading) return <div className="p-4 sm:p-6"><div className="text-center py-12">Loading...</div></div>
+  if (!meeting) return <div className="p-4 sm:p-6"><div className="text-center py-12 text-gray-500">Meeting not found</div></div>
 
   const totalDuration = agendaItems.reduce((sum, a) => sum + (a.duration_minutes || 0), 0)
   const templateConfig = getTemplateForMeetingType(meeting.meeting_type)
@@ -597,7 +597,7 @@ export default function MeetingDetailPage() {
 
       case "hymn":
         return (
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <input
               type="text"
               placeholder="Hymn number"
@@ -617,7 +617,7 @@ export default function MeetingDetailPage() {
 
       case "trainer":
         return (
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <input
               type="text"
               placeholder="Trainer name"
@@ -651,7 +651,7 @@ export default function MeetingDetailPage() {
 
       case "person_notes":
         return (
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <input
               type="text"
               placeholder="Assigned to"
@@ -671,7 +671,7 @@ export default function MeetingDetailPage() {
 
       default:
         return (
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <input
               type="text"
               placeholder="Assigned to"
@@ -728,15 +728,15 @@ export default function MeetingDetailPage() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-4xl mx-auto">
       {/* Header */}
-      <div className="mb-6">
+      <div className="mb-4 sm:mb-6">
         <Link href="/modules/meetings" className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center mb-2">
           <ArrowLeft className="h-4 w-4 mr-1" /> Back to Meetings
         </Link>
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">{meeting.title}</h1>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-3xl font-bold text-gray-900 break-words">{meeting.title}</h1>
             <p className="mt-1 text-gray-600 flex items-center gap-3 flex-wrap">
               <span className="flex items-center gap-1">
                 <CalendarDays className="h-4 w-4" />
@@ -852,7 +852,7 @@ export default function MeetingDetailPage() {
           <Card>
             <CardHeader><CardTitle>Details</CardTitle></CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                 <div><span className="text-sm text-gray-500">Title</span><p className="font-medium">{meeting.title}</p></div>
                 <div><span className="text-sm text-gray-500">Type</span><p className="font-medium capitalize">{meeting.meeting_type?.replace(/_/g, " ")}</p></div>
                 <div><span className="text-sm text-gray-500">Date</span><p className="font-medium">{new Date(meeting.scheduled_date).toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p></div>
@@ -967,7 +967,7 @@ export default function MeetingDetailPage() {
       <>
 
       {/* Tab Navigation */}
-      <div className="flex space-x-1 mb-6 border-b">
+      <div className="flex space-x-1 mb-6 border-b overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
         {([
           { key: "details" as Tab, label: "Details", icon: FileText },
           { key: "agenda" as Tab, label: `Agenda (${agendaItems.length})`, icon: ListOrdered },
@@ -976,7 +976,7 @@ export default function MeetingDetailPage() {
           <button
             key={key}
             onClick={() => setActiveTab(key)}
-            className={`flex items-center px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            className={`flex items-center shrink-0 px-3 sm:px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
               activeTab === key ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"
             }`}
           >
@@ -991,7 +991,7 @@ export default function MeetingDetailPage() {
           <Card>
             <CardHeader><CardTitle>Meeting Details</CardTitle></CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                 <div><span className="text-sm text-gray-500">Title</span><p className="font-medium">{meeting.title}</p></div>
                 <div><span className="text-sm text-gray-500">Type</span><p className="font-medium capitalize">{meeting.meeting_type?.replace(/_/g, " ")}</p></div>
                 <div><span className="text-sm text-gray-500">Start</span><p className="font-medium">{new Date(meeting.scheduled_date).toLocaleString()}</p></div>
@@ -1109,7 +1109,7 @@ export default function MeetingDetailPage() {
           {templateConfig && (templateConfig.presiding_field || templateConfig.conducting_field) && (
             <Card>
               <CardContent className="pt-5">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   {templateConfig.presiding_field && (
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Presiding</label>
@@ -1152,8 +1152,8 @@ export default function MeetingDetailPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <span className="flex items-center gap-2">
+              <CardTitle className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <span className="flex items-center gap-2 flex-wrap">
                   Agenda
                   {templateConfig && (
                     <span className="text-xs font-normal text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
@@ -1161,7 +1161,7 @@ export default function MeetingDetailPage() {
                     </span>
                   )}
                 </span>
-                <div className="flex items-center space-x-3">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                   {totalDuration > 0 && (
                     <span className="text-sm font-normal text-gray-500 flex items-center">
                       <Clock className="h-4 w-4 mr-1" /> {totalDuration} min
@@ -1281,17 +1281,17 @@ export default function MeetingDetailPage() {
             <CardHeader><CardTitle className="text-base">Add Agenda Item</CardTitle></CardHeader>
             <CardContent>
               <div className="space-y-3">
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="col-span-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2">
                     <input type="text" placeholder="Agenda item title *" value={newAgendaTitle} onChange={(e) => setNewAgendaTitle(e.target.value)} className={inputClass} />
                   </div>
                   <input type="number" placeholder="Minutes" value={newAgendaDuration} onChange={(e) => setNewAgendaDuration(e.target.value)} className={inputClass} min="1" />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <input type="text" placeholder="Assigned to (optional)" value={newAgendaAssigned} onChange={(e) => setNewAgendaAssigned(e.target.value)} className={inputClass} />
                   <input type="text" placeholder="Description (optional)" value={newAgendaDesc} onChange={(e) => setNewAgendaDesc(e.target.value)} className={inputClass} />
                 </div>
-                <Button onClick={addAgendaItem} disabled={!newAgendaTitle.trim()}>
+                <Button onClick={addAgendaItem} disabled={!newAgendaTitle.trim()} className="w-full sm:w-auto">
                   <Plus className="h-4 w-4 mr-2" /> Add Item
                 </Button>
               </div>

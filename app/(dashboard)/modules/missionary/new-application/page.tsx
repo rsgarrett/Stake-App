@@ -51,7 +51,7 @@ export default function NewApplicationPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <Link href="/modules/missionary" className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center mb-4">
         <ArrowLeft className="h-4 w-4 mr-1" /> Back to Missionary
       </Link>

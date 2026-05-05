@@ -124,7 +124,7 @@ function ScheduleInterviewContent() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <Link
         href="/modules/interviews"
         className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center mb-4"

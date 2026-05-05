@@ -67,12 +67,12 @@ export default function ComplianceDashboard() {
     return Math.round((completed / totalSlots) * 100)
   }
 
-  if (loading) return <div className="p-6"><div className="text-center py-12">Loading...</div></div>
+  if (loading) return <div className="p-4 sm:p-6"><div className="text-center py-12">Loading...</div></div>
 
   const complianceRate = getComplianceRate()
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <Link href="/modules/training" className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center mb-4">
         <ArrowLeft className="h-4 w-4 mr-1" /> Back to Training
       </Link>

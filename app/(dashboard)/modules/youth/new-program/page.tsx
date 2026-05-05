@@ -57,7 +57,7 @@ export default function NewProgramPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <Link href="/modules/youth" className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center mb-4">
         <ArrowLeft className="h-4 w-4 mr-1" /> Back to Youth
       </Link>
@@ -77,7 +77,7 @@ export default function NewProgramPage() {
               <input type="text" required value={formData.program_name} onChange={(e) => setFormData({ ...formData, program_name: e.target.value })} className={inputClass} placeholder="e.g., 2026 Stake Youth Conference" />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
                 <select value={formData.program_type} onChange={(e) => setFormData({ ...formData, program_type: e.target.value })} className={inputClass}>
@@ -98,7 +98,7 @@ export default function NewProgramPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
                 <input type="date" value={formData.start_date} onChange={(e) => setFormData({ ...formData, start_date: e.target.value })} className={inputClass} />
