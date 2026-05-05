@@ -30,6 +30,8 @@ interface UseAutosaveOptions {
 interface UseAutosaveResult {
   /** Current visual state for the AutosaveBadge. */
   state: AutosaveState
+  /** Most recent error message, when `state === "error"`. */
+  errorMessage: string | null
   /** Manually flush any pending save (await for completion). */
   flush: () => Promise<boolean>
 }
@@ -49,6 +51,7 @@ export function useAutosave({
   flushOnUnload = true,
 }: UseAutosaveOptions): UseAutosaveResult {
   const [state, setState] = useState<AutosaveState>("idle")
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inFlight = useRef(false)
   const pendingRef = useRef(hasPending)
@@ -76,9 +79,15 @@ export function useAutosave({
       // If new edits came in while we were saving, we'll already be flagged
       // pending again and the next render will re-schedule a save.
       setState("saved")
+      setErrorMessage(null)
       return true
     } catch (err) {
       console.error("[useAutosave] save failed", err)
+      const msg =
+        (typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : null) || (typeof err === "string" ? err : null) || "Unknown error"
+      setErrorMessage(msg)
       setState("error")
       return false
     } finally {
@@ -131,5 +140,5 @@ export function useAutosave({
     }
   }, [])
 
-  return { state, flush }
+  return { state, errorMessage, flush }
 }

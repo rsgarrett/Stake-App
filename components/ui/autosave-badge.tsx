@@ -1,6 +1,6 @@
 "use client"
 
-import { Cloud, CloudOff, Loader2 } from "lucide-react"
+import { Cloud, CloudOff, Loader2, RotateCw } from "lucide-react"
 
 /**
  * State machine for any autosaved field on a page.
@@ -16,6 +16,10 @@ interface AutosaveBadgeProps {
   state: AutosaveState
   /** Override the success label (default: "All changes saved"). */
   label?: string
+  /** Detail message from the last failed save (shown in error state). */
+  errorMessage?: string | null
+  /** If provided, an inline "Retry" button is shown in the error state. */
+  onRetry?: () => void
 }
 
 /**
@@ -25,7 +29,7 @@ interface AutosaveBadgeProps {
  * "Save" buttons that used to appear there. Renders nothing in the idle
  * state to avoid distracting the user before they have made any change.
  */
-export function AutosaveBadge({ state, label = "All changes saved" }: AutosaveBadgeProps) {
+export function AutosaveBadge({ state, label = "All changes saved", errorMessage, onRetry }: AutosaveBadgeProps) {
   if (state === "idle") return null
   if (state === "saving") {
     return (
@@ -37,9 +41,23 @@ export function AutosaveBadge({ state, label = "All changes saved" }: AutosaveBa
   }
   if (state === "error") {
     return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-red-600">
+      <span
+        className="inline-flex items-center gap-1.5 text-xs text-red-600"
+        title={errorMessage || undefined}
+      >
         <CloudOff className="h-3.5 w-3.5" />
-        Save failed — check your connection
+        <span className="max-w-[24rem] truncate">
+          Save failed{errorMessage ? `: ${errorMessage}` : " — check your connection"}
+        </span>
+        {onRetry && (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="inline-flex items-center gap-0.5 ml-0.5 px-1.5 py-0.5 rounded border border-red-200 hover:bg-red-50 text-red-700"
+          >
+            <RotateCw className="h-3 w-3" /> Retry
+          </button>
+        )}
       </span>
     )
   }

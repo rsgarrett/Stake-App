@@ -168,7 +168,11 @@ export default function InterviewDetailPage() {
           <CardHeader>
             <CardTitle className="text-base flex items-center justify-between">
               <span>Interview Notes</span>
-              <AutosaveBadge state={notesAutosave.state} />
+              <AutosaveBadge
+                state={notesAutosave.state}
+                errorMessage={notesAutosave.errorMessage}
+                onRetry={() => void notesAutosave.flush()}
+              />
             </CardTitle>
             <CardDescription>Notes are stored securely and saved automatically as you type.</CardDescription>
           </CardHeader>

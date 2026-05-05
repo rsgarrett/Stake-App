@@ -106,8 +106,32 @@ export default function MeetingDetailPage() {
   const [activeTab, setActiveTab] = useState<Tab>(initialTab)
   const [loading, setLoading] = useState(true)
 
-  const [editingItems, setEditingItems] = useState<Record<string, Partial<AgendaItem>>>({})
+  // Pending agenda edits keyed by item id. Mirrored to localStorage so a
+  // failed save (or a refresh / crash) does not lose what the user typed.
+  const editingItemsStorageKey = `stake-app:meeting-edits:${meetingId}`
+  const [editingItems, setEditingItems] = useState<Record<string, Partial<AgendaItem>>>(() => {
+    if (typeof window === "undefined") return {}
+    try {
+      const raw = window.localStorage.getItem(`stake-app:meeting-edits:${meetingId}`)
+      return raw ? (JSON.parse(raw) as Record<string, Partial<AgendaItem>>) : {}
+    } catch {
+      return {}
+    }
+  })
   const [subItemInputs, setSubItemInputs] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    try {
+      if (Object.keys(editingItems).length === 0) {
+        window.localStorage.removeItem(editingItemsStorageKey)
+      } else {
+        window.localStorage.setItem(editingItemsStorageKey, JSON.stringify(editingItems))
+      }
+    } catch {
+      // Quota exceeded or storage disabled — fall back to in-memory only.
+    }
+  }, [editingItems, editingItemsStorageKey])
 
   const [newAgendaTitle, setNewAgendaTitle] = useState("")
   const [newAgendaAssigned, setNewAgendaAssigned] = useState("")
@@ -777,7 +801,13 @@ export default function MeetingDetailPage() {
                       </>
                     )}
                   </div>
-                  {meetingWriteAllowed && <AutosaveBadge state={visitsAutosave.state} />}
+                  {meetingWriteAllowed && (
+                    <AutosaveBadge
+                      state={visitsAutosave.state}
+                      errorMessage={visitsAutosave.errorMessage}
+                      onRetry={() => void visitsAutosave.flush()}
+                    />
+                  )}
                 </div>
               )}
             </CardContent>
@@ -887,7 +917,11 @@ export default function MeetingDetailPage() {
                   </div>
                   {meetingWriteAllowed && visitsAutosave.state !== "idle" && (
                     <div className="flex justify-end mt-4 pt-3 border-t">
-                      <AutosaveBadge state={visitsAutosave.state} />
+                      <AutosaveBadge
+                        state={visitsAutosave.state}
+                        errorMessage={visitsAutosave.errorMessage}
+                        onRetry={() => void visitsAutosave.flush()}
+                      />
                     </div>
                   )}
                 </div>
@@ -1077,7 +1111,13 @@ export default function MeetingDetailPage() {
                       <Clock className="h-4 w-4 mr-1" /> {totalDuration} min
                     </span>
                   )}
-                  {meetingWriteAllowed && <AutosaveBadge state={agendaAutosave.state} />}
+                  {meetingWriteAllowed && (
+                    <AutosaveBadge
+                      state={agendaAutosave.state}
+                      errorMessage={agendaAutosave.errorMessage}
+                      onRetry={() => void agendaAutosave.flush()}
+                    />
+                  )}
                   {meetingWriteAllowed && templateConfig && (
                     <Button
                       size="sm"
@@ -1210,7 +1250,13 @@ export default function MeetingDetailPage() {
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
               <span>Meeting Minutes</span>
-              {meetingWriteAllowed && <AutosaveBadge state={minutesAutosave.state} />}
+              {meetingWriteAllowed && (
+                <AutosaveBadge
+                  state={minutesAutosave.state}
+                  errorMessage={minutesAutosave.errorMessage}
+                  onRetry={() => void minutesAutosave.flush()}
+                />
+              )}
             </CardTitle>
             <CardDescription>
               {minutes ? `Last updated ${new Date(minutes.updated_at).toLocaleString()}` : "Type below — your notes are saved automatically as you go."}
