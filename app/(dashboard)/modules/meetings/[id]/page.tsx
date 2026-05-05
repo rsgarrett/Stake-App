@@ -211,9 +211,13 @@ export default function MeetingDetailPage() {
     if (!getTemplateForMeetingType(meeting.meeting_type)) return
 
     let cancelled = false
+    setSeededTemplateForMeetingId(meetingId)
     ;(async () => {
-      const ok = await applyHandbookTemplate({ silent: true })
-      if (!cancelled && ok) setSeededTemplateForMeetingId(meetingId)
+      // Not silent: if RLS or anything else blocks the insert, surface the
+      // exact error so we can diagnose instead of leaving the user with an
+      // empty agenda and no explanation.
+      await applyHandbookTemplate({ silent: false })
+      if (cancelled) return
     })()
     return () => {
       cancelled = true
