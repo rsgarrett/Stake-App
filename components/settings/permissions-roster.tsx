@@ -79,7 +79,35 @@ export function PermissionsRoster() {
       if (rosterResult.error) throw rosterResult.error
       if (leadersResult.error) throw leadersResult.error
 
-      setRoster(((rosterResult.data || []) as StakePermissionRosterRow[]).slice().sort((a, b) => a.sort_order - b.sort_order))
+      let rosterRows = ((rosterResult.data || []) as StakePermissionRosterRow[])
+        .slice()
+        .sort((a, b) => a.sort_order - b.sort_order)
+
+      // Pre-064 presidents keep users.role but the roster seat stays vacant until assigned — seat self once if allowed by RLS.
+      const presSeat = rosterRows.find((r) => r.office_slug === "stake_president")
+      if (
+        me.role === "stake_president" &&
+        presSeat &&
+        !presSeat.assigned_user_id &&
+        presSeat.stake_id === me.stake_id
+      ) {
+        const { error: seatErr } = await supabase
+          .from("stake_permission_roster")
+          .update({ assigned_user_id: user.id })
+          .eq("id", presSeat.id)
+        if (!seatErr) {
+          const refetch = await supabase
+            .from("stake_permission_roster")
+            .select("id,stake_id,sort_order,office_slug,assigned_user_id")
+            .eq("stake_id", me.stake_id)
+            .order("sort_order")
+          if (!refetch.error && refetch.data?.length) {
+            rosterRows = (refetch.data as StakePermissionRosterRow[]).slice().sort((a, b) => a.sort_order - b.sort_order)
+          }
+        }
+      }
+
+      setRoster(rosterRows)
       setStakeUsers((leadersResult.data || []) as StakeUserOption[])
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -189,7 +217,9 @@ export function PermissionsRoster() {
             <CardDescription>
               One row per ordained or set-apart stake office used in Handbook 7. Seats control who carries which{" "}
               <strong>logged-in permission</strong> in this app. Only leaders with an account in your stake directory appear in the dropdowns.
-              {canEdit ? " You can seat or rotate leaders anytime." : " Contact a stake presidency member or clerk to change seats."}
+              {canEdit
+                ? " You can seat or rotate leaders anytime. If the stake president seat was still empty after the roster migration, it links to your account the first time you open this screen while signed in as president."
+                : " Contact a stake presidency member or clerk to change seats."}
             </CardDescription>
           </div>
         </CardHeader>
