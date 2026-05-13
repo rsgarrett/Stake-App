@@ -1,6 +1,7 @@
 import type { UserRole } from "@/types"
 
-export const STAKE_OFFICE_SLUGS = [
+/** Fixed Handbook 7 stake offices (not high council seats). */
+export const HANDBOOK_OFFICE_SLUGS = [
   "stake_president",
   "first_counselor",
   "second_counselor",
@@ -9,47 +10,22 @@ export const STAKE_OFFICE_SLUGS = [
   "executive_secretary",
   "assistant_executive_secretary_1",
   "assistant_executive_secretary_2",
-  "high_council_1",
-  "high_council_2",
-  "high_council_3",
-  "high_council_4",
-  "high_council_5",
-  "high_council_6",
-  "high_council_7",
-  "high_council_8",
-  "high_council_9",
-  "high_council_10",
-  "high_council_11",
-  "high_council_12",
 ] as const
 
-export type StakeOfficeSlug = (typeof STAKE_OFFICE_SLUGS)[number]
+export type HandbookOfficeSlug = (typeof HANDBOOK_OFFICE_SLUGS)[number]
 
-/** Order shown in Settings roster (matches seeded sort_order best-effort). */
-export const OFFICE_SORT_ORDER: Record<StakeOfficeSlug, number> = {
-  stake_president: 1,
-  first_counselor: 2,
-  second_counselor: 3,
-  stake_clerk: 4,
-  assistant_stake_clerk: 5,
-  executive_secretary: 6,
-  assistant_executive_secretary_1: 7,
-  assistant_executive_secretary_2: 8,
-  high_council_1: 9,
-  high_council_2: 10,
-  high_council_3: 11,
-  high_council_4: 12,
-  high_council_5: 13,
-  high_council_6: 14,
-  high_council_7: 15,
-  high_council_8: 16,
-  high_council_9: 17,
-  high_council_10: 18,
-  high_council_11: 19,
-  high_council_12: 20,
+/** @deprecated Prefer `string` + {@link labelForOfficeSlug} — HC seats are `high_council_<n>`. */
+export type StakeOfficeSlug = string
+
+export function isHandbookOfficeSlug(slug: string): slug is HandbookOfficeSlug {
+  return (HANDBOOK_OFFICE_SLUGS as readonly string[]).includes(slug)
 }
 
-export const OFFICE_LABELS: Record<StakeOfficeSlug, string> = {
+export function isHighCouncilSeatSlug(slug: string): boolean {
+  return /^high_council_[0-9]+$/.test(slug)
+}
+
+export const HANDBOOK_OFFICE_LABELS: Record<HandbookOfficeSlug, string> = {
   stake_president: "Stake president",
   first_counselor: "Stake president’s first counselor",
   second_counselor: "Stake president’s second counselor",
@@ -58,22 +34,20 @@ export const OFFICE_LABELS: Record<StakeOfficeSlug, string> = {
   executive_secretary: "Stake executive secretary",
   assistant_executive_secretary_1: "Stake assistant executive secretary (1)",
   assistant_executive_secretary_2: "Stake assistant executive secretary (2)",
-  high_council_1: "Stake high council (seat 1)",
-  high_council_2: "Stake high council (seat 2)",
-  high_council_3: "Stake high council (seat 3)",
-  high_council_4: "Stake high council (seat 4)",
-  high_council_5: "Stake high council (seat 5)",
-  high_council_6: "Stake high council (seat 6)",
-  high_council_7: "Stake high council (seat 7)",
-  high_council_8: "Stake high council (seat 8)",
-  high_council_9: "Stake high council (seat 9)",
-  high_council_10: "Stake high council (seat 10)",
-  high_council_11: "Stake high council (seat 11)",
-  high_council_12: "Stake high council (seat 12)",
+}
+
+/** Row label in Settings (handbook row or `Stake high council (seat n)`). */
+export function labelForOfficeSlug(slug: string): string {
+  if (isHandbookOfficeSlug(slug)) return HANDBOOK_OFFICE_LABELS[slug]
+  const m = /^high_council_([0-9]+)$/.exec(slug)
+  if (m) return `Stake high council (seat ${parseInt(m[1], 10)})`
+  return slug.replace(/_/g, " ")
 }
 
 /** Maps a roster seat → `public.users.role` when someone is seated. */
-export function appRoleForOffice(slug: StakeOfficeSlug): UserRole {
+export function appRoleForOfficeSlug(slug: string): UserRole {
+  if (isHighCouncilSeatSlug(slug)) return "high_council"
+  if (!isHandbookOfficeSlug(slug)) return "viewer"
   switch (slug) {
     case "stake_president":
       return "stake_president"
@@ -89,27 +63,18 @@ export function appRoleForOffice(slug: StakeOfficeSlug): UserRole {
     case "assistant_executive_secretary_1":
     case "assistant_executive_secretary_2":
       return "assistant_executive_secretary"
-    case "high_council_1":
-    case "high_council_2":
-    case "high_council_3":
-    case "high_council_4":
-    case "high_council_5":
-    case "high_council_6":
-    case "high_council_7":
-    case "high_council_8":
-    case "high_council_9":
-    case "high_council_10":
-    case "high_council_11":
-    case "high_council_12":
-      return "high_council"
+    default:
+      return "viewer"
   }
 }
 
+/** @deprecated Use {@link appRoleForOfficeSlug} */
+export function appRoleForOffice(slug: StakeOfficeSlug): UserRole {
+  return appRoleForOfficeSlug(slug)
+}
+
 /** Short description of what the app allows for that role (high level). */
-export const ROLE_CAPABILITY_SUMMARY: Record<
-  UserRole,
-  string
-> = {
+export const ROLE_CAPABILITY_SUMMARY: Record<UserRole, string> = {
   stake_president: "Full stake leadership access; can manage meetings, callings, welfare where policy allows, conferences, and roster.",
   counselor: "Stake leadership access with presidency; can manage meetings, callings, and most stake modules per RLS.",
   clerk: "Stake clerk access; can manage meetings, callings, records, and training content per RLS.",
