@@ -5,6 +5,9 @@ export const STAKE_MEETING_MANAGER_ROLES: readonly UserRole[] = [
   "stake_president",
   "counselor",
   "clerk",
+  "assistant_clerk",
+  "executive_secretary",
+  "assistant_executive_secretary",
 ]
 
 export function canManageStakeMeetings(

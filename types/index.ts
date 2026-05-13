@@ -3,6 +3,9 @@ export type UserRole =
   | "stake_president"
   | "counselor"
   | "clerk"
+  | "assistant_clerk"
+  | "executive_secretary"
+  | "assistant_executive_secretary"
   | "high_council"
   | "bishop"
   | "auxiliary_leader"
@@ -12,6 +15,8 @@ export interface User {
   id: string
   role: UserRole
   stake_id: string
+  email?: string | null
+  full_name?: string | null
   created_at: string
   updated_at: string
 }
