@@ -9,6 +9,18 @@ export const STAKE_OFFICE_SLUGS = [
   "executive_secretary",
   "assistant_executive_secretary_1",
   "assistant_executive_secretary_2",
+  "high_council_1",
+  "high_council_2",
+  "high_council_3",
+  "high_council_4",
+  "high_council_5",
+  "high_council_6",
+  "high_council_7",
+  "high_council_8",
+  "high_council_9",
+  "high_council_10",
+  "high_council_11",
+  "high_council_12",
 ] as const
 
 export type StakeOfficeSlug = (typeof STAKE_OFFICE_SLUGS)[number]
@@ -23,6 +35,18 @@ export const OFFICE_SORT_ORDER: Record<StakeOfficeSlug, number> = {
   executive_secretary: 6,
   assistant_executive_secretary_1: 7,
   assistant_executive_secretary_2: 8,
+  high_council_1: 9,
+  high_council_2: 10,
+  high_council_3: 11,
+  high_council_4: 12,
+  high_council_5: 13,
+  high_council_6: 14,
+  high_council_7: 15,
+  high_council_8: 16,
+  high_council_9: 17,
+  high_council_10: 18,
+  high_council_11: 19,
+  high_council_12: 20,
 }
 
 export const OFFICE_LABELS: Record<StakeOfficeSlug, string> = {
@@ -34,6 +58,18 @@ export const OFFICE_LABELS: Record<StakeOfficeSlug, string> = {
   executive_secretary: "Stake executive secretary",
   assistant_executive_secretary_1: "Stake assistant executive secretary (1)",
   assistant_executive_secretary_2: "Stake assistant executive secretary (2)",
+  high_council_1: "Stake high council (seat 1)",
+  high_council_2: "Stake high council (seat 2)",
+  high_council_3: "Stake high council (seat 3)",
+  high_council_4: "Stake high council (seat 4)",
+  high_council_5: "Stake high council (seat 5)",
+  high_council_6: "Stake high council (seat 6)",
+  high_council_7: "Stake high council (seat 7)",
+  high_council_8: "Stake high council (seat 8)",
+  high_council_9: "Stake high council (seat 9)",
+  high_council_10: "Stake high council (seat 10)",
+  high_council_11: "Stake high council (seat 11)",
+  high_council_12: "Stake high council (seat 12)",
 }
 
 /** Maps a roster seat → `public.users.role` when someone is seated. */
@@ -53,6 +89,19 @@ export function appRoleForOffice(slug: StakeOfficeSlug): UserRole {
     case "assistant_executive_secretary_1":
     case "assistant_executive_secretary_2":
       return "assistant_executive_secretary"
+    case "high_council_1":
+    case "high_council_2":
+    case "high_council_3":
+    case "high_council_4":
+    case "high_council_5":
+    case "high_council_6":
+    case "high_council_7":
+    case "high_council_8":
+    case "high_council_9":
+    case "high_council_10":
+    case "high_council_11":
+    case "high_council_12":
+      return "high_council"
   }
 }
 
@@ -67,7 +116,8 @@ export const ROLE_CAPABILITY_SUMMARY: Record<
   assistant_clerk: "Assistant clerk access; same elevated stake tools as clerk in this app (meetings, callings, etc.).",
   executive_secretary: "Executive secretary access; elevated like clerk for scheduling, meetings, and stake coordination in this app.",
   assistant_executive_secretary: "Assistant executive secretary; elevated for stake scheduling and operational modules.",
-  high_council: "View-only for High Council and Stake Council meetings; read-only callings; interview tools where configured.",
+  high_council:
+    "Stake-facing access without presidency write tools: filtered meeting visibility (High Council / Stake Council), stake callings and modules per RLS, interviews where configured. Seat assignments use Settings → roster.",
   bishop: "Ward bishop tools in this app where linked to a ward.",
   auxiliary_leader: "Auxiliary-oriented access (narrower than presidency).",
   viewer: "Read-only baseline for assigned modules only.",

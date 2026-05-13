@@ -175,6 +175,7 @@ export function PermissionsRoster() {
       "assistant_clerk",
       "executive_secretary",
       "assistant_executive_secretary",
+      "high_council",
     ]
     return roles.map((r) => (
       <div key={r} className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
@@ -215,8 +216,8 @@ export function PermissionsRoster() {
               <CardTitle className="text-xl">Stake leadership roster &amp; app roles</CardTitle>
             </div>
             <CardDescription>
-              One row per ordained or set-apart stake office used in Handbook 7. Seats control who carries which{" "}
-              <strong>logged-in permission</strong> in this app. Only leaders with an account in your stake directory appear in the dropdowns.
+              Handbook stake offices through the assistant executive secretaries, plus twelve high council seats below (leave vacant if your council is smaller).
+              Seats control who carries which <strong>logged-in permission</strong> in this app. Only leaders with an account in your stake directory appear in the dropdowns.
               {canEdit
                 ? " You can seat or rotate leaders anytime. If the stake president seat was still empty after the roster migration, it links to your account the first time you open this screen while signed in as president."
                 : " Contact a stake presidency member or clerk to change seats."}
