@@ -44,6 +44,8 @@ COMMENT ON COLUMN public.users.email IS 'Optional display/email cache for roster
 COMMENT ON COLUMN public.users.full_name IS 'Optional display name for roster and messaging.';
 
 -- Elevated leaders: presidency, clerks, executive assistants (meetings/scheduling/workflows).
+-- Compare role as text so new enum labels from above are safe in the same transaction
+-- (Postgres 55P04: "unsafe use of new value" if we use u.role IN ('assistant_clerk', ...)).
 CREATE OR REPLACE FUNCTION public.has_elevated_role()
 RETURNS BOOLEAN
 LANGUAGE sql
@@ -54,7 +56,7 @@ AS $$
   SELECT EXISTS (
     SELECT 1 FROM public.users u
     WHERE u.id = auth.uid()
-      AND u.role IN (
+      AND u.role::text IN (
         'stake_president',
         'counselor',
         'clerk',
@@ -157,7 +159,7 @@ AS $$
   SELECT EXISTS (
     SELECT 1 FROM public.users u
     WHERE u.id = auth.uid()
-      AND u.role IN (
+      AND u.role::text IN (
         'stake_president',
         'counselor',
         'clerk',
