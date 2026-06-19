@@ -11,7 +11,7 @@ import Link from "next/link"
 import {
   ArrowLeft, Plus, Trash2, Clock, FileText, ListOrdered,
   User, MapPin, ChevronDown, ChevronUp, Music,
-  BookOpen, CheckCircle2, Users, MessageSquare, CalendarDays,
+  BookOpen, CheckCircle2, Users, MessageSquare, CalendarDays, ClipboardList,
 } from "lucide-react"
 import {
   getFieldTypeForTitle, getSubItemPlaceholder, getTemplateForMeetingType,
@@ -87,9 +87,12 @@ const FIELD_ICONS: Partial<Record<AgendaFieldType, typeof User>> = {
   trainer: BookOpen,
   sub_items: ListOrdered,
   calendar: CalendarDays,
+  action_items: ClipboardList,
   notes: MessageSquare,
   person_notes: User,
 }
+
+const ACTION_ITEM_STATUSES = ["Assigned", "In Progress", "Completed"] as const
 
 /** Calendar rows are stored one-per-line in `description`, with the three
  *  columns tab-separated: `date<TAB>time<TAB>event`. Tabs can't be typed into
@@ -112,6 +115,28 @@ function parseCalendarRows(raw: string | null | undefined): CalendarRow[] {
 function serializeCalendarRows(rows: CalendarRow[]): string {
   return rows
     .map((r) => [r.date, r.time, r.event].join(CALENDAR_COL_SEP))
+    .join("\n")
+}
+
+/** Action-item rows are stored one-per-line in `description`, tab-separated as
+ *  `assignment<TAB>assignedTo<TAB>status`. Same delimiter rationale as calendar. */
+interface ActionRow {
+  assignment: string
+  assignedTo: string
+  status: string
+}
+function parseActionRows(raw: string | null | undefined): ActionRow[] {
+  if (!raw) return []
+  return raw.split("\n").map((line) => {
+    const parts = line.split(CALENDAR_COL_SEP)
+    // Legacy free-text rows (no tabs) fall into the assignment column.
+    if (parts.length === 1) return { assignment: parts[0], assignedTo: "", status: "" }
+    return { assignment: parts[0] ?? "", assignedTo: parts[1] ?? "", status: parts[2] ?? "" }
+  })
+}
+function serializeActionRows(rows: ActionRow[]): string {
+  return rows
+    .map((r) => [r.assignment, r.assignedTo, r.status].join(CALENDAR_COL_SEP))
     .join("\n")
 }
 
@@ -483,6 +508,34 @@ export default function MeetingDetailPage() {
     writeCalendarRows(item.id, rows)
   }
 
+  // --- Action-item rows (assignment / assigned-to / status), in `description` ---
+
+  const getActionRows = (item: AgendaItem): ActionRow[] => {
+    const raw = (editingItems[item.id]?.description as string | undefined) ?? item.description ?? ""
+    return parseActionRows(raw)
+  }
+
+  const writeActionRows = (itemId: string, rows: ActionRow[]) => {
+    const serialized = serializeActionRows(rows)
+    setEditField(itemId, "description", serialized.length > 0 ? serialized : null)
+  }
+
+  const addActionRow = (item: AgendaItem) => {
+    writeActionRows(item.id, [...getActionRows(item), { assignment: "", assignedTo: "", status: "Assigned" }])
+  }
+
+  const editActionRow = (item: AgendaItem, index: number, patch: Partial<ActionRow>) => {
+    const rows = getActionRows(item)
+    rows[index] = { ...rows[index], ...patch }
+    writeActionRows(item.id, rows)
+  }
+
+  const removeActionRow = (item: AgendaItem, index: number) => {
+    const rows = getActionRows(item)
+    rows.splice(index, 1)
+    writeActionRows(item.id, rows)
+  }
+
   // --- Minutes (autosaved) ---
 
   const persistMinutes = useCallback(async () => {
@@ -648,6 +701,51 @@ export default function MeetingDetailPage() {
     )
   }
 
+  // --- Action-item row renderer (assignment / assigned-to / status) ---
+  const renderActionRows = (item: AgendaItem) => {
+    const rows = getActionRows(item)
+    return (
+      <div className="space-y-1.5">
+        {rows.map((row, ri) => (
+          <div key={ri} className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-center group">
+            <input
+              type="text"
+              placeholder="Assignment"
+              value={row.assignment}
+              onChange={(e) => editActionRow(item, ri, { assignment: e.target.value })}
+              className={`${inputClass} text-sm py-1.5 col-span-2 sm:col-span-5`}
+            />
+            <input
+              type="text"
+              placeholder="Assigned to"
+              value={row.assignedTo}
+              onChange={(e) => editActionRow(item, ri, { assignedTo: e.target.value })}
+              className={`${inputClass} text-sm py-1.5 col-span-1 sm:col-span-4`}
+            />
+            <select
+              value={row.status || "Assigned"}
+              onChange={(e) => editActionRow(item, ri, { status: e.target.value })}
+              className={`${inputClass} text-sm py-1.5 col-span-1 sm:col-span-2`}
+            >
+              {ACTION_ITEM_STATUSES.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => removeActionRow(item, ri)}
+              className="text-red-300 hover:text-red-500 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity col-span-2 sm:col-span-1 flex justify-end sm:justify-center p-1.5"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ))}
+        <Button variant="outline" size="sm" onClick={() => addActionRow(item)}>
+          <Plus className="h-4 w-4 mr-1" /> Add action item
+        </Button>
+      </div>
+    )
+  }
+
   // --- Sub-item list renderer ---
   const renderSubItems = (item: AgendaItem, placeholder: string) => {
     const lines = getSubItems(item)
@@ -757,6 +855,9 @@ export default function MeetingDetailPage() {
       case "calendar":
         return renderCalendarRows(item)
 
+      case "action_items":
+        return renderActionRows(item)
+
       case "sub_items":
         return renderSubItems(item, getSubItemPlaceholder(item.title))
 
@@ -819,8 +920,8 @@ export default function MeetingDetailPage() {
     const isDirty = Boolean(editingItems[item.id] && Object.keys(editingItems[item.id]).length > 0)
     if (isDirty) return null
 
-    // Calendar rows are fully shown by their always-on editable inputs.
-    if (ft === "calendar") return null
+    // Calendar / action-item rows are fully shown by their always-on inputs.
+    if (ft === "calendar" || ft === "action_items") return null
 
     if (ft === "sub_items") {
       if (!item.description) return null

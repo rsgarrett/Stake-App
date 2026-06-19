@@ -10,6 +10,7 @@
  *   - "trainer"       → person name + section/topic side-by-side
  *   - "sub_items"     → numbered list with + button (action items, council topics, callings, etc.)
  *   - "calendar"      → list of rows, each with separate date / time / event inputs
+ *   - "action_items"  → list of rows, each with assignment / assigned-to / status
  *   - "readonly"      → title only, no editable fields (stake vision)
  *   - "notes"         → single multi-line notes input
  *   - "person_notes"  → person + notes side-by-side (closing thoughts/remarks)
@@ -21,6 +22,7 @@ export type AgendaFieldType =
   | "trainer"
   | "sub_items"
   | "calendar"
+  | "action_items"
   | "readonly"
   | "notes"
   | "person_notes"
@@ -196,9 +198,8 @@ export const AGENDA_TEMPLATES: Record<string, AgendaTemplateConfig> = {
       },
       {
         title: "Action Items",
-        field_type: "sub_items",
+        field_type: "action_items",
         duration_minutes: 10,
-        sub_item_placeholder: "Who — status — assignment",
         description:
           "Assignments with bishoprics, ward councils, and EQ/RS presidencies",
       },
@@ -340,9 +341,8 @@ export const AGENDA_TEMPLATES: Record<string, AgendaTemplateConfig> = {
       handbookInstruction,
       {
         title: "Action Item: Reports",
-        field_type: "sub_items",
+        field_type: "action_items",
         duration_minutes: 10,
-        sub_item_placeholder: "Assigned to — status — assignment",
         description: "Brief reports on assignments and action items",
       },
       {
@@ -359,9 +359,8 @@ export const AGENDA_TEMPLATES: Record<string, AgendaTemplateConfig> = {
       },
       {
         title: "Action Item: New Assignments",
-        field_type: "sub_items",
+        field_type: "action_items",
         duration_minutes: 5,
-        sub_item_placeholder: "Assigned to — status — assignment",
       },
       closingRemarks,
       closingPrayer,
@@ -385,9 +384,8 @@ export const AGENDA_TEMPLATES: Record<string, AgendaTemplateConfig> = {
       stakeVision,
       {
         title: "Action Item: Reports",
-        field_type: "sub_items",
+        field_type: "action_items",
         duration_minutes: 10,
-        sub_item_placeholder: "Assigned to — status — assignment",
         description: "Brief reports on assignments and action items",
       },
       {
@@ -398,9 +396,8 @@ export const AGENDA_TEMPLATES: Record<string, AgendaTemplateConfig> = {
       },
       {
         title: "Action Item: New Assignments",
-        field_type: "sub_items",
+        field_type: "action_items",
         duration_minutes: 5,
-        sub_item_placeholder: "Assigned to — status — assignment",
         description: "Brief reports on new assignments and action items",
       },
       closingRemarks,
@@ -426,9 +423,8 @@ export const AGENDA_TEMPLATES: Record<string, AgendaTemplateConfig> = {
       stakeVision,
       {
         title: "Action Items",
-        field_type: "sub_items",
+        field_type: "action_items",
         duration_minutes: 10,
-        sub_item_placeholder: "Assigned to — status — assignment",
         description: "Brief reports on assignments and action items",
       },
       {
@@ -512,6 +508,11 @@ export function getFieldTypeForTitle(
 ): AgendaFieldType {
   const lower = title.toLowerCase()
 
+  // Structured multi-column items always win, regardless of any stored template
+  // config, so existing agendas pick up the richer layout automatically.
+  if (lower.includes("action item")) return "action_items"
+  if (lower.includes("calendar") || lower.includes("deadline")) return "calendar"
+
   if (meetingType) {
     const template = getTemplateForMeetingType(meetingType)
     if (template) {
@@ -541,10 +542,8 @@ export function getFieldTypeForTitle(
   if (lower.includes("closing thought") || lower.includes("closing remark"))
     return "person_notes"
   if (lower.includes("agenda planning")) return "notes"
-  if (lower.includes("calendar") || lower.includes("deadline")) return "calendar"
 
   if (
-    lower.includes("action item") ||
     lower.includes("calling") ||
     lower.includes("ordination") ||
     lower.includes("recommendation") ||
