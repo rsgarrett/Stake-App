@@ -43,6 +43,7 @@ interface AgendaItem {
   assigned_to?: string | null
   presenter?: string | null
   duration_minutes?: number | null
+  notes?: string | null
 }
 
 interface Minutes {
@@ -1502,12 +1503,29 @@ export default function MeetingDetailPage() {
                           </p>
                         )}
 
-                        {!isReadOnly && (
-                          <div className="px-3 pb-3 ml-[3.25rem]">
-                            {renderItemFields(item)}
-                            {renderSavedPreview(item)}
-                          </div>
-                        )}
+                        <div className="px-3 pb-3 ml-[3.25rem] space-y-2">
+                          {!isReadOnly && (
+                            <>
+                              {renderItemFields(item)}
+                              {renderSavedPreview(item)}
+                            </>
+                          )}
+                          {meetingWriteAllowed ? (
+                            <textarea
+                              rows={2}
+                              placeholder="Notes / minutes from the meeting…"
+                              value={getEditValue(item, "notes") as string}
+                              onChange={(e) => setEditField(item.id, "notes", e.target.value)}
+                              className={`${inputClass} text-sm py-1.5 bg-amber-50/40 border-amber-100 focus:bg-white`}
+                            />
+                          ) : (
+                            (getEditValue(item, "notes") as string) ? (
+                              <p className="text-sm text-gray-700 whitespace-pre-wrap rounded-md bg-amber-50/40 border border-amber-100 px-3 py-2">
+                                {getEditValue(item, "notes") as string}
+                              </p>
+                            ) : null
+                          )}
+                        </div>
                       </div>
                     )
                   })}
