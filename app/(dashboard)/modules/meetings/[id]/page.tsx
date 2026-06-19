@@ -347,6 +347,7 @@ export default function MeetingDetailPage() {
     const snapshot = editingItems
     const ids = Object.keys(snapshot)
     if (ids.length === 0) return
+    const saved: Record<string, Partial<AgendaItem>> = {}
     const results = await Promise.all(
       ids.map((id) => {
         const edits = snapshot[id]
@@ -355,17 +356,40 @@ export default function MeetingDetailPage() {
         for (const [key, val] of Object.entries(edits)) {
           payload[key] = val === "" ? null : val
         }
+        saved[id] = edits
         return supabase.from("meeting_agendas").update(payload).eq("id", id)
       })
     )
     const firstError = results.find((r) => r && r.error)?.error
     if (firstError) throw firstError
+
+    // Merge the values we just saved into local state so the rendered inputs
+    // (which fall back to item[field]) stay current without a server reload.
+    setAgendaItems((prev) =>
+      prev.map((it) => (saved[it.id] ? { ...it, ...saved[it.id] } : it))
+    )
+
+    // Clear only the fields we persisted that haven't changed since the
+    // snapshot. Anything typed during the in-flight save is preserved so the
+    // next debounce can save it (never reload/clear it out from under typing).
     setEditingItems((prev) => {
-      const next = { ...prev }
-      for (const id of ids) delete next[id]
+      const next: Record<string, Partial<AgendaItem>> = {}
+      for (const [id, edits] of Object.entries(prev)) {
+        const savedEdits = saved[id]
+        if (!savedEdits) {
+          next[id] = edits
+          continue
+        }
+        const remaining: Record<string, unknown> = {}
+        for (const [field, val] of Object.entries(edits)) {
+          if (!(field in savedEdits) || (savedEdits as Record<string, unknown>)[field] !== val) {
+            remaining[field] = val
+          }
+        }
+        if (Object.keys(remaining).length > 0) next[id] = remaining as Partial<AgendaItem>
+      }
       return next
     })
-    await loadAgenda()
   }, [editingItems, supabase])
 
   const agendaAutosave = useAutosave({

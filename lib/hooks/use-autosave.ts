@@ -105,7 +105,11 @@ export function useAutosave({
     return () => {
       if (timer.current) clearTimeout(timer.current)
     }
-  }, [hasPending, debounceMs, flush])
+    // `save` is intentionally a dependency: callers pass a callback that closes
+    // over their latest state, so its identity changes on every keystroke. That
+    // lets us reset (debounce) the timer on each change instead of firing a save
+    // mid-typing, which previously dropped characters.
+  }, [hasPending, debounceMs, flush, save])
 
   useEffect(() => {
     if (!flushOnUnload) return
