@@ -88,6 +88,7 @@ const FIELD_ICONS: Partial<Record<AgendaFieldType, typeof User>> = {
   sub_items: ListOrdered,
   calendar: CalendarDays,
   action_items: ClipboardList,
+  callings_link: Users,
   notes: MessageSquare,
   person_notes: User,
 }
@@ -858,6 +859,17 @@ export default function MeetingDetailPage() {
       case "action_items":
         return renderActionRows(item)
 
+      case "callings_link":
+        return (
+          <Link
+            href="/modules/leadership"
+            className="inline-flex items-center gap-2 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100 transition-colors"
+          >
+            <Users className="h-4 w-4" />
+            Open the Calling Tracker
+          </Link>
+        )
+
       case "sub_items":
         return renderSubItems(item, getSubItemPlaceholder(item.title))
 
@@ -922,6 +934,8 @@ export default function MeetingDetailPage() {
 
     // Calendar / action-item rows are fully shown by their always-on inputs.
     if (ft === "calendar" || ft === "action_items") return null
+    // Callings link has no saved value to preview.
+    if (ft === "callings_link") return null
 
     if (ft === "sub_items") {
       if (!item.description) return null

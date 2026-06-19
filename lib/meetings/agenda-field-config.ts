@@ -11,6 +11,7 @@
  *   - "sub_items"     → numbered list with + button (action items, council topics, callings, etc.)
  *   - "calendar"      → list of rows, each with separate date / time / event inputs
  *   - "action_items"  → list of rows, each with assignment / assigned-to / status
+ *   - "callings_link" → shortcut button to the Calling Tracker (no inline editing)
  *   - "readonly"      → title only, no editable fields (stake vision)
  *   - "notes"         → single multi-line notes input
  *   - "person_notes"  → person + notes side-by-side (closing thoughts/remarks)
@@ -23,6 +24,7 @@ export type AgendaFieldType =
   | "sub_items"
   | "calendar"
   | "action_items"
+  | "callings_link"
   | "readonly"
   | "notes"
   | "person_notes"
@@ -155,9 +157,8 @@ export const AGENDA_TEMPLATES: Record<string, AgendaTemplateConfig> = {
       },
       {
         title: "Callings, Sustainings & Priesthood Advancement",
-        field_type: "sub_items",
+        field_type: "callings_link",
         duration_minutes: 15,
-        sub_item_placeholder: "Person — ward — calling/ordination — status",
         description:
           "Calling Tracker, New Calling Submissions, Sustained-to-be-Set-Apart, Stake Business",
       },
@@ -218,9 +219,8 @@ export const AGENDA_TEMPLATES: Record<string, AgendaTemplateConfig> = {
       },
       {
         title: "Callings & Ordinations",
-        field_type: "sub_items",
+        field_type: "callings_link",
         duration_minutes: 10,
-        sub_item_placeholder: "Person — ward — proposed calling — assigned to",
       },
       {
         title: "Assignment Reports",
@@ -512,6 +512,9 @@ export function getFieldTypeForTitle(
   // config, so existing agendas pick up the richer layout automatically.
   if (lower.includes("action item")) return "action_items"
   if (lower.includes("calendar") || lower.includes("deadline")) return "calendar"
+  // Calling/recommendation items are handled in the Calling Tracker, so the
+  // agenda just links there instead of duplicating an editable list.
+  if (lower.includes("calling")) return "callings_link"
 
   if (meetingType) {
     const template = getTemplateForMeetingType(meetingType)
@@ -544,7 +547,6 @@ export function getFieldTypeForTitle(
   if (lower.includes("agenda planning")) return "notes"
 
   if (
-    lower.includes("calling") ||
     lower.includes("ordination") ||
     lower.includes("recommendation") ||
     lower.includes("assignment") ||
