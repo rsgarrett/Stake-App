@@ -254,12 +254,12 @@ export default function InterviewsPage() {
 
   return (
     <div className="p-4 sm:p-6">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Interviews</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Interviews</h1>
           <p className="mt-2 text-gray-600">Schedule interviews and track Mission Ready candidates on this page.</p>
         </div>
-        <Link href="/modules/interviews/schedule" className={buttonVariants()}>
+        <Link href="/modules/interviews/schedule" className={`${buttonVariants()} shrink-0 self-start`}>
           <Plus className="h-4 w-4 mr-2" />
           Schedule Interview
         </Link>
@@ -298,17 +298,17 @@ export default function InterviewsPage() {
             </Card>
           </div>
 
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex space-x-1 border-b">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex space-x-1 border-b overflow-x-auto">
               {(["upcoming", "missed", "all"] as const).map((t) => (
                 <button key={t} onClick={() => setInterviewTab(t)}
-                  className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px capitalize ${interviewTab === t ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
+                  className={`shrink-0 px-4 py-2 text-sm font-medium border-b-2 -mb-px capitalize ${interviewTab === t ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
                   {t === "missed" ? "Missed" : t}
                 </button>
               ))}
             </div>
             <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}
-              className="px-3 py-1.5 text-sm border border-gray-300 rounded-md">
+              className="w-full sm:w-auto px-3 py-2 sm:py-1.5 text-sm border border-gray-300 rounded-md">
               <option value="all">{englishMenuTitleCase("All types")}</option>
               {uniqueTypes.map((t) => (
                 <option key={t} value={t}>
@@ -473,12 +473,12 @@ export default function InterviewsPage() {
           {missionTab === "preparing" && (
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <CardTitle>Mission Ready Tracker</CardTitle>
                     <CardDescription>Track each prospective missionary through the 20-step preparation process.</CardDescription>
                   </div>
-                  <Button onClick={() => setShowAddReady(true)}><Plus className="h-4 w-4 mr-2" />Add Missionary</Button>
+                  <Button className="shrink-0 self-start" onClick={() => setShowAddReady(true)}><Plus className="h-4 w-4 mr-2" />Add Missionary</Button>
                 </div>
               </CardHeader>
               <CardContent>

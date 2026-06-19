@@ -38,8 +38,15 @@ export default function WelfarePage() {
 
   const loadData = async () => {
     try {
-      // Auth disabled — default to stake_president view
-      setUserRole("stake_president")
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: me } = await supabase
+          .from("users")
+          .select("role")
+          .eq("id", user.id)
+          .single()
+        setUserRole(me?.role ?? null)
+      }
 
       const { data: caseData } = await safeQuery(supabase.from("welfare_cases").select("*").order("created_at", { ascending: false }))
       setCases(caseData || [])
@@ -53,7 +60,8 @@ export default function WelfarePage() {
     }
   }
 
-  const canViewCases = ["stake_president", "counselor", "clerk"].includes(userRole || "")
+  // Matches welfare_cases RLS: presidency only (cases are confidential).
+  const canViewCases = ["stake_president", "counselor"].includes(userRole || "")
   const activeCases = cases.filter((c) => c.status === "open")
   const pendingCases = cases.filter((c) => c.status === "pending")
   const enrolledParticipants = participants.filter((p) => p.status === "enrolled")
@@ -76,7 +84,7 @@ export default function WelfarePage() {
         <Card className="mt-4">
           <CardContent className="py-8 text-center text-gray-500">
             <ShieldCheck className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-            Welfare case management is restricted to stake presidency and clerk.
+            Welfare case management is restricted to the stake presidency.
           </CardContent>
         </Card>
       </div>

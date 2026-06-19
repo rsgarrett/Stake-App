@@ -392,7 +392,7 @@ export default function DayViewPage() {
                                   <UserCircle className="h-3 w-3 mr-1 text-gray-400" />
                                   {p}
                                   <button
-                                    className="ml-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    className="ml-1 p-1 text-gray-400 hover:text-red-500 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
                                     onClick={() => removeParticipant(meeting.id, p)}
                                     title="Remove"
                                   >

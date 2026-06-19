@@ -546,7 +546,7 @@ export default function MeetingDetailPage() {
             />
             <button
               onClick={() => removeSubItem(item, li)}
-              className="text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
+              className="text-red-300 hover:text-red-500 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity p-1.5"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -792,7 +792,7 @@ export default function MeetingDetailPage() {
                     <button
                       type="button"
                       onClick={() => removeVisitName(i)}
-                      className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all p-0.5"
+                      className="text-gray-300 hover:text-red-500 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all p-1.5"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -916,7 +916,7 @@ export default function MeetingDetailPage() {
                         <button
                           type="button"
                           onClick={() => removeVisitName(i)}
-                          className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all p-0.5"
+                          className="text-gray-300 hover:text-red-500 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all p-1.5"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>

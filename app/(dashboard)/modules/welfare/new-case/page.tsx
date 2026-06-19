@@ -32,8 +32,8 @@ export default function NewWelfareCasePage() {
       if (!user) throw new Error("Not authenticated")
 
       const { data: userData } = await supabase.from("users").select("stake_id, role").eq("id", user.id).single()
-      if (!["stake_president", "counselor", "clerk"].includes(userData?.role || "")) {
-        throw new Error("Unauthorized: Only stake presidency and clerks can create welfare cases")
+      if (!["stake_president", "counselor"].includes(userData?.role || "")) {
+        throw new Error("Unauthorized: Only the stake presidency can create welfare cases")
       }
 
       let stakeId = userData?.stake_id
@@ -74,7 +74,7 @@ export default function NewWelfareCasePage() {
       <Card className="max-w-2xl">
         <CardHeader>
           <CardTitle>Case Details</CardTitle>
-          <CardDescription>Only stake presidency and clerks can view welfare cases</CardDescription>
+          <CardDescription>Only the stake presidency can view welfare cases</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">

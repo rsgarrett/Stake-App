@@ -11,3 +11,4 @@ ENV_LOCAL_CONTENT.txt
 ENV_LOCAL_FINAL.txt
 .DS_Store
 supabase/.temp/
+.vercel

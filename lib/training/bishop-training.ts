@@ -549,7 +549,14 @@ export function mergeBishopPayload(raw: unknown): BishopTrainingPayload {
 }
 
 /** Same elevated stake roles as high council training — one stake-wide curriculum. */
-export const BISHOP_TRAINING_EDIT_ROLES = ["stake_president", "counselor", "clerk"] as const
+export const BISHOP_TRAINING_EDIT_ROLES = [
+  "stake_president",
+  "counselor",
+  "clerk",
+  "assistant_clerk",
+  "executive_secretary",
+  "assistant_executive_secretary",
+] as const
 
 export function canEditBishopTraining(role: string | null | undefined): boolean {
   if (!role) return false

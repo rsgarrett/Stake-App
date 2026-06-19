@@ -66,12 +66,12 @@ export default function CommunicationPage() {
 
   return (
     <div className="p-4 sm:p-6">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Communication</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Communication</h1>
           <p className="mt-2 text-gray-600">Announcements and leader messaging</p>
         </div>
-        <div className="flex space-x-2">
+        <div className="flex flex-wrap gap-2 shrink-0">
           <Link href="/modules/communication/messages" className={buttonVariants({ variant: "outline" })}>
               <MessageSquare className="h-4 w-4 mr-2" />Messages
               {unreadCount > 0 && <span className="ml-2 bg-red-500 text-white text-xs rounded-full px-2 py-0.5">{unreadCount}</span>}
@@ -143,11 +143,11 @@ export default function CommunicationPage() {
                       {a.expiration_date && <p className="text-xs text-amber-500">Expires {new Date(a.expiration_date).toLocaleDateString()}</p>}
                     </div>
                   </div>
-                  <div className="flex items-center space-x-2 ml-3">
-                    <Link href={`/modules/communication/edit-announcement/${a.id}`} className="text-gray-400 hover:text-indigo-600">
+                  <div className="flex items-center gap-1 ml-3">
+                    <Link href={`/modules/communication/edit-announcement/${a.id}`} className="p-2 text-gray-400 hover:text-indigo-600">
                       <Pencil className="h-4 w-4" />
                     </Link>
-                    <button onClick={() => deleteAnnouncement(a.id)} className="text-red-400 hover:text-red-600">
+                    <button onClick={() => deleteAnnouncement(a.id)} className="p-2 text-red-400 hover:text-red-600">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>

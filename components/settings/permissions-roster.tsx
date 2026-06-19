@@ -13,7 +13,7 @@ import {
 } from "@/lib/settings/stake-office-slugs"
 import type { UserRole } from "@/types"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
-import { AlertCircle, Plus, Shield, Trash2, UserRoundCog } from "lucide-react"
+import { AlertCircle, KeyRound, Plus, Shield, Trash2, UserPlus, UserRoundCog } from "lucide-react"
 
 export interface StakePermissionRosterRow {
   id: string
@@ -81,7 +81,14 @@ export function PermissionsRoster() {
   const [hcNameByEmail, setHcNameByEmail] = useState<Record<string, string>>({})
   const [savingId, setSavingId] = useState<string | null>(null)
   const [addingHc, setAddingHc] = useState(false)
-  const [demoteRemoved, setDemoteRemoved] = useState(true)
+  /** When true, removed/replaced leaders lose their login entirely (default). */
+  const [revokeRemovedLogin, setRevokeRemovedLogin] = useState(true)
+  const [creatingForRowId, setCreatingForRowId] = useState<string | null>(null)
+  const [createEmail, setCreateEmail] = useState("")
+  const [createFullName, setCreateFullName] = useState("")
+  const [createPassword, setCreatePassword] = useState("")
+  const [createMode, setCreateMode] = useState<"create" | "invite">("create")
+  const [lastProvisionMessage, setLastProvisionMessage] = useState<string | null>(null)
 
   const canEdit = canEditStakePermissionRoster(myRole)
 
@@ -181,6 +188,73 @@ export function PermissionsRoster() {
     [roster]
   )
 
+  const revokeUserLogin = async (userId: string, demoteOnly = false) => {
+    const res = await fetch("/api/admin/users/revoke", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, demoteOnly }),
+    })
+    const payload = (await res.json()) as { error?: string; message?: string }
+    if (!res.ok) throw new Error(payload.error || "Could not revoke login.")
+    return payload.message || "Login updated."
+  }
+
+  const handleRemovedUser = async (previousId: string, excludeRowId: string) => {
+    const stillElsewhere = roster.some((x) => x.id !== excludeRowId && x.assigned_user_id === previousId)
+    if (stillElsewhere) return
+
+    if (revokeRemovedLogin) {
+      await revokeUserLogin(previousId, false)
+      return
+    }
+    const { error: uPrev } = await supabase.from("users").update({ role: "viewer" }).eq("id", previousId)
+    if (uPrev) throw uPrev
+  }
+
+  const provisionLoginForSeat = async (row: StakePermissionRosterRow) => {
+    if (!canEdit) return
+    setSavingId(row.id)
+    setError(null)
+    setLastProvisionMessage(null)
+    try {
+      const res = await fetch("/api/admin/users/provision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: createEmail,
+          fullName: createFullName,
+          password: createPassword || undefined,
+          rosterRowId: row.id,
+          mode: createMode,
+          revokePrevious: revokeRemovedLogin,
+        }),
+      })
+      const payload = (await res.json()) as {
+        error?: string
+        message?: string
+        tempPassword?: string
+      }
+      if (!res.ok) throw new Error(payload.error || "Could not create login.")
+
+      let msg = payload.message || "Login created."
+      if (payload.tempPassword) {
+        msg += ` Temporary password: ${payload.tempPassword}`
+      }
+      setLastProvisionMessage(msg)
+      setCreatingForRowId(null)
+      setCreateEmail("")
+      setCreateFullName("")
+      setCreatePassword("")
+      await load()
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setError(msg)
+      window.alert(msg)
+    } finally {
+      setSavingId(null)
+    }
+  }
+
   const applyAssignment = async (row: StakePermissionRosterRow, newUserId: string | null) => {
     const targetRole = appRoleForOfficeSlug(row.office_slug)
     const previousId = row.assigned_user_id
@@ -197,11 +271,7 @@ export function PermissionsRoster() {
       if (rErr) throw rErr
 
       if (previousId && previousId !== newUserId) {
-        const stillElsewhere = roster.some((x) => x.id !== row.id && x.assigned_user_id === previousId)
-        if (demoteRemoved && !stillElsewhere) {
-          const { error: uPrev } = await supabase.from("users").update({ role: "viewer" }).eq("id", previousId)
-          if (uPrev) throw uPrev
-        }
+        await handleRemovedUser(previousId, row.id)
       }
 
       if (newUserId) {
@@ -223,7 +293,7 @@ export function PermissionsRoster() {
     if (!canEdit || !isHighCouncilSeatSlug(row.office_slug)) return
     if (
       !window.confirm(
-        "Remove this high council permission seat? If someone is seated, they will be released from this seat first; their login may move to viewer if that checkbox is on and they have no other seat."
+        "Remove this high council permission seat? If someone is seated, their login will be revoked or demoted per your setting below."
       )
     ) {
       return
@@ -235,11 +305,7 @@ export function PermissionsRoster() {
       if (previousId) {
         const { error: rErr } = await supabase.from("stake_permission_roster").update({ assigned_user_id: null }).eq("id", row.id)
         if (rErr) throw rErr
-        const stillElsewhere = roster.some((x) => x.id !== row.id && x.assigned_user_id === previousId)
-        if (demoteRemoved && !stillElsewhere) {
-          const { error: uPrev } = await supabase.from("users").update({ role: "viewer" }).eq("id", previousId)
-          if (uPrev) throw uPrev
-        }
+        await handleRemovedUser(previousId, row.id)
       }
       const { error: delErr } = await supabase.from("stake_permission_roster").delete().eq("id", row.id)
       if (delErr) throw delErr
@@ -341,7 +407,7 @@ export function PermissionsRoster() {
             ) : null}
             {subtitle ? <p className="text-xs text-gray-500">{subtitle}</p> : null}
             {!seated ? (
-              <p className="text-xs text-amber-800">No one seated — choose a stake account after they sign in once.</p>
+              <p className="text-xs text-amber-800">No one seated — create a login below or assign an existing stake account.</p>
             ) : (
               <p className="text-xs text-gray-500">
                 Account ID <span className="font-mono text-gray-600">{seated.id.slice(0, 8)}…</span>
@@ -372,6 +438,24 @@ export function PermissionsRoster() {
               })}
             </select>
             <div className="flex flex-col gap-2">
+              {canEdit && !seated ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="w-full"
+                  disabled={savingId === row.id}
+                  onClick={() => {
+                    setCreatingForRowId(creatingForRowId === row.id ? null : row.id)
+                    setCreateEmail("")
+                    setCreateFullName("")
+                    setCreatePassword("")
+                  }}
+                >
+                  <UserPlus className="h-3.5 w-3.5 mr-1.5 inline" aria-hidden />
+                  {creatingForRowId === row.id ? "Cancel create login" : "Create login for this seat"}
+                </Button>
+              ) : null}
               {canEdit && row.assigned_user_id ? (
                 <Button
                   type="button"
@@ -382,6 +466,36 @@ export function PermissionsRoster() {
                   onClick={() => void applyAssignment(row, null)}
                 >
                   Remove from seat
+                </Button>
+              ) : null}
+              {canEdit && seated ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-red-700 border-red-200 hover:bg-red-50"
+                  disabled={savingId === row.id}
+                  onClick={async () => {
+                    if (
+                      !window.confirm(
+                        `Revoke login for ${primary}? They will be removed from this seat and their account deleted (unless they hold another seat).`
+                      )
+                    ) {
+                      return
+                    }
+                    setSavingId(row.id)
+                    try {
+                      await revokeUserLogin(seated.id, false)
+                      await load()
+                    } catch (e: unknown) {
+                      window.alert(e instanceof Error ? e.message : String(e))
+                    } finally {
+                      setSavingId(null)
+                    }
+                  }}
+                >
+                  <KeyRound className="h-3.5 w-3.5 mr-1.5 inline" aria-hidden />
+                  Revoke login
                 </Button>
               ) : null}
               {canEdit && isHighCouncilSeatSlug(row.office_slug) ? (
@@ -398,6 +512,63 @@ export function PermissionsRoster() {
                 </Button>
               ) : null}
             </div>
+            {canEdit && creatingForRowId === row.id ? (
+              <div className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50/50 p-3 space-y-2">
+                <p className="text-xs font-semibold text-indigo-900">New login for {label}</p>
+                <input
+                  type="email"
+                  placeholder="Email address"
+                  className={selectClass}
+                  value={createEmail}
+                  onChange={(e) => setCreateEmail(e.target.value)}
+                />
+                <input
+                  type="text"
+                  placeholder="Full name (as in LCR)"
+                  className={selectClass}
+                  value={createFullName}
+                  onChange={(e) => setCreateFullName(e.target.value)}
+                />
+                <div className="flex gap-2 text-xs">
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      name={`mode-${row.id}`}
+                      checked={createMode === "create"}
+                      onChange={() => setCreateMode("create")}
+                    />
+                    Set password now
+                  </label>
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      name={`mode-${row.id}`}
+                      checked={createMode === "invite"}
+                      onChange={() => setCreateMode("invite")}
+                    />
+                    Email invite
+                  </label>
+                </div>
+                {createMode === "create" ? (
+                  <input
+                    type="text"
+                    placeholder="Password (optional — auto-generated if blank)"
+                    className={selectClass}
+                    value={createPassword}
+                    onChange={(e) => setCreatePassword(e.target.value)}
+                  />
+                ) : null}
+                <Button
+                  type="button"
+                  size="sm"
+                  className="w-full"
+                  disabled={savingId === row.id}
+                  onClick={() => void provisionLoginForSeat(row)}
+                >
+                  Create &amp; seat
+                </Button>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -435,8 +606,9 @@ export function PermissionsRoster() {
               <CardTitle className="text-xl">Stake leadership roster &amp; app permissions</CardTitle>
             </div>
             <CardDescription>
-              The <strong>person’s name</strong> is always shown for each seat (we prefer the High Council communications roster when the member’s
-              login email matches). Handbook offices below are fixed; high council <strong>permission seats</strong> can be added or removed as the council changes.
+              Create and manage logins for stake presidency, clerks, executive secretaries, and high councilors.
+              Each seat maps to app permissions. When someone is released, use <strong>Remove from seat</strong> or{" "}
+              <strong>Revoke login</strong> so the previous person loses access.
               {canEdit
                 ? " If the stake president seat was still empty after migration, it links to your account the first time you open this screen as president."
                 : " Contact stake presidency or a clerk to change assignments."}
@@ -450,13 +622,14 @@ export function PermissionsRoster() {
             <label className="flex items-start gap-2 text-sm text-gray-700 cursor-pointer select-none">
               <input
                 type="checkbox"
-                checked={demoteRemoved}
-                onChange={(e) => setDemoteRemoved(e.target.checked)}
+                checked={revokeRemovedLogin}
+                onChange={(e) => setRevokeRemovedLogin(e.target.checked)}
                 className="mt-0.5 h-4 w-4 rounded border-gray-300"
               />
               <span>
-                When someone is <strong>removed</strong> from a seat or <strong>replaced</strong>, set their former app login to{" "}
-                <span className="font-medium">viewer</span> unless they still hold another seat elsewhere on this roster.
+                When someone is <strong>removed</strong> or <strong>replaced</strong>,{" "}
+                <strong>revoke their login entirely</strong> (delete account) unless they still hold another seat.
+                Uncheck to keep their account as <span className="font-medium">viewer</span> instead.
               </span>
             </label>
           ) : (
@@ -466,6 +639,12 @@ export function PermissionsRoster() {
               –<code className="text-xs bg-white px-1 rounded">067</code>.
             </p>
           )}
+
+          {lastProvisionMessage ? (
+            <p className="text-sm rounded-md bg-emerald-50 border border-emerald-200 px-3 py-2 text-emerald-900">
+              {lastProvisionMessage}
+            </p>
+          ) : null}
 
           <div className="space-y-2">
             <h3 className="text-sm font-semibold text-gray-900">Handbook stake offices</h3>

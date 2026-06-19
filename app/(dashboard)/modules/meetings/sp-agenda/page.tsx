@@ -412,30 +412,30 @@ function SPMeetingAgendaContent() {
           <CardContent>
             <div className="space-y-2">
               {agenda.calendar_items.map((item, idx) => (
-                <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                <div key={idx} className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-center">
                   <input
                     type="date"
                     value={item.date}
                     onChange={(e) => updateCalendarItem(idx, "date", e.target.value)}
-                    className={`${inputClass} col-span-3`}
+                    className={`${inputClass} col-span-1 sm:col-span-3`}
                   />
                   <input
                     type="text"
                     value={item.time}
                     onChange={(e) => updateCalendarItem(idx, "time", e.target.value)}
                     placeholder="Time"
-                    className={`${inputClass} col-span-2`}
+                    className={`${inputClass} col-span-1 sm:col-span-2`}
                   />
                   <input
                     type="text"
                     value={item.event}
                     onChange={(e) => updateCalendarItem(idx, "event", e.target.value)}
                     placeholder="Event description"
-                    className={`${inputClass} col-span-6`}
+                    className={`${inputClass} col-span-2 sm:col-span-6`}
                   />
                   <button
                     onClick={() => removeCalendarItem(idx)}
-                    className="text-red-400 hover:text-red-600 col-span-1 flex justify-center"
+                    className="text-red-400 hover:text-red-600 col-span-2 sm:col-span-1 flex justify-end sm:justify-center p-1.5"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -515,7 +515,7 @@ function SPMeetingAgendaContent() {
                   className={inputClass}
                 />
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="block text-xs font-medium text-gray-500 mb-1">
                   Handbook Topic
                 </label>

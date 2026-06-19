@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 
 export default function LoginPage() {
@@ -70,7 +69,7 @@ export default function LoginPage() {
               )}
               {error.includes("Invalid login") && (
                 <div className="mt-2 text-xs text-red-600">
-                  <p>Check that you have registered an account first, and that your email and password are correct.</p>
+                  <p>Check that your email and password are correct. Accounts are created by stake leadership — if you have not received an invitation, contact your stake clerk.</p>
                 </div>
               )}
             </div>
@@ -121,12 +120,10 @@ export default function LoginPage() {
           </div>
 
           <div className="text-center">
-            <Link
-              href="/register"
-              className="text-sm text-indigo-600 hover:text-indigo-500"
-            >
-              Don&apos;t have an account? Register
-            </Link>
+            <p className="text-sm text-gray-500">
+              Accounts are created by stake leadership. Need access? Contact
+              your stake clerk or executive secretary.
+            </p>
           </div>
         </form>
       </div>

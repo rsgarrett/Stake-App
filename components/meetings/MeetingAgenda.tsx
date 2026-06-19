@@ -303,11 +303,11 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
             <CardContent>
               <div className="space-y-2">
                 {agenda.calendar_items.map((item, idx) => (
-                  <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                    <input type="date" value={item.date} onChange={(e) => { const items = [...agenda.calendar_items]; items[idx] = { ...items[idx], date: e.target.value }; update("calendar_items", items) }} className={`${inputClass} col-span-3`} />
-                    <input type="text" value={item.time} onChange={(e) => { const items = [...agenda.calendar_items]; items[idx] = { ...items[idx], time: e.target.value }; update("calendar_items", items) }} placeholder="Time" className={`${inputClass} col-span-2`} />
-                    <input type="text" value={item.event} onChange={(e) => { const items = [...agenda.calendar_items]; items[idx] = { ...items[idx], event: e.target.value }; update("calendar_items", items) }} placeholder="Event" className={`${inputClass} col-span-6`} />
-                    <button onClick={() => update("calendar_items", agenda.calendar_items.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 col-span-1 flex justify-center"><Trash2 className="h-4 w-4" /></button>
+                  <div key={idx} className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-center">
+                    <input type="date" value={item.date} onChange={(e) => { const items = [...agenda.calendar_items]; items[idx] = { ...items[idx], date: e.target.value }; update("calendar_items", items) }} className={`${inputClass} col-span-1 sm:col-span-3`} />
+                    <input type="text" value={item.time} onChange={(e) => { const items = [...agenda.calendar_items]; items[idx] = { ...items[idx], time: e.target.value }; update("calendar_items", items) }} placeholder="Time" className={`${inputClass} col-span-1 sm:col-span-2`} />
+                    <input type="text" value={item.event} onChange={(e) => { const items = [...agenda.calendar_items]; items[idx] = { ...items[idx], event: e.target.value }; update("calendar_items", items) }} placeholder="Event" className={`${inputClass} col-span-2 sm:col-span-6`} />
+                    <button onClick={() => update("calendar_items", agenda.calendar_items.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 col-span-2 sm:col-span-1 flex justify-end sm:justify-center p-1.5"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 ))}
                 <Button variant="outline" size="sm" onClick={() => update("calendar_items", [...agenda.calendar_items, { date: "", time: "", event: "" }])}>
@@ -327,7 +327,7 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Presiding</label>
                   <input type="text" value={agenda.presiding} onChange={(e) => update("presiding", e.target.value)} className={inputClass} />
@@ -360,7 +360,7 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
                   <label className="block text-xs font-medium text-gray-500 mb-1">Handbook Trainer</label>
                   <input type="text" value={agenda.handbook_trainer} onChange={(e) => update("handbook_trainer", e.target.value)} className={inputClass} />
                 </div>
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <label className="block text-xs font-medium text-gray-500 mb-1">Handbook Topic</label>
                   <input type="text" value={agenda.handbook_topic} onChange={(e) => update("handbook_topic", e.target.value)} className={inputClass} placeholder="e.g., 1.2.3. Inviting All to Receive the Gospel" />
                 </div>
@@ -411,15 +411,15 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
                 <div className="space-y-3">
                   {agenda.action_items.map((item, idx) => (
                     <div key={idx} className="border border-gray-200 rounded-lg p-3 space-y-2">
-                      <div className="grid grid-cols-12 gap-2 items-center">
-                        <input type="text" value={item.assigned_to} onChange={(e) => { const items = [...agenda.action_items]; items[idx] = { ...items[idx], assigned_to: e.target.value }; update("action_items", items) }} placeholder="Assigned to" className={`${inputClass} col-span-4`} />
-                        <select value={item.status} onChange={(e) => { const items = [...agenda.action_items]; items[idx] = { ...items[idx], status: e.target.value }; update("action_items", items) }} className={`${inputClass} col-span-3`}>
+                      <div className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-center">
+                        <input type="text" value={item.assigned_to} onChange={(e) => { const items = [...agenda.action_items]; items[idx] = { ...items[idx], assigned_to: e.target.value }; update("action_items", items) }} placeholder="Assigned to" className={`${inputClass} col-span-1 sm:col-span-4`} />
+                        <select value={item.status} onChange={(e) => { const items = [...agenda.action_items]; items[idx] = { ...items[idx], status: e.target.value }; update("action_items", items) }} className={`${inputClass} col-span-1 sm:col-span-3`}>
                           <option value="Assigned">{englishMenuTitleCase("Assigned")}</option>
                           <option value="In Progress">{englishMenuTitleCase("In Progress")}</option>
                           <option value="Completed">{englishMenuTitleCase("Completed")}</option>
                         </select>
-                        <input type="text" value={item.assignment} onChange={(e) => { const items = [...agenda.action_items]; items[idx] = { ...items[idx], assignment: e.target.value }; update("action_items", items) }} placeholder="Assignment description" className={`${inputClass} col-span-4`} />
-                        <button onClick={() => update("action_items", agenda.action_items.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 col-span-1 flex justify-center"><Trash2 className="h-4 w-4" /></button>
+                        <input type="text" value={item.assignment} onChange={(e) => { const items = [...agenda.action_items]; items[idx] = { ...items[idx], assignment: e.target.value }; update("action_items", items) }} placeholder="Assignment description" className={`${inputClass} col-span-2 sm:col-span-4`} />
+                        <button onClick={() => update("action_items", agenda.action_items.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 col-span-2 sm:col-span-1 flex justify-end sm:justify-center p-1.5"><Trash2 className="h-4 w-4" /></button>
                       </div>
                     </div>
                   ))}
@@ -443,10 +443,10 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
             <CardContent>
               <div className="space-y-3">
                 {agenda.training.map((item, idx) => (
-                  <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                    <input type="text" value={item.conducted_by} onChange={(e) => { const items = [...agenda.training]; items[idx] = { ...items[idx], conducted_by: e.target.value }; update("training", items) }} placeholder="Conducted by" className={`${inputClass} col-span-4`} />
-                    <input type="text" value={item.topic} onChange={(e) => { const items = [...agenda.training]; items[idx] = { ...items[idx], topic: e.target.value }; update("training", items) }} placeholder="Topic" className={`${inputClass} col-span-7`} />
-                    <button onClick={() => update("training", agenda.training.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 col-span-1 flex justify-center"><Trash2 className="h-4 w-4" /></button>
+                  <div key={idx} className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-center">
+                    <input type="text" value={item.conducted_by} onChange={(e) => { const items = [...agenda.training]; items[idx] = { ...items[idx], conducted_by: e.target.value }; update("training", items) }} placeholder="Conducted by" className={`${inputClass} col-span-2 sm:col-span-4`} />
+                    <input type="text" value={item.topic} onChange={(e) => { const items = [...agenda.training]; items[idx] = { ...items[idx], topic: e.target.value }; update("training", items) }} placeholder="Topic" className={`${inputClass} col-span-2 sm:col-span-7`} />
+                    <button onClick={() => update("training", agenda.training.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 col-span-2 sm:col-span-1 flex justify-end sm:justify-center p-1.5"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 ))}
               </div>

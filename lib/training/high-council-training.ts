@@ -472,7 +472,14 @@ export function mergeHighCouncilPayload(raw: unknown): HighCouncilTrainingPayloa
   }
 }
 
-export const HIGH_COUNCIL_TRAINING_EDIT_ROLES = ["stake_president", "counselor", "clerk"] as const
+export const HIGH_COUNCIL_TRAINING_EDIT_ROLES = [
+  "stake_president",
+  "counselor",
+  "clerk",
+  "assistant_clerk",
+  "executive_secretary",
+  "assistant_executive_secretary",
+] as const
 
 export function canEditHighCouncilTraining(role: string | null | undefined): boolean {
   if (!role) return false

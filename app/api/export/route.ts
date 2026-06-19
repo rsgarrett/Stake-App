@@ -1,29 +1,35 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { requireElevatedLeader } from "@/lib/auth/require-elevated-leader"
+import { isExportableTable } from "@/lib/export/exportable-tables"
+
+function csvEscape(value: unknown): string {
+  if (value === null || value === undefined) return ""
+  const str = typeof value === "object" ? JSON.stringify(value) : String(value)
+  if (/[",\n\r]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`
+  }
+  return str
+}
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const auth = await requireElevatedLeader()
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status })
     }
+    const { supabase } = auth.ctx
 
-    const searchParams = request.nextUrl.searchParams
-    const tableName = searchParams.get("table")
+    const tableName = request.nextUrl.searchParams.get("table")
 
-    if (!tableName) {
+    if (!tableName || !isExportableTable(tableName)) {
       return NextResponse.json(
-        { error: "Table name is required" },
+        { error: "Table is not exportable." },
         { status: 400 }
       )
     }
 
-    // Fetch data from table
-    const { data, error } = await supabase
-      .from(tableName)
-      .select("*")
+    // RLS still applies (anon-key client with user session), so rows stay stake-scoped.
+    const { data, error } = await supabase.from(tableName).select("*")
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
@@ -33,20 +39,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "No data found" }, { status: 404 })
     }
 
-    // Convert to CSV
     const headers = Object.keys(data[0])
     const csvRows = [
       headers.join(","),
-      ...data.map((row) =>
-        headers.map((header) => {
-          const value = row[header]
-          return value === null || value === undefined
-            ? ""
-            : typeof value === "string" && value.includes(",")
-            ? `"${value}"`
-            : value
-        }).join(",")
-      ),
+      ...data.map((row) => headers.map((h) => csvEscape(row[h])).join(",")),
     ]
 
     const csv = csvRows.join("\n")
@@ -64,5 +60,3 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-
-

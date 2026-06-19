@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { logAuditEvent } from "@/lib/utils/audit"
+import { canEditStakePermissionRoster } from "@/lib/settings/stake-office-slugs"
+import { isExportableTable } from "@/lib/export/exportable-tables"
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,7 +20,7 @@ export async function POST(request: NextRequest) {
       .eq("id", user.id)
       .single()
 
-    if (!userData || !["stake_president", "counselor", "clerk"].includes(userData.role)) {
+    if (!userData || !canEditStakePermissionRoster(userData.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
@@ -29,6 +31,14 @@ export async function POST(request: NextRequest) {
     if (!file || !tableName) {
       return NextResponse.json(
         { error: "File and table name are required" },
+        { status: 400 }
+      )
+    }
+
+    // Same allowlist as exports — blocks imports into users, audit_logs, etc.
+    if (!isExportableTable(tableName)) {
+      return NextResponse.json(
+        { error: "Table is not importable." },
         { status: 400 }
       )
     }

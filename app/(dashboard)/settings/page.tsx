@@ -7,9 +7,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/client"
 import { canEditStakePermissionRoster } from "@/lib/settings/stake-office-slugs"
+import { EXPORTABLE_TABLES } from "@/lib/export/exportable-tables"
 
 export default function SettingsPage() {
   const [canImport, setCanImport] = useState(false)
+  const [exportTable, setExportTable] = useState<string>(EXPORTABLE_TABLES[0].table)
   const supabase = createClient()
 
   useEffect(() => {
@@ -31,10 +33,7 @@ export default function SettingsPage() {
   }, [supabase])
 
   const handleExport = () => {
-    const table = prompt("Enter table name to export:")
-    if (table) {
-      window.location.href = `/api/export?table=${table}`
-    }
+    window.location.href = `/api/export?table=${encodeURIComponent(exportTable)}`
   }
 
   return (
@@ -55,20 +54,33 @@ export default function SettingsPage() {
           </div>
         )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Export Data</CardTitle>
-            <CardDescription>Export data to CSV format</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <p className="text-sm text-gray-600">
-                Export data from any table in CSV format for backup or analysis.
-              </p>
-              <Button onClick={handleExport}>Export Data</Button>
-            </div>
-          </CardContent>
-        </Card>
+        {canImport && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Export Data</CardTitle>
+              <CardDescription>Export stake data to CSV format</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <p className="text-sm text-gray-600">
+                  Choose the data to export as a CSV file for backup or analysis.
+                </p>
+                <select
+                  value={exportTable}
+                  onChange={(e) => setExportTable(e.target.value)}
+                  className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500"
+                >
+                  {EXPORTABLE_TABLES.map((t) => (
+                    <option key={t.table} value={t.table}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+                <Button onClick={handleExport}>Export CSV</Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   )
