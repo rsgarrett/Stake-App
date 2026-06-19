@@ -42,11 +42,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         <Header onMenuToggle={toggleDrawer} />
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
           {children}
-          {process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ? (
-            <div className="shrink-0 border-t border-gray-200/80 bg-gray-50 py-1.5 text-center text-[10px] text-gray-400">
-              Build {process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA.slice(0, 7)}
-            </div>
-          ) : null}
         </main>
       </div>
     </div>
