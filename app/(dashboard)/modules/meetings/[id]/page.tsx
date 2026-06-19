@@ -86,8 +86,33 @@ const FIELD_ICONS: Partial<Record<AgendaFieldType, typeof User>> = {
   hymn: Music,
   trainer: BookOpen,
   sub_items: ListOrdered,
+  calendar: CalendarDays,
   notes: MessageSquare,
   person_notes: User,
+}
+
+/** Calendar rows are stored one-per-line in `description`, with the three
+ *  columns tab-separated: `date<TAB>time<TAB>event`. Tabs can't be typed into
+ *  the inputs, so they're a safe delimiter and no schema change is needed. */
+const CALENDAR_COL_SEP = "\t"
+interface CalendarRow {
+  date: string
+  time: string
+  event: string
+}
+function parseCalendarRows(raw: string | null | undefined): CalendarRow[] {
+  if (!raw) return []
+  return raw.split("\n").map((line) => {
+    const parts = line.split(CALENDAR_COL_SEP)
+    // Legacy free-text rows (no tabs) fall into the event column.
+    if (parts.length === 1) return { date: "", time: "", event: parts[0] }
+    return { date: parts[0] ?? "", time: parts[1] ?? "", event: parts[2] ?? "" }
+  })
+}
+function serializeCalendarRows(rows: CalendarRow[]): string {
+  return rows
+    .map((r) => [r.date, r.time, r.event].join(CALENDAR_COL_SEP))
+    .join("\n")
 }
 
 function fieldIcon(ft: AgendaFieldType) {
@@ -430,6 +455,34 @@ export default function MeetingDetailPage() {
     updateSubItems(item.id, current)
   }
 
+  // --- Calendar rows (date / time / event), stored in `description` ---
+
+  const getCalendarRows = (item: AgendaItem): CalendarRow[] => {
+    const raw = (editingItems[item.id]?.description as string | undefined) ?? item.description ?? ""
+    return parseCalendarRows(raw)
+  }
+
+  const writeCalendarRows = (itemId: string, rows: CalendarRow[]) => {
+    const serialized = serializeCalendarRows(rows)
+    setEditField(itemId, "description", serialized.length > 0 ? serialized : null)
+  }
+
+  const addCalendarRow = (item: AgendaItem) => {
+    writeCalendarRows(item.id, [...getCalendarRows(item), { date: "", time: "", event: "" }])
+  }
+
+  const editCalendarRow = (item: AgendaItem, index: number, patch: Partial<CalendarRow>) => {
+    const rows = getCalendarRows(item)
+    rows[index] = { ...rows[index], ...patch }
+    writeCalendarRows(item.id, rows)
+  }
+
+  const removeCalendarRow = (item: AgendaItem, index: number) => {
+    const rows = getCalendarRows(item)
+    rows.splice(index, 1)
+    writeCalendarRows(item.id, rows)
+  }
+
   // --- Minutes (autosaved) ---
 
   const persistMinutes = useCallback(async () => {
@@ -553,6 +606,48 @@ export default function MeetingDetailPage() {
   const totalDuration = agendaItems.reduce((sum, a) => sum + (a.duration_minutes || 0), 0)
   const templateConfig = getTemplateForMeetingType(meeting.meeting_type)
 
+  // --- Calendar row renderer (date / time / event) ---
+  const renderCalendarRows = (item: AgendaItem) => {
+    const rows = getCalendarRows(item)
+    return (
+      <div className="space-y-1.5">
+        {rows.map((row, ri) => (
+          <div key={ri} className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-center group">
+            <input
+              type="date"
+              value={row.date}
+              onChange={(e) => editCalendarRow(item, ri, { date: e.target.value })}
+              className={`${inputClass} text-sm py-1.5 col-span-1 sm:col-span-3`}
+            />
+            <input
+              type="text"
+              placeholder="Time"
+              value={row.time}
+              onChange={(e) => editCalendarRow(item, ri, { time: e.target.value })}
+              className={`${inputClass} text-sm py-1.5 col-span-1 sm:col-span-3`}
+            />
+            <input
+              type="text"
+              placeholder="Event"
+              value={row.event}
+              onChange={(e) => editCalendarRow(item, ri, { event: e.target.value })}
+              className={`${inputClass} text-sm py-1.5 col-span-2 sm:col-span-5`}
+            />
+            <button
+              onClick={() => removeCalendarRow(item, ri)}
+              className="text-red-300 hover:text-red-500 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity col-span-2 sm:col-span-1 flex justify-end sm:justify-center p-1.5"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ))}
+        <Button variant="outline" size="sm" onClick={() => addCalendarRow(item)}>
+          <Plus className="h-4 w-4 mr-1" /> Add event
+        </Button>
+      </div>
+    )
+  }
+
   // --- Sub-item list renderer ---
   const renderSubItems = (item: AgendaItem, placeholder: string) => {
     const lines = getSubItems(item)
@@ -659,6 +754,9 @@ export default function MeetingDetailPage() {
           </div>
         )
 
+      case "calendar":
+        return renderCalendarRows(item)
+
       case "sub_items":
         return renderSubItems(item, getSubItemPlaceholder(item.title))
 
@@ -720,6 +818,9 @@ export default function MeetingDetailPage() {
     const ft = getFieldTypeForTitle(item.title, meeting?.meeting_type)
     const isDirty = Boolean(editingItems[item.id] && Object.keys(editingItems[item.id]).length > 0)
     if (isDirty) return null
+
+    // Calendar rows are fully shown by their always-on editable inputs.
+    if (ft === "calendar") return null
 
     if (ft === "sub_items") {
       if (!item.description) return null

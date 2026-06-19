@@ -9,6 +9,7 @@
  *   - "hymn"          → hymn number + hymn name side-by-side
  *   - "trainer"       → person name + section/topic side-by-side
  *   - "sub_items"     → numbered list with + button (action items, council topics, callings, etc.)
+ *   - "calendar"      → list of rows, each with separate date / time / event inputs
  *   - "readonly"      → title only, no editable fields (stake vision)
  *   - "notes"         → single multi-line notes input
  *   - "person_notes"  → person + notes side-by-side (closing thoughts/remarks)
@@ -19,6 +20,7 @@ export type AgendaFieldType =
   | "hymn"
   | "trainer"
   | "sub_items"
+  | "calendar"
   | "readonly"
   | "notes"
   | "person_notes"
@@ -53,17 +55,15 @@ function slugNorm(mt: string): string {
 
 const calendarReview: AgendaItemConfig = {
   title: "Calendar Review",
-  field_type: "sub_items",
+  field_type: "calendar",
   duration_minutes: 5,
-  sub_item_placeholder: "Date — time — event",
   description: "Upcoming meetings, conferences, and stake events",
 }
 
 const calendarItems: AgendaItemConfig = {
   title: "Calendar Items",
-  field_type: "sub_items",
+  field_type: "calendar",
   duration_minutes: 5,
-  sub_item_placeholder: "Date — time — event",
   description: "Calendar items for your information",
 }
 
@@ -136,9 +136,8 @@ export const AGENDA_TEMPLATES: Record<string, AgendaTemplateConfig> = {
     items: [
       {
         title: "Review Calendar Items / Announcements",
-        field_type: "sub_items",
+        field_type: "calendar",
         duration_minutes: 5,
-        sub_item_placeholder: "Date — time — event",
       },
       openingPrayer,
       stakeVision,
@@ -459,9 +458,8 @@ export const AGENDA_TEMPLATES: Record<string, AgendaTemplateConfig> = {
     items: [
       {
         title: "Calendar & Deadlines",
-        field_type: "sub_items",
+        field_type: "calendar",
         duration_minutes: 5,
-        sub_item_placeholder: "Date — finance/audit deadline or event",
       },
       openingPrayer,
       stakeVision,
@@ -543,10 +541,10 @@ export function getFieldTypeForTitle(
   if (lower.includes("closing thought") || lower.includes("closing remark"))
     return "person_notes"
   if (lower.includes("agenda planning")) return "notes"
+  if (lower.includes("calendar") || lower.includes("deadline")) return "calendar"
 
   if (
     lower.includes("action item") ||
-    lower.includes("calendar") ||
     lower.includes("calling") ||
     lower.includes("ordination") ||
     lower.includes("recommendation") ||
@@ -565,8 +563,7 @@ export function getFieldTypeForTitle(
     lower.includes("donation") ||
     lower.includes("tithing") ||
     lower.includes("group discussion") ||
-    lower.includes("additional items") ||
-    lower.includes("deadlines")
+    lower.includes("additional items")
   ) {
     return "sub_items"
   }
