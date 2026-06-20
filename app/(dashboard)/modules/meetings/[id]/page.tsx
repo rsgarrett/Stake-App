@@ -92,6 +92,7 @@ const FIELD_ICONS: Partial<Record<AgendaFieldType, typeof User>> = {
   sub_items: ListOrdered,
   calendar: CalendarDays,
   action_items: ClipboardList,
+  agenda_submissions: FileText,
   callings_link: Users,
   notes: MessageSquare,
   person_notes: User,
@@ -143,6 +144,34 @@ function serializeActionRows(rows: ActionRow[]): string {
   return rows
     .map((r) => [r.assignment, r.assignedTo, r.status].join(CALENDAR_COL_SEP))
     .join("\n")
+}
+
+/** Submitted agenda rows: `agendaItem<TAB>submittedBy` per line in `description`. */
+interface SubmissionRow {
+  agendaItem: string
+  submittedBy: string
+}
+function parseSubmissionRows(raw: string | null | undefined): SubmissionRow[] {
+  if (!raw) return []
+  return raw.split("\n").map((line) => {
+    const parts = line.split(CALENDAR_COL_SEP)
+    if (parts.length === 1) return { agendaItem: parts[0], submittedBy: "" }
+    return { agendaItem: parts[0] ?? "", submittedBy: parts[1] ?? "" }
+  })
+}
+function serializeSubmissionRows(rows: SubmissionRow[]): string {
+  return rows
+    .map((r) => [r.agendaItem, r.submittedBy].join(CALENDAR_COL_SEP))
+    .join("\n")
+}
+
+function isWardAndMemberNeedsTitle(title: string): boolean {
+  const lower = title.toLowerCase()
+  return lower.includes("ward") && lower.includes("member") && lower.includes("need")
+}
+
+function isAddAgendaItemTitle(title: string): boolean {
+  return title.toLowerCase().includes("add agenda item")
 }
 
 /** Live link to the General Handbook on churchofjesuschrist.org. */
@@ -243,6 +272,7 @@ export default function MeetingDetailPage() {
   const [carryNotice, setCarryNotice] = useState<string | null>(null)
   const [carryingOver, setCarryingOver] = useState(false)
   const calendarReorderAttempted = useRef<string | null>(null)
+  const addAgendaItemAttempted = useRef<string | null>(null)
 
   const supabase = createClient()
 
@@ -339,6 +369,77 @@ export default function MeetingDetailPage() {
     meetingWriteAllowed,
     meetingId,
     ensureCalendarReviewFirst,
+  ])
+
+  /** Insert “Add Agenda Item” immediately after “Ward and Member Needs” when missing. */
+  const ensureAddAgendaItemSection = useCallback(
+    async (items: AgendaItem[]) => {
+      const wardIdx = items.findIndex((it) => isWardAndMemberNeedsTitle(it.title))
+      if (wardIdx === -1) return
+      if (items.some((it) => isAddAgendaItemTitle(it.title))) return
+
+      const insertOrder = items[wardIdx].item_order + 1
+      const toShift = items.filter((it) => it.item_order >= insertOrder)
+      const shiftResults = await Promise.all(
+        toShift.map((it) =>
+          supabase
+            .from("meeting_agendas")
+            .update({ item_order: it.item_order + 1 })
+            .eq("id", it.id)
+        )
+      )
+      const shiftErr = shiftResults.find((r) => r.error)?.error
+      if (shiftErr) {
+        console.error("Could not shift agenda items for Add Agenda Item:", shiftErr)
+        return
+      }
+
+      const { error } = await supabase.from("meeting_agendas").insert({
+        meeting_id: meetingId,
+        title: "Add Agenda Item",
+        description: null,
+        item_order: insertOrder,
+        duration_minutes: 5,
+      })
+      if (error) {
+        console.error("Could not insert Add Agenda Item section:", error)
+        return
+      }
+      await loadAgenda()
+    },
+    [meetingId, supabase] // eslint-disable-line react-hooks/exhaustive-deps
+  )
+
+  useEffect(() => {
+    addAgendaItemAttempted.current = null
+  }, [meetingId])
+
+  useEffect(() => {
+    if (loading) return
+    if (!meeting) return
+    if (!meetingWriteAllowed) return
+    if (agendaItems.length === 0) return
+    if (addAgendaItemAttempted.current === meetingId) return
+
+    const wardIdx = agendaItems.findIndex((it) => isWardAndMemberNeedsTitle(it.title))
+    if (wardIdx === -1) {
+      addAgendaItemAttempted.current = meetingId
+      return
+    }
+    if (agendaItems.some((it) => isAddAgendaItemTitle(it.title))) {
+      addAgendaItemAttempted.current = meetingId
+      return
+    }
+
+    addAgendaItemAttempted.current = meetingId
+    void ensureAddAgendaItemSection(agendaItems)
+  }, [
+    loading,
+    meeting?.id,
+    agendaItems,
+    meetingWriteAllowed,
+    meetingId,
+    ensureAddAgendaItemSection,
   ])
 
   const loadMinutes = async () => {
@@ -785,6 +886,34 @@ export default function MeetingDetailPage() {
     writeActionRows(item.id, rows)
   }
 
+  // --- Submitted agenda rows (agenda item / submitted by), in `description` ---
+
+  const getSubmissionRows = (item: AgendaItem): SubmissionRow[] => {
+    const raw = (editingItems[item.id]?.description as string | undefined) ?? item.description ?? ""
+    return parseSubmissionRows(raw)
+  }
+
+  const writeSubmissionRows = (itemId: string, rows: SubmissionRow[]) => {
+    const serialized = serializeSubmissionRows(rows)
+    setEditField(itemId, "description", serialized.length > 0 ? serialized : null)
+  }
+
+  const addSubmissionRow = (item: AgendaItem) => {
+    writeSubmissionRows(item.id, [...getSubmissionRows(item), { agendaItem: "", submittedBy: "" }])
+  }
+
+  const editSubmissionRow = (item: AgendaItem, index: number, patch: Partial<SubmissionRow>) => {
+    const rows = getSubmissionRows(item)
+    rows[index] = { ...rows[index], ...patch }
+    writeSubmissionRows(item.id, rows)
+  }
+
+  const removeSubmissionRow = (item: AgendaItem, index: number) => {
+    const rows = getSubmissionRows(item)
+    rows.splice(index, 1)
+    writeSubmissionRows(item.id, rows)
+  }
+
   // --- Minutes (autosaved) ---
 
   const persistMinutes = useCallback(async () => {
@@ -999,6 +1128,43 @@ export default function MeetingDetailPage() {
     )
   }
 
+  // --- Submitted agenda row renderer (agenda item / submitted by) ---
+  const renderAgendaSubmissionRows = (item: AgendaItem) => {
+    const rows = getSubmissionRows(item)
+    return (
+      <div className="space-y-1.5">
+        {rows.map((row, ri) => (
+          <div key={ri} className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-center group">
+            <input
+              type="text"
+              placeholder="Agenda item"
+              value={row.agendaItem}
+              onChange={(e) => editSubmissionRow(item, ri, { agendaItem: e.target.value })}
+              className={`${inputClass} text-sm py-1.5 col-span-2 sm:col-span-7`}
+            />
+            <input
+              type="text"
+              list="agenda-people-list"
+              placeholder="Submitted by"
+              value={row.submittedBy}
+              onChange={(e) => editSubmissionRow(item, ri, { submittedBy: e.target.value })}
+              className={`${inputClass} text-sm py-1.5 col-span-1 sm:col-span-4`}
+            />
+            <button
+              onClick={() => removeSubmissionRow(item, ri)}
+              className="text-red-300 hover:text-red-500 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity col-span-2 sm:col-span-1 flex justify-end sm:justify-center p-1.5"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ))}
+        <Button variant="outline" size="sm" onClick={() => addSubmissionRow(item)}>
+          <Plus className="h-4 w-4 mr-1" /> Add submission
+        </Button>
+      </div>
+    )
+  }
+
   // --- Sub-item list renderer ---
   const renderSubItems = (item: AgendaItem, placeholder: string) => {
     const lines = getSubItems(item)
@@ -1162,6 +1328,9 @@ export default function MeetingDetailPage() {
       case "action_items":
         return renderActionRows(item)
 
+      case "agenda_submissions":
+        return renderAgendaSubmissionRows(item)
+
       case "callings_link":
         return (
           <Link
@@ -1239,7 +1408,7 @@ export default function MeetingDetailPage() {
     if (isDirty) return null
 
     // Calendar / action-item rows are fully shown by their always-on inputs.
-    if (ft === "calendar" || ft === "action_items") return null
+    if (ft === "calendar" || ft === "action_items" || ft === "agenda_submissions") return null
     // Callings link has no saved value to preview.
     if (ft === "callings_link") return null
 

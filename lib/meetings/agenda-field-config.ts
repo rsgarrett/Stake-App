@@ -11,6 +11,7 @@
  *   - "sub_items"     → numbered list with + button (action items, council topics, callings, etc.)
  *   - "calendar"      → list of rows, each with separate date / time / event inputs
  *   - "action_items"  → list of rows, each with assignment / assigned-to / status
+ *   - "agenda_submissions" → list of rows, each with agenda item / submitted by
  *   - "callings_link" → shortcut button to the Calling Tracker (no inline editing)
  *   - "readonly"      → title only, no editable fields (stake vision)
  *   - "notes"         → single multi-line notes input
@@ -24,6 +25,7 @@ export type AgendaFieldType =
   | "sub_items"
   | "calendar"
   | "action_items"
+  | "agenda_submissions"
   | "callings_link"
   | "readonly"
   | "notes"
@@ -190,6 +192,18 @@ export const AGENDA_TEMPLATES: Record<string, AgendaTemplateConfig> = {
         field_type: "sub_items",
         duration_minutes: 10,
         sub_item_placeholder: "Missionary — mission — highlights",
+      },
+      {
+        title: "Ward and Member Needs",
+        field_type: "sub_items",
+        duration_minutes: 15,
+        sub_item_placeholder: "Ward — member — need",
+      },
+      {
+        title: "Add Agenda Item",
+        field_type: "agenda_submissions",
+        duration_minutes: 5,
+        description: "Items submitted for an upcoming council agenda",
       },
       {
         title: "Action Items",
@@ -505,6 +519,7 @@ export function getFieldTypeForTitle(
   // Structured multi-column items always win, regardless of any stored template
   // config, so existing agendas pick up the richer layout automatically.
   if (lower.includes("action item")) return "action_items"
+  if (lower.includes("add agenda item")) return "agenda_submissions"
   if (lower.includes("calendar") || lower.includes("deadline")) return "calendar"
   // Calling/recommendation items are handled in the Calling Tracker, so the
   // agenda just links there instead of duplicating an editable list.
@@ -548,6 +563,7 @@ export function getFieldTypeForTitle(
     lower.includes("report indicator") ||
     lower.includes("salvation") ||
     lower.includes("ward & member") ||
+    lower.includes("ward and member") ||
     lower.includes("ward report") ||
     lower.includes("ministering") ||
     lower.includes("council topic") ||
@@ -570,7 +586,10 @@ export function getSubItemPlaceholder(title: string): string {
   const lower = title.toLowerCase()
   if (lower.includes("calendar") || lower.includes("deadline"))
     return "Date — time — event"
+  if (lower.includes("add agenda item")) return "Agenda item — submitted by"
   if (lower.includes("action item")) return "Assigned to — status — assignment"
+  if (lower.includes("ward and member") || lower.includes("ward & member"))
+    return "Ward — member — need"
   if (lower.includes("salvation"))
     return "Divinely appointed responsibility — item — result"
   if (
