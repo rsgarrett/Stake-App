@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -242,6 +242,7 @@ export default function MeetingDetailPage() {
   const [seededTemplateForMeetingId, setSeededTemplateForMeetingId] = useState<string | null>(null)
   const [carryNotice, setCarryNotice] = useState<string | null>(null)
   const [carryingOver, setCarryingOver] = useState(false)
+  const calendarReorderAttempted = useRef<string | null>(null)
 
   const supabase = createClient()
 
@@ -280,6 +281,65 @@ export default function MeetingDetailPage() {
     const { data } = await supabase.from("meeting_agendas").select("*").eq("meeting_id", meetingId).order("item_order", { ascending: true })
     setAgendaItems(data || [])
   }
+
+  /** Older seeded agendas put calendar fourth; handbook order expects it first. */
+  const ensureCalendarReviewFirst = useCallback(
+    async (items: AgendaItem[], meetingType: string) => {
+      if (items.length < 2) return
+      const calIdx = items.findIndex(
+        (it) => getFieldTypeForTitle(it.title, meetingType) === "calendar"
+      )
+      if (calIdx <= 0) return
+
+      const reordered = [...items]
+      const [calItem] = reordered.splice(calIdx, 1)
+      reordered.unshift(calItem)
+
+      const results = await Promise.all(
+        reordered.map((item, idx) =>
+          supabase.from("meeting_agendas").update({ item_order: idx + 1 }).eq("id", item.id)
+        )
+      )
+      const err = results.find((r) => r.error)?.error
+      if (err) {
+        console.error("Could not move Calendar Review to item 1:", err)
+        return
+      }
+      await loadAgenda()
+    },
+    [meetingId, supabase] // eslint-disable-line react-hooks/exhaustive-deps
+  )
+
+  useEffect(() => {
+    calendarReorderAttempted.current = null
+  }, [meetingId])
+
+  useEffect(() => {
+    if (loading) return
+    if (!meeting) return
+    if (!meetingWriteAllowed) return
+    if (agendaItems.length < 2) return
+    if (calendarReorderAttempted.current === meetingId) return
+
+    const calIdx = agendaItems.findIndex(
+      (it) => getFieldTypeForTitle(it.title, meeting.meeting_type) === "calendar"
+    )
+    if (calIdx <= 0) {
+      calendarReorderAttempted.current = meetingId
+      return
+    }
+
+    calendarReorderAttempted.current = meetingId
+    void ensureCalendarReviewFirst(agendaItems, meeting.meeting_type)
+  }, [
+    loading,
+    meeting?.id,
+    meeting?.meeting_type,
+    agendaItems,
+    meetingWriteAllowed,
+    meetingId,
+    ensureCalendarReviewFirst,
+  ])
 
   const loadMinutes = async () => {
     const { data } = await supabase.from("meeting_minutes").select("*").eq("meeting_id", meetingId).order("created_at", { ascending: false }).limit(1).single()
