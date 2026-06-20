@@ -12,12 +12,15 @@ import {
   ArrowLeft, Plus, Trash2, Clock, FileText, ListOrdered,
   User, MapPin, ChevronDown, ChevronUp, Music,
   BookOpen, CheckCircle2, Users, MessageSquare, CalendarDays, ClipboardList,
+  RefreshCw, ExternalLink,
 } from "lucide-react"
 import {
   getFieldTypeForTitle, getSubItemPlaceholder, getTemplateForMeetingType,
   type AgendaFieldType,
 } from "@/lib/meetings/agenda-field-config"
 import { canManageStakeMeetings } from "@/lib/meetings/meeting-permissions"
+import { useAgendaPeople } from "@/lib/meetings/use-agenda-people"
+import { setAgendaReturn } from "@/lib/navigation/agenda-return"
 
 interface Meeting {
   id: string
@@ -142,9 +145,48 @@ function serializeActionRows(rows: ActionRow[]): string {
     .join("\n")
 }
 
+/** Live link to the General Handbook on churchofjesuschrist.org. */
+const GENERAL_HANDBOOK_URL =
+  "https://www.churchofjesuschrist.org/study/manual/general-handbook?lang=eng"
+
+/**
+ * Advance a handbook topic to the next section number. The stake marches
+ * through the Handbook sequentially (1.0 → 1.1 → 1.2 …), so the trailing
+ * numeric segment is incremented. Returns just the number (the new section's
+ * title is left for the user to fill). Non-numeric topics are returned as-is.
+ */
+function nextHandbookTopic(prev: string | null | undefined): string {
+  const raw = (prev ?? "").trim()
+  const m = /^(\d+(?:\.\d+)*)/.exec(raw)
+  if (!m) return raw
+  const parts = m[1].split(".").map((n) => parseInt(n, 10))
+  parts[parts.length - 1] += 1
+  return parts.join(".")
+}
+
 function fieldIcon(ft: AgendaFieldType) {
   const Icon = FIELD_ICONS[ft]
   return Icon ? <Icon className="h-3.5 w-3.5 text-gray-400 shrink-0" /> : null
+}
+
+/** Per-section meeting notes — skip on prayers and vision/goal headers. */
+function shouldShowItemNotes(title: string, meetingType?: string): boolean {
+  const lower = title.toLowerCase()
+  const ft = getFieldTypeForTitle(title, meetingType)
+  if (ft === "person" && lower.includes("prayer")) return false
+  if (ft === "readonly") return false
+  if (lower.includes("stake vision") || lower.includes("goal review")) return false
+  if (lower.includes("vision / goal") || lower.includes("vision/goal")) return false
+  return true
+}
+
+/** Template hint text — skip on vision/goal so it isn't stacked under the title. */
+function shouldShowSectionHint(title: string, meetingType?: string): boolean {
+  const lower = title.toLowerCase()
+  if (lower.includes("stake vision") || lower.includes("goal review")) return false
+  if (lower.includes("vision / goal") || lower.includes("vision/goal")) return false
+  if (getFieldTypeForTitle(title, meetingType) === "readonly") return false
+  return true
 }
 
 export default function MeetingDetailPage() {
@@ -196,7 +238,10 @@ export default function MeetingDetailPage() {
 
   const [userMeetingRole, setUserMeetingRole] = useState<string | null>(null)
   const meetingWriteAllowed = canManageStakeMeetings(userMeetingRole)
+  const { people: agendaPeople } = useAgendaPeople()
   const [seededTemplateForMeetingId, setSeededTemplateForMeetingId] = useState<string | null>(null)
+  const [carryNotice, setCarryNotice] = useState<string | null>(null)
+  const [carryingOver, setCarryingOver] = useState(false)
 
   const supabase = createClient()
 
@@ -359,6 +404,148 @@ export default function MeetingDetailPage() {
     setSubItemInputs({})
     const ok = await applyHandbookTemplate()
     if (ok) setSeededTemplateForMeetingId(meetingId)
+  }
+
+  /**
+   * Pull unfinished action items forward from the most recent earlier meeting
+   * of the same type into this meeting's action-item section. Saves the weekly
+   * busywork of retyping carry-over assignments. Merged rows are staged as
+   * edits (so they autosave) and de-duplicated against what's already here.
+   */
+  const carryOverOpenItems = async () => {
+    if (!meeting) return
+    setCarryNotice(null)
+    setCarryingOver(true)
+    try {
+      const target = agendaItems.find(
+        (it) => getFieldTypeForTitle(it.title, meeting.meeting_type) === "action_items"
+      )
+      if (!target) {
+        setCarryNotice("This agenda has no action-item section to carry into.")
+        return
+      }
+
+      // Most recent earlier meeting of the same type. RLS already scopes
+      // meetings to the current user's stake, so no stake filter is needed.
+      const { data: prior } = await supabase
+        .from("meetings")
+        .select("id, scheduled_date")
+        .eq("meeting_type", meeting.meeting_type)
+        .lt("scheduled_date", meeting.scheduled_date)
+        .order("scheduled_date", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (!prior) {
+        setCarryNotice("No earlier meeting of this type was found.")
+        return
+      }
+
+      const { data: priorItems } = await supabase
+        .from("meeting_agendas")
+        .select("title, description")
+        .eq("meeting_id", prior.id)
+
+      const openRows: ActionRow[] = []
+      for (const pi of priorItems ?? []) {
+        if (getFieldTypeForTitle(pi.title, meeting.meeting_type) !== "action_items") continue
+        for (const row of parseActionRows(pi.description)) {
+          if (!row.assignment.trim()) continue
+          if (row.status === "Completed") continue
+          openRows.push(row)
+        }
+      }
+      if (openRows.length === 0) {
+        setCarryNotice("No open action items to carry over from the last meeting.")
+        return
+      }
+
+      const key = (r: ActionRow) =>
+        `${r.assignment.trim().toLowerCase()}|${r.assignedTo.trim().toLowerCase()}`
+      const existing = getActionRows(target).filter((r) => r.assignment.trim())
+      const seen = new Set(existing.map(key))
+      const merged = [...existing]
+      let added = 0
+      for (const row of openRows) {
+        if (seen.has(key(row))) continue
+        seen.add(key(row))
+        merged.push(row)
+        added += 1
+      }
+      if (added === 0) {
+        setCarryNotice("All open items are already on this agenda.")
+        return
+      }
+      writeActionRows(target.id, merged)
+      setCarryNotice(`Carried over ${added} open item${added === 1 ? "" : "s"} — review and they’ll save automatically.`)
+    } finally {
+      setCarryingOver(false)
+    }
+  }
+
+  /**
+   * Suggest the next person for a rotating assignment (prayer, conducting,
+   * handbook trainer, etc.) by round-robin through the presidency + high
+   * council roster, advancing one seat past whoever held that role at the most
+   * recent earlier meeting of this type. Bishops are excluded from the pool.
+   */
+  const suggestRotationFor = async (itemTitle: string): Promise<string | null> => {
+    if (!meeting) return null
+    const pool = agendaPeople.filter((p) => p.role !== "Bishop").map((p) => p.name)
+    if (pool.length === 0) return null
+
+    const { data: prior } = await supabase
+      .from("meetings")
+      .select("id, scheduled_date")
+      .eq("meeting_type", meeting.meeting_type)
+      .lt("scheduled_date", meeting.scheduled_date)
+      .order("scheduled_date", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    let lastName: string | null = null
+    if (prior) {
+      const { data: priorItems } = await supabase
+        .from("meeting_agendas")
+        .select("title, assigned_to")
+        .eq("meeting_id", prior.id)
+      const match = (priorItems ?? []).find(
+        (i) => i.title.toLowerCase() === itemTitle.toLowerCase()
+      )
+      lastName = (match?.assigned_to ?? "").trim() || null
+    }
+
+    if (!lastName) return pool[0]
+    const idx = pool.findIndex((n) => n.toLowerCase() === lastName!.toLowerCase())
+    if (idx === -1) return pool[0]
+    return pool[(idx + 1) % pool.length]
+  }
+
+  const rotateAssignment = async (itemTitle: string, apply: (name: string) => void) => {
+    const name = await suggestRotationFor(itemTitle)
+    if (name) apply(name)
+  }
+
+  /** Conducting lives on the meetings row, so its rotation reads the prior
+   *  meeting's `conducting` column rather than an agenda item. */
+  const rotateConducting = async () => {
+    if (!meeting) return
+    const pool = agendaPeople.filter((p) => p.role !== "Bishop").map((p) => p.name)
+    if (pool.length === 0) return
+    const { data: prior } = await supabase
+      .from("meetings")
+      .select("conducting, scheduled_date")
+      .eq("meeting_type", meeting.meeting_type)
+      .lt("scheduled_date", meeting.scheduled_date)
+      .order("scheduled_date", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const lastName = (prior?.conducting ?? "").trim() || null
+    if (!lastName) {
+      setConducting(pool[0])
+      return
+    }
+    const idx = pool.findIndex((n) => n.toLowerCase() === lastName.toLowerCase())
+    setConducting(idx === -1 ? pool[0] : pool[(idx + 1) % pool.length])
   }
 
   const moveAgendaItem = async (index: number, direction: "up" | "down") => {
@@ -660,6 +847,9 @@ export default function MeetingDetailPage() {
 
   const totalDuration = agendaItems.reduce((sum, a) => sum + (a.duration_minutes || 0), 0)
   const templateConfig = getTemplateForMeetingType(meeting.meeting_type)
+  const hasActionItemsSection = agendaItems.some(
+    (it) => getFieldTypeForTitle(it.title, meeting.meeting_type) === "action_items"
+  )
 
   // --- Calendar row renderer (date / time / event) ---
   const renderCalendarRows = (item: AgendaItem) => {
@@ -719,6 +909,7 @@ export default function MeetingDetailPage() {
             />
             <input
               type="text"
+              list="agenda-people-list"
               placeholder="Assigned to"
               value={row.assignedTo}
               onChange={(e) => editActionRow(item, ri, { assignedTo: e.target.value })}
@@ -794,6 +985,23 @@ export default function MeetingDetailPage() {
     )
   }
 
+  const hasRotationPool = agendaPeople.some((p) => p.role !== "Bishop")
+
+  /** Small "next in rotation" button shown beside rotating person fields. */
+  const renderRotateButton = (itemTitle: string, apply: (name: string) => void) => {
+    if (!hasRotationPool) return null
+    return (
+      <button
+        type="button"
+        onClick={() => void rotateAssignment(itemTitle, apply)}
+        title="Suggest the next person in the rotation"
+        className="shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-md border border-gray-200 text-gray-400 hover:text-indigo-600 hover:border-indigo-300 transition-colors"
+      >
+        <RefreshCw className="h-3.5 w-3.5" />
+      </button>
+    )
+  }
+
   // --- Field renderer per item ---
   const renderItemFields = (item: AgendaItem) => {
     const ft = getFieldTypeForTitle(item.title, meeting?.meeting_type)
@@ -805,13 +1013,17 @@ export default function MeetingDetailPage() {
 
       case "person":
         return (
-          <input
-            type="text"
-            placeholder={item.description || "Name"}
-            value={getEditValue(item, "assigned_to") as string}
-            onChange={(e) => setEditField(item.id, "assigned_to", e.target.value)}
-            className={`${inputClass} text-sm py-1.5`}
-          />
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              list="agenda-people-list"
+              placeholder={item.description || "Name"}
+              value={getEditValue(item, "assigned_to") as string}
+              onChange={(e) => setEditField(item.id, "assigned_to", e.target.value)}
+              className={`${inputClass} text-sm py-1.5`}
+            />
+            {renderRotateButton(item.title, (n) => setEditField(item.id, "assigned_to", n))}
+          </div>
         )
 
       case "hymn":
@@ -836,21 +1048,51 @@ export default function MeetingDetailPage() {
 
       case "trainer":
         return (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <input
-              type="text"
-              placeholder="Trainer name"
-              value={getEditValue(item, "assigned_to") as string}
-              onChange={(e) => setEditField(item.id, "assigned_to", e.target.value)}
-              className={`${inputClass} text-sm py-1.5`}
-            />
-            <input
-              type="text"
-              placeholder="Section / topic"
-              value={getEditValue(item, "description") as string}
-              onChange={(e) => setEditField(item.id, "description", e.target.value)}
-              className={`${inputClass} text-sm py-1.5`}
-            />
+          <div className="space-y-1.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  list="agenda-people-list"
+                  placeholder="Trainer name"
+                  value={getEditValue(item, "assigned_to") as string}
+                  onChange={(e) => setEditField(item.id, "assigned_to", e.target.value)}
+                  className={`${inputClass} text-sm py-1.5`}
+                />
+                {renderRotateButton(item.title, (n) => setEditField(item.id, "assigned_to", n))}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Section / topic (e.g. 1.3)"
+                  value={getEditValue(item, "description") as string}
+                  onChange={(e) => setEditField(item.id, "description", e.target.value)}
+                  className={`${inputClass} text-sm py-1.5`}
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setEditField(
+                      item.id,
+                      "description",
+                      nextHandbookTopic(getEditValue(item, "description") as string)
+                    )
+                  }
+                  title="Advance to the next handbook section number"
+                  className="shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-md border border-gray-200 text-gray-400 hover:text-indigo-600 hover:border-indigo-300 transition-colors"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+            <a
+              href={GENERAL_HANDBOOK_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800"
+            >
+              Open the General Handbook <ExternalLink className="h-3 w-3" />
+            </a>
           </div>
         )
 
@@ -863,7 +1105,8 @@ export default function MeetingDetailPage() {
       case "callings_link":
         return (
           <Link
-            href="/modules/leadership"
+            href={`/modules/leadership?returnTo=${encodeURIComponent(`/modules/meetings/${meetingId}?tab=agenda`)}`}
+            onClick={() => setAgendaReturn(`/modules/meetings/${meetingId}?tab=agenda`)}
             className="inline-flex items-center gap-2 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100 transition-colors"
           >
             <Users className="h-4 w-4" />
@@ -890,6 +1133,7 @@ export default function MeetingDetailPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <input
               type="text"
+              list="agenda-people-list"
               placeholder="Assigned to"
               value={getEditValue(item, "assigned_to") as string}
               onChange={(e) => setEditField(item.id, "assigned_to", e.target.value)}
@@ -910,6 +1154,7 @@ export default function MeetingDetailPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <input
               type="text"
+              list="agenda-people-list"
               placeholder="Assigned to"
               value={getEditValue(item, "assigned_to") as string}
               onChange={(e) => setEditField(item.id, "assigned_to", e.target.value)}
@@ -1346,6 +1591,14 @@ export default function MeetingDetailPage() {
           </Card>
         ) : (
         <div className="space-y-6">
+          {/* Shared autocomplete source for every person / assigned-to field. */}
+          <datalist id="agenda-people-list">
+            {agendaPeople.map((p) => (
+              <option key={p.name} value={p.name}>
+                {p.role}
+              </option>
+            ))}
+          </datalist>
           {/* Presiding / Conducting header for structured meetings */}
           {templateConfig && (templateConfig.presiding_field || templateConfig.conducting_field) && (
             <Card>
@@ -1356,6 +1609,7 @@ export default function MeetingDetailPage() {
                       <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Presiding</label>
                       <input
                         type="text"
+                        list="agenda-people-list"
                         placeholder="Who is presiding?"
                         value={presiding}
                         readOnly={!meetingWriteAllowed}
@@ -1367,14 +1621,27 @@ export default function MeetingDetailPage() {
                   {templateConfig.conducting_field && (
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Conducting</label>
-                      <input
-                        type="text"
-                        placeholder="Who is conducting?"
-                        value={conducting}
-                        readOnly={!meetingWriteAllowed}
-                        onChange={(e) => setConducting(e.target.value)}
-                        className={`${inputClass} text-sm py-1.5`}
-                      />
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          list="agenda-people-list"
+                          placeholder="Who is conducting?"
+                          value={conducting}
+                          readOnly={!meetingWriteAllowed}
+                          onChange={(e) => setConducting(e.target.value)}
+                          className={`${inputClass} text-sm py-1.5`}
+                        />
+                        {meetingWriteAllowed && hasRotationPool && (
+                          <button
+                            type="button"
+                            onClick={() => void rotateConducting()}
+                            title="Suggest the next person in the conducting rotation"
+                            className="shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-md border border-gray-200 text-gray-400 hover:text-indigo-600 hover:border-indigo-300 transition-colors"
+                          >
+                            <RefreshCw className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1415,6 +1682,18 @@ export default function MeetingDetailPage() {
                       onRetry={() => void agendaAutosave.flush()}
                     />
                   )}
+                  {meetingWriteAllowed && hasActionItemsSection && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void carryOverOpenItems()}
+                      disabled={carryingOver}
+                      title="Pull unfinished action items from the most recent earlier meeting of this type"
+                    >
+                      <ClipboardList className="h-4 w-4 mr-1.5" />
+                      {carryingOver ? "Carrying over…" : "Carry over open items"}
+                    </Button>
+                  )}
                   {meetingWriteAllowed && templateConfig && (
                     <Button
                       size="sm"
@@ -1427,6 +1706,11 @@ export default function MeetingDetailPage() {
                   )}
                 </div>
               </CardTitle>
+              {carryNotice && (
+                <p className="mt-2 text-sm text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-md px-3 py-2">
+                  {carryNotice}
+                </p>
+              )}
             </CardHeader>
             <CardContent>
               {agendaItems.length === 0 ? (
@@ -1497,7 +1781,7 @@ export default function MeetingDetailPage() {
                           </div>
                         </div>
 
-                        {sectionHint && (
+                        {sectionHint && shouldShowSectionHint(item.title, meeting?.meeting_type) && (
                           <p className="px-3 pb-2 ml-[3.25rem] -mt-1 text-xs italic text-gray-500">
                             {sectionHint}
                           </p>
@@ -1510,20 +1794,22 @@ export default function MeetingDetailPage() {
                               {renderSavedPreview(item)}
                             </>
                           )}
-                          {meetingWriteAllowed ? (
-                            <textarea
-                              rows={2}
-                              placeholder="Notes / minutes from the meeting…"
-                              value={getEditValue(item, "notes") as string}
-                              onChange={(e) => setEditField(item.id, "notes", e.target.value)}
-                              className={`${inputClass} text-sm py-1.5 bg-amber-50/40 border-amber-100 focus:bg-white`}
-                            />
-                          ) : (
-                            (getEditValue(item, "notes") as string) ? (
-                              <p className="text-sm text-gray-700 whitespace-pre-wrap rounded-md bg-amber-50/40 border border-amber-100 px-3 py-2">
-                                {getEditValue(item, "notes") as string}
-                              </p>
-                            ) : null
+                          {shouldShowItemNotes(item.title, meeting?.meeting_type) && (
+                            meetingWriteAllowed ? (
+                              <textarea
+                                rows={2}
+                                placeholder="Notes / minutes from the meeting…"
+                                value={getEditValue(item, "notes") as string}
+                                onChange={(e) => setEditField(item.id, "notes", e.target.value)}
+                                className={`${inputClass} text-sm py-1.5 bg-amber-50/40 border-amber-100 focus:bg-white`}
+                              />
+                            ) : (
+                              (getEditValue(item, "notes") as string) ? (
+                                <p className="text-sm text-gray-700 whitespace-pre-wrap rounded-md bg-amber-50/40 border border-amber-100 px-3 py-2">
+                                  {getEditValue(item, "notes") as string}
+                                </p>
+                              ) : null
+                            )
                           )}
                         </div>
                       </div>
@@ -1546,7 +1832,7 @@ export default function MeetingDetailPage() {
                   <input type="number" placeholder="Minutes" value={newAgendaDuration} onChange={(e) => setNewAgendaDuration(e.target.value)} className={inputClass} min="1" />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <input type="text" placeholder="Assigned to (optional)" value={newAgendaAssigned} onChange={(e) => setNewAgendaAssigned(e.target.value)} className={inputClass} />
+                  <input type="text" list="agenda-people-list" placeholder="Assigned to (optional)" value={newAgendaAssigned} onChange={(e) => setNewAgendaAssigned(e.target.value)} className={inputClass} />
                   <input type="text" placeholder="Description (optional)" value={newAgendaDesc} onChange={(e) => setNewAgendaDesc(e.target.value)} className={inputClass} />
                 </div>
                 <Button onClick={addAgendaItem} disabled={!newAgendaTitle.trim()} className="w-full sm:w-auto">

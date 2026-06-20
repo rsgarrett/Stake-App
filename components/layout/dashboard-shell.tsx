@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
+import { AgendaReturnBar } from "@/components/layout/agenda-return-bar"
 
 /** Desktop: fixed sidebar + content. Narrow viewports: hamburger toggles drawer (full-width content). */
 export function DashboardShell({ children }: { children: React.ReactNode }) {
@@ -40,6 +41,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <Header onMenuToggle={toggleDrawer} />
+        <Suspense fallback={null}>
+          <AgendaReturnBar />
+        </Suspense>
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
           {children}
         </main>

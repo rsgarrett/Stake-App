@@ -1,13 +1,14 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter, useParams } from "next/navigation"
+import { useRouter, useParams, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
 import { ArrowLeft, CheckCircle2, UserPlus, Users, ShieldCheck, Vote, Hand, Sparkles } from "lucide-react"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
+import { clearAgendaReturn, getAgendaReturn } from "@/lib/navigation/agenda-return"
 
 const ORGANIZATIONS = [
   "Stake Presidency", "High Council", "Stake Clerk", "Stake Executive Secretary",
@@ -78,6 +79,10 @@ const inputClass =
 export default function EditCallingPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
+  const returnFromQuery = searchParams.get("returnTo")
+  const [storedReturn, setStoredReturn] = useState<string | null>(null)
+  const returnTo = returnFromQuery || storedReturn
   const id = params.id as string
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -114,6 +119,14 @@ export default function EditCallingPage() {
   })
 
   useEffect(() => { loadCalling() }, [id])
+
+  useEffect(() => {
+    if (returnFromQuery) {
+      setStoredReturn(returnFromQuery)
+      return
+    }
+    setStoredReturn(getAgendaReturn())
+  }, [returnFromQuery])
 
   const loadCalling = async () => {
     try {
@@ -206,7 +219,7 @@ export default function EditCallingPage() {
         notes: formData.notes || null,
       }).eq("id", id)
       if (updateError) throw updateError
-      router.push("/modules/leadership")
+      router.push(returnTo || "/modules/leadership")
     } catch (err: any) {
       setError(err.message || "Failed to update")
       setSaving(false)
@@ -222,8 +235,13 @@ export default function EditCallingPage() {
   return (
     <div className="p-4 sm:p-6">
       <div className="mb-6">
-        <Link href="/modules/leadership" className="inline-flex items-center text-sm text-indigo-600 hover:underline mb-3">
-          <ArrowLeft className="h-4 w-4 mr-1" />Back to Callings
+        <Link
+          href={returnTo || "/modules/leadership"}
+          onClick={() => { if (returnTo) clearAgendaReturn() }}
+          className="inline-flex items-center text-sm text-indigo-600 hover:underline mb-3"
+        >
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          {returnTo ? "Back to meeting agenda" : "Back to Callings"}
         </Link>
         <h1 className="text-3xl font-bold text-gray-900">Edit Calling</h1>
         <p className="mt-1 text-gray-600">Update details, workflow stage, and compliance</p>
@@ -500,7 +518,7 @@ export default function EditCallingPage() {
 
             <div className="flex space-x-4 pt-4">
               <Button type="submit" disabled={saving}>{saving ? "Saving..." : "Save Changes"}</Button>
-              <Button type="button" variant="outline" onClick={() => router.push("/modules/leadership")} disabled={saving}>Cancel</Button>
+              <Button type="button" variant="outline" onClick={() => router.push(returnTo || "/modules/leadership")} disabled={saving}>Cancel</Button>
             </div>
           </form>
         </CardContent>

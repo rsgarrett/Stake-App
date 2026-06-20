@@ -1,12 +1,14 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { safeQuery } from "@/lib/utils/safe-query"
 import { buttonVariants } from "@/components/ui/button"
+import { clearAgendaReturn, getAgendaReturn } from "@/lib/navigation/agenda-return"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
-import { Plus, Edit, CheckCircle2, ChevronRight, ChevronLeft, Search, Trash2 } from "lucide-react"
+import { Plus, Edit, CheckCircle2, ChevronRight, ChevronLeft, Search, Trash2, ArrowLeft } from "lucide-react"
 
 interface Calling {
   id: string
@@ -47,6 +49,11 @@ function getStage(c: Calling): number {
 }
 
 export default function LeadershipPage() {
+  const searchParams = useSearchParams()
+  const returnFromQuery = searchParams.get("returnTo")
+  const [storedReturn, setStoredReturn] = useState<string | null>(null)
+  const returnTo = returnFromQuery || storedReturn
+  const returnQuery = returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""
   const [callings, setCallings] = useState<Calling[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
@@ -61,6 +68,14 @@ export default function LeadershipPage() {
   }, [supabase])
 
   useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (returnFromQuery) {
+      setStoredReturn(returnFromQuery)
+      return
+    }
+    setStoredReturn(getAgendaReturn())
+  }, [returnFromQuery])
 
   const updateCalling = async (id: string, updates: Record<string, unknown>) => {
     const { data, error } = await supabase
@@ -149,12 +164,27 @@ export default function LeadershipPage() {
 
   return (
     <div className="p-4 sm:p-6">
+      {returnTo ? (
+        <div className="mb-4 flex flex-col gap-3 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-indigo-900">
+            Opened from a meeting agenda — return when you&apos;re done reviewing callings.
+          </p>
+          <Link
+            href={returnTo}
+            onClick={() => clearAgendaReturn()}
+            className={`${buttonVariants({ size: "sm" })} shrink-0 self-start sm:self-auto`}
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to agenda
+          </Link>
+        </div>
+      ) : null}
       <div className="mb-4 sm:mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Calling Tracker</h1>
           <p className="mt-1 text-sm sm:text-base text-gray-600">Manage callings through each stage of the process</p>
         </div>
-        <Link href="/modules/leadership/recommend" className={`${buttonVariants()} shrink-0 self-start sm:self-auto`}>
+        <Link href={`/modules/leadership/recommend${returnQuery}`} className={`${buttonVariants()} shrink-0 self-start sm:self-auto`}>
           <Plus className="h-4 w-4 mr-2" />Submit Name
         </Link>
       </div>
@@ -205,7 +235,7 @@ export default function LeadershipPage() {
                           )}
                         </div>
 
-                        <Link href={`/modules/leadership/edit/${c.id}`} className="text-gray-300 hover:text-indigo-600 shrink-0">
+                        <Link href={`/modules/leadership/edit/${c.id}${returnQuery}`} className="text-gray-300 hover:text-indigo-600 shrink-0">
                           <Edit className="h-3.5 w-3.5" />
                         </Link>
 

@@ -88,8 +88,6 @@ const stakeVision: AgendaItemConfig = {
   title: "Stake Vision",
   field_type: "readonly",
   duration_minutes: 3,
-  description:
-    "We are centered on Jesus Christ and His atonement and are establishing Zion by loving God and our neighbors as ourselves.",
 }
 
 const handbookTraining: AgendaItemConfig = {
@@ -138,11 +136,7 @@ export const AGENDA_TEMPLATES: Record<string, AgendaTemplateConfig> = {
     presiding_field: true,
     conducting_field: true,
     items: [
-      {
-        title: "Review Calendar Items / Announcements",
-        field_type: "calendar",
-        duration_minutes: 5,
-      },
+      calendarReview,
       openingPrayer,
       stakeVision,
       handbookTraining,
