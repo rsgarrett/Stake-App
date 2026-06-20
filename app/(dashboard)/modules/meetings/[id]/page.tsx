@@ -151,18 +151,35 @@ interface SubmissionRow {
   agendaItem: string
   submittedBy: string
 }
+function escapeSubmissionField(value: string): string {
+  return value.replace(/\r\n/g, "\n").replace(/\n/g, "\\n").replace(/\t/g, "\\t")
+}
+function unescapeSubmissionField(value: string): string {
+  return value.replace(/\\n/g, "\n").replace(/\\t/g, "\t")
+}
 function parseSubmissionRows(raw: string | null | undefined): SubmissionRow[] {
   if (!raw) return []
   return raw.split("\n").map((line) => {
     const parts = line.split(CALENDAR_COL_SEP)
-    if (parts.length === 1) return { agendaItem: parts[0], submittedBy: "" }
-    return { agendaItem: parts[0] ?? "", submittedBy: parts[1] ?? "" }
+    if (parts.length === 1) {
+      return { agendaItem: unescapeSubmissionField(parts[0]), submittedBy: "" }
+    }
+    return {
+      agendaItem: unescapeSubmissionField(parts[0] ?? ""),
+      submittedBy: unescapeSubmissionField(parts[1] ?? ""),
+    }
   })
 }
 function serializeSubmissionRows(rows: SubmissionRow[]): string {
   return rows
-    .map((r) => [r.agendaItem, r.submittedBy].join(CALENDAR_COL_SEP))
+    .map((r) =>
+      [escapeSubmissionField(r.agendaItem), escapeSubmissionField(r.submittedBy)].join(CALENDAR_COL_SEP)
+    )
     .join("\n")
+}
+function submissionTextareaRows(text: string): number {
+  const lines = text.split("\n").length
+  return Math.max(3, Math.min(lines + 1, 20))
 }
 
 function isWardAndMemberNeedsTitle(title: string): boolean {
@@ -172,6 +189,14 @@ function isWardAndMemberNeedsTitle(title: string): boolean {
 
 function isAddAgendaItemTitle(title: string): boolean {
   return title.toLowerCase().includes("add agenda item")
+}
+
+function isNotesColumnError(err: unknown): boolean {
+  const msg =
+    err && typeof err === "object" && "message" in err
+      ? String((err as { message: unknown }).message)
+      : String(err ?? "")
+  return /notes['"]?\s+column|column\s+['"]?notes/i.test(msg)
 }
 
 /** Live link to the General Handbook on churchofjesuschrist.org. */
@@ -271,6 +296,8 @@ export default function MeetingDetailPage() {
   const [seededTemplateForMeetingId, setSeededTemplateForMeetingId] = useState<string | null>(null)
   const [carryNotice, setCarryNotice] = useState<string | null>(null)
   const [carryingOver, setCarryingOver] = useState(false)
+  const [notesColumnMissing, setNotesColumnMissing] = useState(false)
+  const notesColumnAvailableRef = useRef<boolean | null>(null)
   const calendarReorderAttempted = useRef<string | null>(null)
   const addAgendaItemAttempted = useRef<string | null>(null)
 
@@ -342,6 +369,9 @@ export default function MeetingDetailPage() {
 
   useEffect(() => {
     calendarReorderAttempted.current = null
+    addAgendaItemAttempted.current = null
+    notesColumnAvailableRef.current = null
+    setNotesColumnMissing(false)
   }, [meetingId])
 
   useEffect(() => {
@@ -409,10 +439,6 @@ export default function MeetingDetailPage() {
     },
     [meetingId, supabase] // eslint-disable-line react-hooks/exhaustive-deps
   )
-
-  useEffect(() => {
-    addAgendaItemAttempted.current = null
-  }, [meetingId])
 
   useEffect(() => {
     if (loading) return
@@ -747,20 +773,41 @@ export default function MeetingDetailPage() {
     const snapshot = editingItems
     const ids = Object.keys(snapshot)
     if (ids.length === 0) return
-    const saved: Record<string, Partial<AgendaItem>> = {}
-    const results = await Promise.all(
-      ids.map((id) => {
-        const edits = snapshot[id]
-        if (!edits || Object.keys(edits).length === 0) return null
-        const payload: Record<string, unknown> = {}
-        for (const [key, val] of Object.entries(edits)) {
-          payload[key] = val === "" ? null : val
-        }
-        saved[id] = edits
-        return supabase.from("meeting_agendas").update(payload).eq("id", id)
-      })
-    )
-    const firstError = results.find((r) => r && r.error)?.error
+
+    const saveBatch = async (includeNotes: boolean) => {
+      const saved: Record<string, Partial<AgendaItem>> = {}
+      const results = await Promise.all(
+        ids.map((id) => {
+          const edits = snapshot[id]
+          if (!edits || Object.keys(edits).length === 0) return null
+          const payload: Record<string, unknown> = {}
+          const savedEdits: Partial<AgendaItem> = {}
+          for (const [key, val] of Object.entries(edits)) {
+            if (!includeNotes && key === "notes") continue
+            payload[key] = val === "" ? null : val
+            ;(savedEdits as Record<string, unknown>)[key] = val
+          }
+          if (Object.keys(payload).length === 0) return null
+          saved[id] = savedEdits
+          return supabase.from("meeting_agendas").update(payload).eq("id", id)
+        })
+      )
+      return { saved, results }
+    }
+
+    let includeNotes = notesColumnAvailableRef.current !== false
+    let { saved, results } = await saveBatch(includeNotes)
+    let firstError = results.find((r) => r && r.error)?.error
+
+    if (firstError && includeNotes && isNotesColumnError(firstError)) {
+      notesColumnAvailableRef.current = false
+      setNotesColumnMissing(true)
+      ;({ saved, results } = await saveBatch(false))
+      firstError = results.find((r) => r && r.error)?.error
+    } else if (!firstError && includeNotes) {
+      notesColumnAvailableRef.current = true
+    }
+
     if (firstError) throw firstError
 
     // Merge the values we just saved into local state so the rendered inputs
@@ -906,6 +953,15 @@ export default function MeetingDetailPage() {
     const rows = getSubmissionRows(item)
     rows[index] = { ...rows[index], ...patch }
     writeSubmissionRows(item.id, rows)
+  }
+
+  const patchSubmissionRow = (item: AgendaItem, index: number, patch: Partial<SubmissionRow>) => {
+    const rows = getSubmissionRows(item)
+    if (rows.length === 0) {
+      writeSubmissionRows(item.id, [{ agendaItem: "", submittedBy: "", ...patch }])
+      return
+    }
+    editSubmissionRow(item, index, patch)
   }
 
   const removeSubmissionRow = (item: AgendaItem, index: number) => {
@@ -1130,24 +1186,25 @@ export default function MeetingDetailPage() {
 
   // --- Submitted agenda row renderer (agenda item / submitted by) ---
   const renderAgendaSubmissionRows = (item: AgendaItem) => {
-    const rows = getSubmissionRows(item)
+    const storedRows = getSubmissionRows(item)
+    const rows = storedRows.length > 0 ? storedRows : [{ agendaItem: "", submittedBy: "" }]
     return (
       <div className="space-y-1.5">
         {rows.map((row, ri) => (
-          <div key={ri} className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-center group">
-            <input
-              type="text"
+          <div key={ri} className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-start group">
+            <textarea
+              rows={submissionTextareaRows(row.agendaItem)}
               placeholder="Agenda item"
               value={row.agendaItem}
-              onChange={(e) => editSubmissionRow(item, ri, { agendaItem: e.target.value })}
-              className={`${inputClass} text-sm py-1.5 col-span-2 sm:col-span-7`}
+              onChange={(e) => patchSubmissionRow(item, ri, { agendaItem: e.target.value })}
+              className={`${inputClass} text-sm py-1.5 col-span-2 sm:col-span-7 resize-y min-h-[4.5rem]`}
             />
             <input
               type="text"
               list="agenda-people-list"
               placeholder="Submitted by"
               value={row.submittedBy}
-              onChange={(e) => editSubmissionRow(item, ri, { submittedBy: e.target.value })}
+              onChange={(e) => patchSubmissionRow(item, ri, { submittedBy: e.target.value })}
               className={`${inputClass} text-sm py-1.5 col-span-1 sm:col-span-4`}
             />
             <button
@@ -1938,6 +1995,13 @@ export default function MeetingDetailPage() {
               {carryNotice && (
                 <p className="mt-2 text-sm text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-md px-3 py-2">
                   {carryNotice}
+                </p>
+              )}
+              {notesColumnMissing && (
+                <p className="mt-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                  Section notes are not saved yet — run migration{" "}
+                  <code className="text-xs bg-amber-100 px-1 rounded">070_agenda_item_notes.sql</code>{" "}
+                  in Supabase to enable them. Other agenda edits still save normally.
                 </p>
               )}
             </CardHeader>
