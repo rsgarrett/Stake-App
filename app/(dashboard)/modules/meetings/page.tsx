@@ -17,6 +17,8 @@ import {
 import { formatInterviewType } from "@/lib/interviews/interview-types"
 import { navigateInterviewSelection } from "@/lib/interviews/navigate-mission-interview"
 import { canManageStakeMeetings } from "@/lib/meetings/meeting-permissions"
+import { canEditStakePermissionRoster } from "@/lib/settings/stake-office-slugs"
+import { RecurringDutiesCard } from "@/components/meetings/recurring-duties-card"
 
 type ViewMode = "calendar" | "list" | "templates"
 
@@ -345,6 +347,7 @@ export default function MeetingsPage() {
   const [deletingListItem, setDeletingListItem] = useState<{ kind: "interview" | "meeting"; id: string } | null>(null)
   /** `public.users.role` — used to hide add/edit for high council (view-only on HC + stake council). */
   const [userMeetingRole, setUserMeetingRole] = useState<string | null>(null)
+  const [userStakeId, setUserStakeId] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -377,8 +380,11 @@ export default function MeetingsPage() {
         if (!cancelled) setUserMeetingRole(null)
         return
       }
-      const { data } = await supabase.from("users").select("role").eq("id", user.id).maybeSingle()
-      if (!cancelled) setUserMeetingRole(data?.role ?? null)
+      const { data } = await supabase.from("users").select("role, stake_id").eq("id", user.id).maybeSingle()
+      if (!cancelled) {
+        setUserMeetingRole(data?.role ?? null)
+        setUserStakeId(data?.stake_id ?? null)
+      }
     })()
     return () => {
       cancelled = true
@@ -963,6 +969,10 @@ export default function MeetingsPage() {
           </div>
         </div>
       </div>
+
+      {userStakeId && userMeetingRole && canEditStakePermissionRoster(userMeetingRole) ? (
+        <RecurringDutiesCard stakeId={userStakeId} />
+      ) : null}
 
       {viewMode === "calendar" && (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">

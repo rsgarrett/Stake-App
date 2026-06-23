@@ -174,11 +174,14 @@ export default function InterviewDetailPage() {
                 onRetry={() => void notesAutosave.flush()}
               />
             </CardTitle>
-            <CardDescription>Notes are stored securely and saved automatically as you type.</CardDescription>
+            <CardDescription>
+              For scheduling and logistics only. Do not record confidential worthiness or repentance details
+              here — follow Handbook guidance and keep LCR as the system of record for recommends.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <textarea rows={12} value={notes} onChange={(e) => setNotes(e.target.value)} className={inputClass}
-              placeholder="Record interview notes here...&#10;&#10;These notes are encrypted and only accessible by authorized leaders." />
+              placeholder="Scheduling notes, follow-up items, logistics…&#10;&#10;Avoid confidential worthiness matters. Notes are encrypted for authorized leaders." />
           </CardContent>
         </Card>
       </div>

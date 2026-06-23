@@ -78,5 +78,29 @@ for (const t of ["calling_role_map", "high_council_training_content", "bishop_tr
   checks.push([t, r.ok ? `present (${r.count} rows)` : `missing: ${r.error}`])
 }
 
+// 5. meeting_agendas.notes column (migration 070)
+{
+  const { error } = await admin.from("meeting_agendas").select("notes").limit(1)
+  if (error) {
+    checks.push([
+      "meeting_agendas.notes",
+      `MISSING — apply supabase/migrations/070_agenda_item_notes.sql (${error.message})`,
+    ])
+  } else {
+    checks.push(["meeting_agendas.notes", "present"])
+  }
+}
+
+// 6. Launch summary
+{
+  const { data: roster } = await admin.from("stake_permission_roster").select("assigned_user_id")
+  const vacant = (roster ?? []).filter((r) => !r.assigned_user_id).length
+  if (vacant > 0) {
+    checks.push(["launch", `${vacant} roster seat(s) still vacant — provision from Settings → Permissions`])
+  } else {
+    checks.push(["launch", "all roster seats filled"])
+  }
+}
+
 console.log("\n=== Launch readiness ===")
 for (const [k, v] of checks) console.log(`${k.padEnd(42)} ${v}`)
