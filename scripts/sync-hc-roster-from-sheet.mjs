@@ -134,11 +134,14 @@ function buildRosterFromSheet(rows) {
 
     if (!resp || /^YLC =|^ALC =|^\* =/i.test(resp)) continue
 
-    // Supplementary duty tied to a named HC in the "Was before" column
+    // Supplementary duty tied to a named HC in the "Was before" column — only if
+    // that person has a primary assignment row elsewhere in the sheet.
     if (!pres && !hcRaw && wasBefore) {
-      ensure(wasBefore.replace(/\s+\d.*$/, "").trim()).stewardship_notes.push(
-        cleanAssignment(resp.replace(/\n/g, " / "))
-      )
+      const name = wasBefore.replace(/\s+\d.*$/, "").trim()
+      const existing = byName.get(name)
+      if (existing?.stewardships?.length) {
+        existing.stewardship_notes.push(cleanAssignment(resp.replace(/\n/g, " / ")))
+      }
       continue
     }
 
@@ -201,6 +204,8 @@ function buildRosterFromSheet(rows) {
   const out = []
   for (const [key, m] of byName) {
     if (key === "__NEW_HC__") continue
+    // Only roster people with a primary assignment row (Assigned High Councilor column).
+    if (!m.stewardships.length) continue
     out.push({
       member_name: m.member_name,
       presidency_oversight: [...m.presidency_oversight].join(" · ") || null,
