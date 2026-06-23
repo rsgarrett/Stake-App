@@ -11,14 +11,18 @@ export function getHcPresidencyOnlyAssignmentLines(): { title: string; lines: st
       title: "President Garrett — presidency stewardship",
       lines: [
         "President, High Priests Group",
-        "Bishops coordination",
-        "Relief Society (stake lead)",
+        "Bishops",
+        "Relief Society",
         "First-time temple recommends",
       ],
     },
     {
       title: "President Williams — presidency stewardship",
       lines: ["Audits (financial and membership)", "Military relations"],
+    },
+    {
+      title: "President Chandler — presidency stewardship",
+      lines: ["Ward baptisms (coordination through YLC representative)"],
     },
   ]
 }
