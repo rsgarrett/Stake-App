@@ -204,7 +204,14 @@ export function MeetingForm({
     return sortSchedulableStandardTemplates(rows)
   }, [standardTemplates, allowFullStandardCatalog, initialData?.meeting_type])
 
-  const sortedStandardTemplates = catalogTemplates
+  /** Handbook templates + one-on-one appointment types, alphabetized for the picker. */
+  const pickerOptions = useMemo(
+    () =>
+      [...catalogTemplates, ...APPOINTMENT_QUICK_TYPES].sort((a, b) =>
+        (a.title || "").localeCompare(b.title || "", undefined, { sensitivity: "base" })
+      ),
+    [catalogTemplates]
+  )
 
   const [draftAgendaRows, setDraftAgendaRows] = useState<AgendaDraftRow[]>([])
   const agendaDraftSlugRef = useRef("")
@@ -404,13 +411,8 @@ export function MeetingForm({
                     className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   >
                     <option value="">{englishMenuTitleCase("Select a meeting type...")}</option>
-                    {sortedStandardTemplates.map((t) => (
+                    {pickerOptions.map((t) => (
                       <option key={`${normalizeMeetingTypeSlug(t.meeting_type)}-${t.id}`} value={t.id}>
-                        {englishMenuTitleCase(t.title)}
-                      </option>
-                    ))}
-                    {APPOINTMENT_QUICK_TYPES.map((t) => (
-                      <option key={t.id} value={t.id}>
                         {englishMenuTitleCase(t.title)}
                       </option>
                     ))}
