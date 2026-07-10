@@ -54,7 +54,7 @@ export type NextAppointment =
     }
 
 /** Roles whose "next appointment" includes unassigned (no interviewer set) interviews. */
-const UNASSIGNED_INTERVIEW_ROLES = new Set([
+export const UNASSIGNED_INTERVIEW_ROLES = new Set([
   "stake_president",
   "counselor",
   "executive_secretary",

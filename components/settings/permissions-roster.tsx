@@ -21,6 +21,8 @@ export interface StakePermissionRosterRow {
   sort_order: number
   office_slug: string
   assigned_user_id: string | null
+  /** Current calling holder (from the calling tracker) — shown even without a login. */
+  person_name?: string | null
 }
 
 interface StakeUserOption {
@@ -83,6 +85,8 @@ export function PermissionsRoster() {
   const [addingHc, setAddingHc] = useState(false)
   /** When true, removed/replaced leaders lose their login entirely (default). */
   const [revokeRemovedLogin, setRevokeRemovedLogin] = useState(true)
+  /** True when `person_name` column is missing (migration 072 not applied yet). */
+  const [personNamesUnavailable, setPersonNamesUnavailable] = useState(false)
   const [creatingForRowId, setCreatingForRowId] = useState<string | null>(null)
   const [createEmail, setCreateEmail] = useState("")
   const [createFullName, setCreateFullName] = useState("")
@@ -116,10 +120,10 @@ export function PermissionsRoster() {
       setMyRole(me.role ?? null)
       setStakeId(me.stake_id)
 
-      const [rosterResult, leadersResult, hcResult] = await Promise.all([
+      let [rosterResult, leadersResult, hcResult] = await Promise.all([
         supabase
           .from("stake_permission_roster")
-          .select("id,stake_id,sort_order,office_slug,assigned_user_id")
+          .select("id,stake_id,sort_order,office_slug,assigned_user_id,person_name")
           .eq("stake_id", me.stake_id)
           .order("sort_order"),
         supabase.from("users").select("id,email,full_name,role").eq("stake_id", me.stake_id).order("full_name"),
@@ -129,6 +133,17 @@ export function PermissionsRoster() {
           .eq("stake_id", me.stake_id),
       ])
 
+      if (rosterResult.error && /person_name/i.test(rosterResult.error.message || "")) {
+        // Migration 072 not applied yet — retry without the calling-holder column.
+        setPersonNamesUnavailable(true)
+        rosterResult = (await supabase
+          .from("stake_permission_roster")
+          .select("id,stake_id,sort_order,office_slug,assigned_user_id")
+          .eq("stake_id", me.stake_id)
+          .order("sort_order")) as unknown as typeof rosterResult
+      } else {
+        setPersonNamesUnavailable(false)
+      }
       if (rosterResult.error) throw rosterResult.error
       if (leadersResult.error) throw leadersResult.error
 
@@ -154,11 +169,18 @@ export function PermissionsRoster() {
           .update({ assigned_user_id: user.id })
           .eq("id", presSeat.id)
         if (!seatErr) {
-          const refetch = await supabase
+          let refetch = await supabase
             .from("stake_permission_roster")
-            .select("id,stake_id,sort_order,office_slug,assigned_user_id")
+            .select("id,stake_id,sort_order,office_slug,assigned_user_id,person_name")
             .eq("stake_id", me.stake_id)
             .order("sort_order")
+          if (refetch.error && /person_name/i.test(refetch.error.message || "")) {
+            refetch = (await supabase
+              .from("stake_permission_roster")
+              .select("id,stake_id,sort_order,office_slug,assigned_user_id")
+              .eq("stake_id", me.stake_id)
+              .order("sort_order")) as unknown as typeof refetch
+          }
           if (!refetch.error && refetch.data?.length) {
             rosterRows = (refetch.data as StakePermissionRosterRow[])
               .slice()
@@ -377,7 +399,9 @@ export function PermissionsRoster() {
     const appRole = appRoleForOfficeSlug(row.office_slug)
     const appRolePretty = englishMenuTitleCase(appRole.replace(/_/g, " "))
 
-    let primary = "Vacant"
+    const callingHolder = row.person_name?.trim() || null
+
+    let primary = callingHolder ?? "Vacant"
     let fromHc = false
     let subtitle: string | null = null
     if (seated) {
@@ -406,14 +430,20 @@ export function PermissionsRoster() {
               </p>
             ) : null}
             {subtitle ? <p className="text-xs text-gray-500">{subtitle}</p> : null}
-            {!seated ? (
+            {!seated && callingHolder ? (
+              <p className="text-xs text-sky-800 bg-sky-50 border border-sky-100 rounded px-2 py-1 inline-block">
+                Holds this calling (synced from the calling tracker) — no app login yet. Create a login below to give them access.
+              </p>
+            ) : null}
+            {!seated && !callingHolder ? (
               <p className="text-xs text-amber-800">No one seated — create a login below or assign an existing stake account.</p>
-            ) : (
+            ) : null}
+            {seated ? (
               <p className="text-xs text-gray-500">
                 Account ID <span className="font-mono text-gray-600">{seated.id.slice(0, 8)}…</span>
                 {seated.role ? ` · current role ${seated.role}` : null}
               </p>
-            )}
+            ) : null}
           </div>
           <div className="w-full sm:max-w-xs shrink-0 space-y-2">
             <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500">Assign member</label>
@@ -426,7 +456,7 @@ export function PermissionsRoster() {
                 void applyAssignment(row, v)
               }}
             >
-              <option value="">{englishMenuTitleCase("Vacant")}</option>
+              <option value="">{callingHolder ? "No login linked" : englishMenuTitleCase("Vacant")}</option>
               {opts.map((u) => {
                 const { primary: optPrimary } = primaryAccountLabel(u, hcNameByEmail)
                 const optLine = [optPrimary, u.email].filter(Boolean).join(" · ")
@@ -640,6 +670,14 @@ export function PermissionsRoster() {
             </p>
           )}
 
+          {personNamesUnavailable ? (
+            <p className="text-sm rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-amber-900">
+              Calling-holder names are not available yet — run migration{" "}
+              <code className="text-xs bg-white px-1 rounded">072_roster_seat_person_names.sql</code> in the Supabase SQL
+              editor so each seat shows who currently holds the calling.
+            </p>
+          ) : null}
+
           {lastProvisionMessage ? (
             <p className="text-sm rounded-md bg-emerald-50 border border-emerald-200 px-3 py-2 text-emerald-900">
               {lastProvisionMessage}
@@ -662,8 +700,8 @@ export function PermissionsRoster() {
               ) : null}
             </div>
             <p className="text-xs text-gray-500">
-              Each seat grants the <span className="font-medium">high council</span> app role. Use Communications → High Council roster for calling names;
-              match <span className="font-medium">login email</span> so the right name appears here.
+              Each seat grants the <span className="font-medium">high council</span> app role. Seat names come from the
+              calling tracker — completing a high councilor calling or release there updates these seats automatically.
             </p>
             <div className="space-y-3">{hcRows.length ? hcRows.map((row) => renderSeatRow(row)) : <p className="text-sm text-gray-500">No high council seats yet — click Add HC seat.</p>}</div>
           </div>

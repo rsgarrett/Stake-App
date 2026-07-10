@@ -19,6 +19,13 @@ import { navigateInterviewSelection } from "@/lib/interviews/navigate-mission-in
 import { canManageStakeMeetings } from "@/lib/meetings/meeting-permissions"
 import { selectNextAppointment, type NextAppointment } from "@/lib/meetings/next-appointment"
 import { NextAppointmentBar } from "@/components/meetings/next-appointment-bar"
+import {
+  buildCalendarPersonOptions,
+  interviewBelongsToPerson,
+  meetingBelongsToPerson,
+  type CalendarPerson,
+  type CalendarPersonOption,
+} from "@/lib/meetings/person-calendar"
 
 type ViewMode = "calendar" | "list" | "templates"
 
@@ -351,6 +358,10 @@ export default function MeetingsPage() {
   /** Signed-in user's id + display name — personalizes the "Next appointment" line. */
   const [userAuthId, setUserAuthId] = useState<string | null>(null)
   const [userFullName, setUserFullName] = useState<string | null>(null)
+  /** Stake president only: roster people whose calendars can be viewed. */
+  const [calendarPeople, setCalendarPeople] = useState<CalendarPersonOption[]>([])
+  /** "everyone" | "me" | roster row id — which calendar the president is viewing. */
+  const [viewPersonKey, setViewPersonKey] = useState<string>("everyone")
   const router = useRouter()
   const supabase = createClient()
 
@@ -392,6 +403,31 @@ export default function MeetingsPage() {
         setUserMeetingRole(data?.role ?? null)
         setUserAuthId(user.id)
         setUserFullName(data?.full_name ?? null)
+      }
+
+      // Stake president: load the roster so he can view any leader's calendar.
+      if (data?.role === "stake_president") {
+        let rosterRes = await supabase
+          .from("stake_permission_roster")
+          .select("id, office_slug, assigned_user_id, person_name")
+          .order("sort_order")
+        if (rosterRes.error && /person_name/i.test(rosterRes.error.message || "")) {
+          rosterRes = (await supabase
+            .from("stake_permission_roster")
+            .select("id, office_slug, assigned_user_id")
+            .order("sort_order")) as unknown as typeof rosterRes
+        }
+        const usersRes = await supabase.from("users").select("id, full_name, email, role")
+        if (!cancelled && !rosterRes.error) {
+          setCalendarPeople(
+            buildCalendarPersonOptions(rosterRes.data ?? [], (usersRes.data ?? []) as {
+              id: string
+              full_name: string | null
+              email: string | null
+              role: string | null
+            }[])
+          )
+        }
       }
     })()
     return () => {
@@ -807,10 +843,39 @@ export default function MeetingsPage() {
     [meetings, conferencesForCalendar]
   )
 
-  const meetingsForCalendar = useMemo(
-    () => meetings.filter((m) => !hiddenStakeConferenceMeetingIds.has(m.id)),
-    [meetings, hiddenStakeConferenceMeetingIds]
+  const isStakePresident = userMeetingRole === "stake_president"
+
+  /** The signed-in leader as a calendar person. */
+  const selfPerson: CalendarPerson = useMemo(
+    () => ({ name: userFullName, userId: userAuthId, role: userMeetingRole }),
+    [userFullName, userAuthId, userMeetingRole]
   )
+
+  /**
+   * Whose calendar is shown. Everyone except the stake president is locked to
+   * their own; the president picks via the dropdown (null = full stake calendar).
+   */
+  const viewedPerson: CalendarPerson | null = useMemo(() => {
+    if (!isStakePresident) {
+      // Until the profile loads we can't personalize; show role-filtered (RLS) data.
+      if (userMeetingRole === null) return null
+      return selfPerson
+    }
+    if (viewPersonKey === "everyone") return null
+    if (viewPersonKey === "me") return selfPerson
+    return calendarPeople.find((p) => p.key === viewPersonKey) ?? null
+  }, [isStakePresident, userMeetingRole, selfPerson, viewPersonKey, calendarPeople])
+
+  const meetingsForCalendar = useMemo(() => {
+    const visible = meetings.filter((m) => !hiddenStakeConferenceMeetingIds.has(m.id))
+    if (!viewedPerson) return visible
+    return visible.filter((m) => meetingBelongsToPerson(m, agendaItems[m.id] ?? [], viewedPerson))
+  }, [meetings, hiddenStakeConferenceMeetingIds, viewedPerson, agendaItems])
+
+  const interviewsForCalendar = useMemo(() => {
+    if (!viewedPerson) return interviews
+    return interviews.filter((i) => interviewBelongsToPerson(i, viewedPerson))
+  }, [interviews, viewedPerson])
 
   const meetingCalendarEvents: CalendarEvent[] = useMemo(
     () =>
@@ -834,7 +899,7 @@ export default function MeetingsPage() {
 
   const interviewCalendarEvents: CalendarEvent[] = useMemo(
     () =>
-      interviews.map((i) => ({
+      interviewsForCalendar.map((i) => ({
         id: i.id,
         title: `Interview: ${i.interviewee_name}`,
         start_date: i.scheduled_date,
@@ -846,7 +911,7 @@ export default function MeetingsPage() {
         interview_type: i.interview_type,
         interviewee_name: i.interviewee_name,
       })),
-    [interviews]
+    [interviewsForCalendar]
   )
 
   const calendarEvents: CalendarEvent[] = useMemo(() => {
@@ -854,22 +919,21 @@ export default function MeetingsPage() {
     return merged.sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())
   }, [meetingCalendarEvents, conferenceCalendarEvents, interviewCalendarEvents])
 
-  /** Earliest upcoming item relevant to the signed-in user (meetings are RLS-filtered per role;
-   *  Sunday visit/teaching rows match by presidency member; interviews match by interviewer). */
-  const nextAppointment = useMemo(
-    () =>
-      selectNextAppointment({
-        now: new Date(),
-        userId: userAuthId,
-        userFullName,
-        userRole: userMeetingRole,
-        meetings: meetingsForCalendar,
-        agendaItemsByMeetingId: agendaItems,
-        conferences: conferencesForCalendar,
-        interviews,
-      }),
-    [userAuthId, userFullName, userMeetingRole, meetingsForCalendar, agendaItems, conferencesForCalendar, interviews]
-  )
+  /** Earliest upcoming item for whoever's calendar is shown (self by default;
+   *  Sunday visit/teaching rows match by name; interviews match by interviewer). */
+  const nextAppointment = useMemo(() => {
+    const person = viewedPerson ?? selfPerson
+    return selectNextAppointment({
+      now: new Date(),
+      userId: person.userId,
+      userFullName: person.name,
+      userRole: person.role,
+      meetings: meetingsForCalendar,
+      agendaItemsByMeetingId: agendaItems,
+      conferences: conferencesForCalendar,
+      interviews: interviewsForCalendar,
+    })
+  }, [viewedPerson, selfPerson, meetingsForCalendar, agendaItems, conferencesForCalendar, interviewsForCalendar])
 
   const openNextAppointment = (appt: NextAppointment) => {
     if (appt.kind === "conference") {
@@ -898,7 +962,7 @@ export default function MeetingsPage() {
       conferencesForCalendar
         .filter((c) => conferenceOccursOnDay(c, listDayFilter))
         .forEach((c) => rows.push({ kind: "conference", start: parseLocalDateOnly(c.start_date), conference: c }))
-      interviews
+      interviewsForCalendar
         .filter((i) => i.status === "scheduled" && isSameDay(new Date(i.scheduled_date), listDayFilter))
         .forEach((i) => rows.push({ kind: "interview", start: new Date(i.scheduled_date), interview: i }))
       return sortListRowsByTimeThenCategory(rows, true)
@@ -909,11 +973,11 @@ export default function MeetingsPage() {
     conferencesForCalendar
       .filter((c) => parseLocalDateOnly(c.end_date) >= today)
       .forEach((c) => rows.push({ kind: "conference", start: parseLocalDateOnly(c.start_date), conference: c }))
-    interviews
+    interviewsForCalendar
       .filter((i) => i.status === "scheduled" && new Date(i.scheduled_date) >= today)
       .forEach((i) => rows.push({ kind: "interview", start: new Date(i.scheduled_date), interview: i }))
     return sortListRowsByTimeThenCategory(rows, false).slice(0, 15)
-  }, [meetingsForCalendar, conferencesForCalendar, interviews, listDayFilter])
+  }, [meetingsForCalendar, conferencesForCalendar, interviewsForCalendar, listDayFilter])
 
   const listRowsForRender: UnifiedListRow[] = useMemo(() => {
     if (!listDayFilter) {
@@ -974,6 +1038,28 @@ export default function MeetingsPage() {
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {isStakePresident && calendarPeople.length > 0 && (
+            <label className="flex items-center gap-2 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 shadow-sm">
+              <User className="h-4 w-4 shrink-0 text-gray-500" aria-hidden />
+              <span className="hidden text-xs font-medium text-gray-600 sm:inline">Calendar:</span>
+              <select
+                value={viewPersonKey}
+                onChange={(e) => setViewPersonKey(e.target.value)}
+                className="max-w-[13rem] bg-transparent text-sm text-gray-900 focus:outline-none"
+                aria-label="View calendar for"
+              >
+                <option value="everyone">Everyone (full stake)</option>
+                <option value="me">My calendar</option>
+                {calendarPeople
+                  .filter((p) => p.userId !== userAuthId)
+                  .map((p) => (
+                    <option key={p.key} value={p.key}>
+                      {p.label}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          )}
           <div className="inline-flex rounded-md border border-gray-300 bg-white shadow-sm">
             <Button
               variant={viewMode === "calendar" ? "default" : "ghost"}
@@ -1010,6 +1096,23 @@ export default function MeetingsPage() {
           </div>
         </div>
       </div>
+
+      {isStakePresident && viewedPerson && viewPersonKey !== "me" && viewPersonKey !== "everyone" && (
+        <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-indigo-200 bg-indigo-50/80 px-3 py-2 text-sm text-indigo-900">
+          <User className="h-4 w-4 shrink-0 text-indigo-600" aria-hidden />
+          <span>
+            Viewing <strong>{viewedPerson.name}</strong>&rsquo;s calendar — only their meetings, Sunday assignments, and
+            interviews are shown.
+          </span>
+          <button
+            type="button"
+            className="font-medium text-indigo-700 underline underline-offset-2 hover:text-indigo-900"
+            onClick={() => setViewPersonKey("everyone")}
+          >
+            Back to full calendar
+          </button>
+        </div>
+      )}
 
       <NextAppointmentBar appointment={nextAppointment} onOpen={openNextAppointment} />
 

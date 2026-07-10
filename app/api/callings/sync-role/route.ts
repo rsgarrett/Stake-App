@@ -7,6 +7,8 @@ import {
   officeSlugForCallingName,
   pickAssistantExecSecSeatSlug,
   pickHighCouncilSeatSlug,
+  samePersonName,
+  type SeatPickRow,
 } from "@/lib/settings/calling-office-map"
 import {
   clearUserFromStakeRoster,
@@ -54,6 +56,112 @@ async function revokeReleasedPerson(
   return `Removed login for '${personName}' (released from calling).`
 }
 
+interface RosterSeatRow extends SeatPickRow {
+  id: string
+  stake_id: string
+}
+
+/** Loads roster seats incl. `person_name`; falls back pre-migration-072 (names then unavailable). */
+async function loadRosterSeats(
+  admin: ReturnType<typeof createAdminClient>,
+  stakeId: string
+): Promise<{ rows: RosterSeatRow[]; personNamesAvailable: boolean }> {
+  const withNames = await admin
+    .from("stake_permission_roster")
+    .select("id, office_slug, assigned_user_id, stake_id, person_name")
+    .eq("stake_id", stakeId)
+  if (!withNames.error) {
+    return { rows: (withNames.data ?? []) as RosterSeatRow[], personNamesAvailable: true }
+  }
+  const basic = await admin
+    .from("stake_permission_roster")
+    .select("id, office_slug, assigned_user_id, stake_id")
+    .eq("stake_id", stakeId)
+  return { rows: (basic.data ?? []) as RosterSeatRow[], personNamesAvailable: false }
+}
+
+/** Writes the new holder's name on the seat and clears the released holder's name elsewhere. */
+async function syncSeatHolderNames(
+  admin: ReturnType<typeof createAdminClient>,
+  rosterRows: RosterSeatRow[],
+  seatRowId: string | null,
+  newPersonName: string,
+  replacesPersonName: string | null
+): Promise<string[]> {
+  const notes: string[] = []
+  if (seatRowId) {
+    const { error } = await admin
+      .from("stake_permission_roster")
+      .update({ person_name: newPersonName })
+      .eq("id", seatRowId)
+    if (error) throw error
+    notes.push(`Seat now shows '${newPersonName}' as the calling holder.`)
+  }
+  if (replacesPersonName) {
+    const stale = rosterRows.filter(
+      (r) => r.id !== seatRowId && samePersonName(r.person_name, replacesPersonName)
+    )
+    for (const r of stale) {
+      const { error } = await admin
+        .from("stake_permission_roster")
+        .update({ person_name: null })
+        .eq("id", r.id)
+      if (error) throw error
+      notes.push(`Cleared '${replacesPersonName}' from the ${r.office_slug} seat.`)
+    }
+  }
+  return notes
+}
+
+/** Keeps the High Council communications roster in step with completed HC callings/releases. */
+async function syncHighCouncilRoster(
+  admin: ReturnType<typeof createAdminClient>,
+  stakeId: string,
+  newPersonName: string,
+  replacesPersonName: string | null
+): Promise<string[]> {
+  const notes: string[] = []
+  const today = new Date().toISOString().slice(0, 10)
+
+  if (replacesPersonName) {
+    const { data: released } = await admin
+      .from("high_council_members")
+      .update({ status: "released", released_date: today })
+      .eq("stake_id", stakeId)
+      .eq("status", "active")
+      .ilike("member_name", replacesPersonName.trim())
+      .select("id")
+    if (released?.length) notes.push(`Marked '${replacesPersonName}' released on the HC roster.`)
+  }
+
+  const { data: existing } = await admin
+    .from("high_council_members")
+    .select("id, status")
+    .eq("stake_id", stakeId)
+    .ilike("member_name", newPersonName.trim())
+    .limit(1)
+    .maybeSingle()
+
+  if (existing) {
+    if (existing.status !== "active") {
+      await admin
+        .from("high_council_members")
+        .update({ status: "active", called_date: today, released_date: null })
+        .eq("id", existing.id)
+      notes.push(`Reactivated '${newPersonName}' on the HC roster.`)
+    }
+  } else {
+    const { error } = await admin.from("high_council_members").insert({
+      stake_id: stakeId,
+      member_name: newPersonName.trim(),
+      status: "active",
+      called_date: today,
+    })
+    if (!error) notes.push(`Added '${newPersonName}' to the HC roster.`)
+  }
+  return notes
+}
+
 export async function POST(req: NextRequest) {
   const auth = await requireElevatedLeader()
   if (!auth.ok) {
@@ -85,27 +193,51 @@ export async function POST(req: NextRequest) {
     const results: string[] = []
     let officeSlug = officeSlugForCallingName(calling.calling_name)
 
-    const { data: rosterRows } = await admin
-      .from("stake_permission_roster")
-      .select("id, office_slug, assigned_user_id, stake_id")
-      .eq("stake_id", stakeId)
+    const { rows: rosterRows, personNamesAvailable } = await loadRosterSeats(admin, stakeId)
 
     if (isHighCouncilCalling(calling.calling_name)) {
-      officeSlug = pickHighCouncilSeatSlug(rosterRows ?? [])
+      officeSlug = pickHighCouncilSeatSlug(rosterRows, calling.replaces_person_name)
       if (!officeSlug) {
         results.push("No high council permission seat found — add one in Settings first.")
       }
     } else if (isAssistantExecSecCalling(calling.calling_name)) {
-      officeSlug = pickAssistantExecSecSeatSlug(rosterRows ?? [])
+      officeSlug = pickAssistantExecSecSeatSlug(rosterRows, calling.replaces_person_name)
       if (!officeSlug) {
         results.push("No assistant executive secretary seat found — check Settings roster.")
       }
     }
 
     let rosterRowId: string | null = null
-    if (officeSlug && rosterRows?.length) {
+    if (officeSlug && rosterRows.length) {
       const row = rosterRows.find((r) => r.office_slug === officeSlug)
       rosterRowId = row?.id ?? null
+    }
+
+    if (personNamesAvailable) {
+      results.push(
+        ...(await syncSeatHolderNames(
+          admin,
+          rosterRows,
+          rosterRowId,
+          calling.person_name,
+          calling.replaces_person_name ?? null
+        ))
+      )
+    } else {
+      results.push(
+        "Seat holder names could not be updated — run migration 072_roster_seat_person_names.sql."
+      )
+    }
+
+    if (isHighCouncilCalling(calling.calling_name)) {
+      results.push(
+        ...(await syncHighCouncilRoster(
+          admin,
+          stakeId,
+          calling.person_name,
+          calling.replaces_person_name ?? null
+        ))
+      )
     }
 
     if (calling.replaces_person_name) {
