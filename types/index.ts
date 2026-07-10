@@ -505,6 +505,10 @@ export interface ConferenceSession {
   broadcast_url?: string
   equipment_notes?: string
   announcements?: string
+  /** Edited Welcome & Announcements script; null/undefined = use the auto-generated draft (migration 071). */
+  welcome_script?: string | null
+  /** "Attended by" line on the conducting sheet (migration 071). */
+  attended_by?: string | null
   dinner_group_invited?: string | null
   dinner_provided_by?: string | null
   dinner_guest_count?: number | null

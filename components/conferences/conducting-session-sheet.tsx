@@ -4,10 +4,14 @@ import { useRef, useEffect, useCallback, useState } from "react"
 import { Copy } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { ConferenceProgramItem, ConferenceSession } from "@/types"
-import { programItemTopicText } from "@/lib/conferences/program-item-fields"
+import { programItemAllowsDuration } from "@/lib/conferences/program-item-duration"
+import { programItemFieldConfig } from "@/lib/conferences/program-item-fields"
 import { PROGRAM_ITEM_LABELS } from "@/lib/conferences/program-item-labels"
-import { sortProgramItemsByOrder } from "@/lib/conferences/standard-opening-block"
-import { CONDUCTING_SHEET_HEADER_QUOTES } from "@/lib/conferences/conducting-sheet-header-quotes"
+import {
+  isStandardOpeningItemType,
+  sortProgramItemsByOrder,
+} from "@/lib/conferences/standard-opening-block"
+import { STAKE_VISION_TEXT } from "@/lib/conferences/conducting-sheet-header-quotes"
 import type { ConductingSheetEvent } from "@/lib/conferences/conducting-sheet-event"
 import { fitConductingSheet, CONDUCTING_PAGE_MARGIN_IN, type FitResult } from "@/lib/conferences/conducting-sheet-fit"
 
@@ -19,6 +23,49 @@ interface ConductingSessionSheetProps {
   formatSessionDateLong: (iso: string) => string
   formatEventDateRange: (start: string, end: string) => string
   generateConductingText: (session: ConferenceSession, items: ConferenceProgramItem[]) => string
+  patchProgramItem: (itemId: string, updates: Partial<ConferenceProgramItem>) => Promise<void>
+  patchSessionField: (sessionId: string, field: string, value: string | null) => Promise<void>
+}
+
+const inlineInput =
+  "conducting-inline-input min-w-0 border-0 border-b border-dotted border-transparent bg-transparent p-0 font-serif text-[0.95rem] leading-snug text-slate-900 placeholder:text-slate-300 focus:border-slate-400 focus:outline-none focus:ring-0 hover:border-slate-300"
+
+/** Uncontrolled inline text input that saves on blur when the value changed. */
+function InlineText({
+  value,
+  placeholder,
+  onCommit,
+  className,
+  align = "left",
+}: {
+  value: string
+  placeholder: string
+  onCommit: (next: string) => void
+  className?: string
+  align?: "left" | "center"
+}) {
+  return (
+    <input
+      type="text"
+      key={value}
+      defaultValue={value}
+      placeholder={placeholder}
+      onBlur={(e) => {
+        const next = e.target.value.trim()
+        if (next !== value.trim()) onCommit(next)
+      }}
+      className={`${inlineInput} ${align === "center" ? "text-center" : ""} ${className || ""}`}
+    />
+  )
+}
+
+function DocLine({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-[minmax(8.5rem,30%)_1fr] items-baseline gap-x-3 py-[3px]">
+      <p className="font-semibold text-slate-900">{label}:</p>
+      <div className="min-w-0 flex items-baseline gap-1.5 flex-wrap">{children}</div>
+    </div>
+  )
 }
 
 export function ConductingSessionSheet({
@@ -29,35 +76,30 @@ export function ConductingSessionSheet({
   formatSessionDateLong,
   formatEventDateRange,
   generateConductingText,
+  patchProgramItem,
+  patchSessionField,
 }: ConductingSessionSheetProps) {
   const items = sortProgramItemsByOrder(session.program_items || [])
   const condDateIso = resolveSessionDisplayDateIso(session, event)
   const condDateLabel = condDateIso ? formatSessionDateLong(condDateIso) : null
 
-  const metaParts: string[] = []
-  if (condDateLabel) metaParts.push(condDateLabel)
-  if (session.start_time && session.end_time) {
-    metaParts.push(`${formatTime(session.start_time)} – ${formatTime(session.end_time)}`)
-  }
-  if (event.location) metaParts.push(event.location)
+  const timeLabel =
+    session.start_time && session.end_time
+      ? `${formatTime(session.start_time)} — ${formatTime(session.end_time)}`
+      : null
 
   const contentRef = useRef<HTMLDivElement>(null)
-  const articleRef = useRef<HTMLElement>(null)
   const clipRef = useRef<HTMLDivElement>(null)
   const [fit, setFit] = useState<FitResult>({ paddingIn: 0.44, zoom: 1 })
 
   const measureKey = JSON.stringify({
     id: session.id,
-    items: items.map((i) => `${i.id}:${i.item_type}:${i.assigned_to}:${i.topic}:${i.hymn_number}:${i.notes}`),
-    announcements: session.announcements,
+    items: items.map((i) => `${i.id}:${i.item_type}:${i.assigned_to}:${i.topic}:${i.hymn_number}:${i.notes}:${i.duration_minutes}`),
+    attended_by: session.attended_by,
     equipment_notes: session.equipment_notes,
     broadcast_url: session.broadcast_url,
   })
 
-  // The fit logic forces the inner content element to a fixed letter-page
-  // width so each session prints to one page. On phones that fixed width
-  // (~693px) is wider than the viewport and clips the right side of the
-  // sheet. On small screens we skip the fit and let the sheet flow.
   const isSmallScreen = useCallback(() => {
     if (typeof window === "undefined") return false
     return window.innerWidth < 768
@@ -102,8 +144,6 @@ export function ConductingSessionSheet({
 
   useEffect(() => {
     const onBeforePrint = () => {
-      // Always run the actual page fit before print, even on phones, so the
-      // printed sheet is identical regardless of the on-screen viewport.
       if (!contentRef.current) return
       const result = fitConductingSheet(contentRef.current)
       setFit(result)
@@ -125,8 +165,6 @@ export function ConductingSessionSheet({
         clipRef.current.style.overflow = ""
       }
       clearFitStyles()
-      // Re-measure so the on-screen view returns to its responsive state
-      // (especially important on phones where the print fit forced a width).
       measure()
     }
     window.addEventListener("beforeprint", onBeforePrint)
@@ -142,133 +180,168 @@ export function ConductingSessionSheet({
       ? { zoom: fit.zoom, transform: `scale(${fit.zoom})`, transformOrigin: "top left" }
       : {}
 
+  const commitItem = (itemId: string, updates: Partial<ConferenceProgramItem>) => {
+    void patchProgramItem(itemId, updates)
+  }
+
+  const firstOpeningHymnId = items.find((i) => i.item_type === "opening_hymn")?.id
+
   return (
     <article
-      ref={articleRef}
       className="conducting-sheet-page w-full min-w-0 max-w-full overflow-hidden break-words bg-white text-slate-900"
       style={{ padding: `${fit.paddingIn}in`, pageBreakAfter: "always", breakAfter: "page" }}
     >
       <div ref={clipRef} className="min-w-0">
         <div ref={contentRef} className="conducting-doc mx-auto w-full max-w-3xl min-w-0 font-serif" style={zoomStyle}>
           <header className="text-center font-serif">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500">
-              Stake conference
+            <p className="mx-auto max-w-[36rem] text-[12.5px] italic leading-snug text-slate-600">
+              &ldquo;{STAKE_VISION_TEXT}&rdquo;
             </p>
-            <h1 className="mt-2 break-words text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
+            <h1 className="mt-3 break-words text-2xl font-bold tracking-tight text-slate-900">
               {session.session_label}
             </h1>
-            <p className="mt-1 text-base text-slate-700">{event.title}</p>
-            <p className="mt-2 text-sm text-slate-600">{formatEventDateRange(event.start_date, event.end_date)}</p>
-
-            <div className="mx-auto mt-5 max-w-[34rem] space-y-3 border-t border-slate-200 pt-4 text-sm leading-relaxed text-slate-800">
-              <p className="text-center">{CONDUCTING_SHEET_HEADER_QUOTES[0]}</p>
-              <p className="text-center">{CONDUCTING_SHEET_HEADER_QUOTES[1]}</p>
-              <p className="text-center text-base font-semibold text-slate-900">
-                {CONDUCTING_SHEET_HEADER_QUOTES[2]}
-              </p>
-            </div>
+            <p className="mt-1 text-sm text-slate-700">
+              {event.title}
+              {event.title && (condDateLabel || timeLabel) ? " · " : ""}
+              {condDateLabel || formatEventDateRange(event.start_date, event.end_date)}
+            </p>
+            {timeLabel ? <p className="text-sm text-slate-700">{timeLabel}{event.location ? ` · ${event.location}` : ""}</p> : null}
           </header>
 
-          <div className="my-4 h-px bg-slate-300" aria-hidden />
+          <div className="my-3 h-px bg-slate-400" aria-hidden />
 
-          <div className="space-y-1 text-center text-sm text-slate-700">
-            {metaParts.length > 0 ? <p>{metaParts.join(" · ")}</p> : (
-              <p className="text-amber-800">Set date, time, and location on the Sessions tab.</p>
-            )}
+          <div className="text-[0.95rem] leading-snug">
+            <DocLine label="Attended by">
+              <InlineText
+                value={session.attended_by ?? ""}
+                placeholder="Who attends this session…"
+                onCommit={(v) => void patchSessionField(session.id, "attended_by", v || null)}
+                className="w-full"
+              />
+            </DocLine>
+            <DocLine label="Materials requested">
+              <InlineText
+                value={session.equipment_notes ?? ""}
+                placeholder="Microphones, projector, whiteboard…"
+                onCommit={(v) => void patchSessionField(session.id, "equipment_notes", v || null)}
+                className="w-full"
+              />
+            </DocLine>
             {event.presiding_authority ? (
-              <p>
-                <span className="font-semibold text-slate-800">Presiding: </span>
-                {event.presiding_authority}
-              </p>
+              <DocLine label="Presiding authority">
+                <span>{event.presiding_authority}</span>
+              </DocLine>
             ) : null}
             {event.theme ? (
-              <p>
-                <span className="font-semibold text-slate-800">Theme: </span>
+              <DocLine label="Theme">
                 <span className="italic">{event.theme}</span>
-              </p>
+              </DocLine>
             ) : null}
           </div>
 
-          {session.announcements ? (
-            <>
-              <div className="my-4 h-px bg-slate-300" aria-hidden />
-              <section>
-                <h2 className="text-center font-serif text-sm font-semibold uppercase tracking-[0.18em] text-slate-600">
-                  Announcements
-                </h2>
-                <p className="mt-2 text-sm leading-relaxed text-slate-800">{session.announcements}</p>
-              </section>
-            </>
-          ) : null}
+          <div className="my-3 h-px bg-slate-400" aria-hidden />
 
-          {(session.equipment_notes || session.broadcast_url) && (
-            <>
-              <div className="my-4 h-px bg-slate-300" aria-hidden />
-              <section className="text-sm text-slate-700">
-                <h2 className="text-center font-serif text-sm font-semibold uppercase tracking-[0.18em] text-slate-600">
-                  Logistics
-                </h2>
-                <div className="mt-2 space-y-1.5">
-                  {session.equipment_notes ? (
-                    <p>
-                      <span className="font-semibold text-slate-800">Equipment / setup: </span>
-                      {session.equipment_notes}
-                    </p>
-                  ) : null}
-                  {session.broadcast_url ? (
-                    <p className="break-all">
-                      <span className="font-semibold text-slate-800">Broadcast: </span>
-                      {session.broadcast_url}
-                    </p>
-                  ) : null}
-                </div>
-              </section>
-            </>
-          )}
-
-          <div className="my-4 h-px bg-slate-300" aria-hidden />
-
-          <section>
-            <h2 className="text-center font-serif text-sm font-semibold uppercase tracking-[0.18em] text-slate-600">Program</h2>
+          <section className="text-[0.95rem] leading-snug">
             {items.length === 0 ? (
-              <p className="mt-3 text-center text-sm text-slate-500">No program items yet. Add them on the Sessions tab.</p>
+              <p className="mt-2 text-center text-sm text-slate-500">No program items yet. Add them on the Sessions tab.</p>
             ) : (
-              <div className="mx-auto mt-3 max-w-[96%] border-l-2 border-slate-300 pl-4">
-                <ul className="list-none">
-                  {items.map((item) => {
-                    const label = PROGRAM_ITEM_LABELS[item.item_type] || item.item_type
-                    const detailParts: string[] = []
-                    if (item.assigned_to) detailParts.push(item.assigned_to)
-                    const musicOrTopic = programItemTopicText(item)
-                    if (musicOrTopic) detailParts.push(musicOrTopic)
-                    const detailLine = detailParts.length > 0 ? detailParts.join(" — ") : null
-                    return (
-                      <li
-                        key={item.id}
-                        className="border-b border-slate-200 py-2.5 first:border-t first:border-slate-200"
-                      >
-                        <div className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-[minmax(9rem,32%)_1fr] sm:items-start">
-                          <p className="font-semibold text-slate-900">{label}</p>
-                          <div className="min-w-0 text-left">
-                            {detailLine ? (
-                              <p className="text-sm leading-snug text-slate-800">{detailLine}</p>
-                            ) : (
-                              <p className="text-sm text-slate-400">—</p>
-                            )}
-                            {item.notes ? (
-                              <p className="mt-1 text-xs leading-snug text-slate-600">{item.notes}</p>
-                            ) : null}
-                          </div>
-                        </div>
-                      </li>
-                    )
-                  })}
-                </ul>
-              </div>
+              items.map((item) => {
+                const label = PROGRAM_ITEM_LABELS[item.item_type] || item.item_type
+                const fields = programItemFieldConfig(item.item_type)
+                const showMinutes =
+                  programItemAllowsDuration(item.item_type) &&
+                  !isStandardOpeningItemType(item.item_type) &&
+                  item.item_type !== "closing_hymn" &&
+                  item.item_type !== "benediction"
+                const welcomeLineBefore = item.id === firstOpeningHymnId ? (
+                  <DocLine key={`${item.id}-welcome`} label="Welcome / Announcements">
+                    <span className="text-slate-600 italic">(see welcome sheet)</span>
+                  </DocLine>
+                ) : null
+                return (
+                  <div key={item.id}>
+                    {welcomeLineBefore}
+                    <DocLine label={label}>
+                      {fields.hymnNumber ? (
+                        <InlineText
+                          value={item.hymn_number ?? ""}
+                          placeholder="#"
+                          onCommit={(v) => commitItem(item.id, { hymn_number: v || undefined })}
+                          className="w-10"
+                          align="center"
+                        />
+                      ) : null}
+                      {fields.hymnNumber && fields.topic ? <span className="text-slate-500">:</span> : null}
+                      {fields.name ? (
+                        <InlineText
+                          value={item.assigned_to ?? ""}
+                          placeholder={fields.name.placeholder}
+                          onCommit={(v) => commitItem(item.id, { assigned_to: v || undefined })}
+                          className="flex-1 min-w-[8rem]"
+                        />
+                      ) : null}
+                      {fields.topic && !fields.name ? (
+                        <InlineText
+                          value={item.topic ?? ""}
+                          placeholder={fields.topic.placeholder}
+                          onCommit={(v) => commitItem(item.id, { topic: v || undefined })}
+                          className="flex-1 min-w-[8rem]"
+                        />
+                      ) : null}
+                      {showMinutes ? (
+                        <span className="whitespace-nowrap text-slate-700">
+                          (
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            key={`min-${item.id}-${item.duration_minutes}`}
+                            defaultValue={item.duration_minutes > 0 ? String(item.duration_minutes) : ""}
+                            placeholder="—"
+                            onBlur={(e) => {
+                              const n = parseInt(e.target.value.replace(/\D/g, ""), 10) || 0
+                              if (n !== (item.duration_minutes || 0)) commitItem(item.id, { duration_minutes: n })
+                            }}
+                            className={`${inlineInput} w-8 text-center`}
+                          />{" "}
+                          min)
+                        </span>
+                      ) : null}
+                    </DocLine>
+                    {fields.topic && fields.name ? (
+                      <div className="grid grid-cols-[minmax(8.5rem,30%)_1fr] gap-x-3 pb-[3px] -mt-[2px]">
+                        <span aria-hidden />
+                        <InlineText
+                          value={item.topic ?? ""}
+                          placeholder={fields.topic.placeholder}
+                          onCommit={(v) => commitItem(item.id, { topic: v || undefined })}
+                          className="w-full italic text-slate-700"
+                        />
+                      </div>
+                    ) : null}
+                    {item.notes ? (
+                      <div className="grid grid-cols-[minmax(8.5rem,30%)_1fr] gap-x-3 pb-[3px] -mt-[2px]">
+                        <span aria-hidden />
+                        <p className="text-xs leading-snug text-slate-500">{item.notes}</p>
+                      </div>
+                    ) : null}
+                  </div>
+                )
+              })
             )}
           </section>
 
-          <div className="conducting-no-print mt-5 flex justify-end">
+          {session.broadcast_url ? (
+            <>
+              <div className="my-3 h-px bg-slate-300" aria-hidden />
+              <p className="break-all text-xs text-slate-600">
+                <span className="font-semibold text-slate-800">Broadcast: </span>
+                {session.broadcast_url}
+              </p>
+            </>
+          ) : null}
+
+          <div className="conducting-no-print mt-5 flex items-center justify-between gap-3">
+            <p className="text-xs text-slate-400">Click any line to edit — changes save automatically.</p>
             <Button
               variant="outline"
               size="sm"

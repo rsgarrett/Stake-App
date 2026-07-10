@@ -29,7 +29,7 @@ import {
   programItemTypeOptions,
 } from "@/lib/conferences/program-item-fields"
 import { PROGRAM_ITEM_LABELS } from "@/lib/conferences/program-item-labels"
-import { CONDUCTING_SHEET_HEADER_QUOTES } from "@/lib/conferences/conducting-sheet-header-quotes"
+import { STAKE_VISION_TEXT } from "@/lib/conferences/conducting-sheet-header-quotes"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 import {
   anyStandardOpeningTypeInProgram,
@@ -307,6 +307,26 @@ export default function ConferenceDetailPage() {
       payload[field] = value.trim() === "" ? null : value
     }
     await supabase.from("conference_sessions").update(payload).eq("id", sessionId)
+  }
+
+  /** Save one session field and refresh (used by the welcome/conducting sheets). */
+  const patchSessionField = async (sessionId: string, field: string, value: string | null) => {
+    const { error } = await supabase
+      .from("conference_sessions")
+      .update({ [field]: value })
+      .eq("id", sessionId)
+    if (error) {
+      console.error("patchSessionField:", error)
+      if (/column|schema cache/i.test(error.message)) {
+        window.alert(
+          `Could not save: ${error.message}\n\nRun supabase/migrations/071_conference_welcome_sheets.sql in the Supabase SQL editor, then try again.`
+        )
+      } else {
+        window.alert(`Could not save: ${error.message}`)
+      }
+      return
+    }
+    await loadData({ background: true })
   }
 
   // --- Program Item CRUD ---
@@ -627,7 +647,7 @@ export default function ConferenceDetailPage() {
 
   const generateConductingText = (session: ConferenceSession, items: ConferenceProgramItem[]) => {
     let lines: string[] = []
-    CONDUCTING_SHEET_HEADER_QUOTES.forEach((q) => lines.push(q))
+    lines.push(`"${STAKE_VISION_TEXT}"`)
     lines.push("")
     lines.push(session.session_label.toUpperCase())
     const dateIso = resolveSessionDisplayDateIso(session, event)
@@ -761,8 +781,8 @@ export default function ConferenceDetailPage() {
       <div className="-mx-3 mb-6 flex gap-1 overflow-x-auto border-b px-3 pb-px [-webkit-overflow-scrolling:touch] sm:mx-0 sm:px-0">
         {([
           { key: "sessions" as const, label: `Sessions (${sessions.length})`, icon: Calendar },
-          { key: "conducting" as const, label: "Conducting Sheets", icon: Printer },
           { key: "business" as const, label: "Stake Business", icon: UserCheck },
+          { key: "conducting" as const, label: "Conducting Sheets", icon: Printer },
           { key: "notes" as const, label: `Notes (${notes.length})`, icon: FileText },
           { key: "suggestions" as const, label: `Name Bank (${suggestions.length})`, icon: Lightbulb },
         ]).map(({ key, label, icon: Icon }) => (
@@ -1584,12 +1604,15 @@ export default function ConferenceDetailPage() {
             end_date: event.end_date,
             location: event.location,
             event_type: event.event_type,
+            stand_seating: event.stand_seating,
           }}
           sessions={sessions}
           formatTime={formatTime}
           resolveSessionDisplayDateIso={resolveSessionDisplayDateIso}
           formatSessionDateLong={formatSessionDateLong}
           generateConductingText={generateConductingText}
+          patchProgramItem={patchProgramItem}
+          patchSessionField={patchSessionField}
         />
         </div>
       )}

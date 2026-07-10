@@ -1,11 +1,12 @@
 "use client"
 
-import { useCallback } from "react"
+import { Fragment, useCallback } from "react"
 import { Printer } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { ConferenceProgramItem, ConferenceSession } from "@/types"
 import type { ConductingSheetEvent } from "@/lib/conferences/conducting-sheet-event"
 import { ConductingSessionSheet } from "@/components/conferences/conducting-session-sheet"
+import { WelcomeAnnouncementsSheet } from "@/components/conferences/welcome-announcements-sheet"
 
 export type { ConductingSheetEvent }
 
@@ -16,6 +17,8 @@ interface ConductingSheetViewProps {
   resolveSessionDisplayDateIso: (session: ConferenceSession, ev: ConductingSheetEvent | null) => string | null
   formatSessionDateLong: (iso: string) => string
   generateConductingText: (session: ConferenceSession, items: ConferenceProgramItem[]) => string
+  patchProgramItem: (itemId: string, updates: Partial<ConferenceProgramItem>) => Promise<void>
+  patchSessionField: (sessionId: string, field: string, value: string | null) => Promise<void>
 }
 
 function formatEventDateRange(start: string, end: string): string {
@@ -34,6 +37,8 @@ export function ConductingSheetView({
   resolveSessionDisplayDateIso,
   formatSessionDateLong,
   generateConductingText,
+  patchProgramItem,
+  patchSessionField,
 }: ConductingSheetViewProps) {
   const lagSessions = sessions.filter(
     (s) => s.session_type === "leadership_session" || s.session_type === "adult_session" || s.session_type === "general_session"
@@ -59,10 +64,11 @@ export function ConductingSheetView({
   return (
     <div className="conducting-sheet-print space-y-8 px-3 sm:px-0">
       <div className="conducting-no-print rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-        <p className="font-medium text-slate-900">Conducting sheets</p>
+        <p className="font-medium text-slate-900">Welcome sheets &amp; conducting sheets</p>
         <p className="mt-1 text-slate-600">
-          Click the button below or use your browser's print (⌘P / Ctrl+P). Header quotes are in{" "}
-          <code className="rounded bg-white px-1 py-0.5 text-xs">lib/conferences/conducting-sheet-header-quotes.ts</code>.
+          Each session gets a Welcome &amp; Announcements page (read before the meeting begins) followed by a one-page
+          conducting sheet. Everything is editable in place — click a line on a conducting sheet, or use
+          &ldquo;Edit script&rdquo; on a welcome page. Stand seating and sustaining flow in from the Stake Business tab.
         </p>
       </div>
 
@@ -75,26 +81,37 @@ export function ConductingSheetView({
           onClick={printSheets}
         >
           <Printer className="h-4 w-4 mr-2" />
-          Print conducting sheets
+          Print all sheets
         </Button>
       </div>
 
       {lagSessions.map((session) => (
-        <ConductingSessionSheet
-          key={session.id}
-          session={session}
-          event={event}
-          formatTime={formatTime}
-          resolveSessionDisplayDateIso={resolveSessionDisplayDateIso}
-          formatSessionDateLong={formatSessionDateLong}
-          formatEventDateRange={formatEventDateRange}
-          generateConductingText={generateConductingText}
-        />
+        <Fragment key={session.id}>
+          <WelcomeAnnouncementsSheet
+            session={session}
+            event={event}
+            formatTime={formatTime}
+            resolveSessionDisplayDateIso={resolveSessionDisplayDateIso}
+            formatSessionDateLong={formatSessionDateLong}
+            patchSessionField={patchSessionField}
+          />
+          <ConductingSessionSheet
+            session={session}
+            event={event}
+            formatTime={formatTime}
+            resolveSessionDisplayDateIso={resolveSessionDisplayDateIso}
+            formatSessionDateLong={formatSessionDateLong}
+            formatEventDateRange={formatEventDateRange}
+            generateConductingText={generateConductingText}
+            patchProgramItem={patchProgramItem}
+            patchSessionField={patchSessionField}
+          />
+        </Fragment>
       ))}
 
       {lagSessions.length === 0 ? (
         <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-slate-600">
-          Add a Leadership, Adult, or General session to generate conducting sheets.
+          Add a Leadership, Adult, or General session to generate welcome and conducting sheets.
         </p>
       ) : null}
     </div>
