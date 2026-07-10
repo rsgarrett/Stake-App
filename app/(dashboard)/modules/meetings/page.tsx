@@ -17,8 +17,8 @@ import {
 import { formatInterviewType } from "@/lib/interviews/interview-types"
 import { navigateInterviewSelection } from "@/lib/interviews/navigate-mission-interview"
 import { canManageStakeMeetings } from "@/lib/meetings/meeting-permissions"
-import { canEditStakePermissionRoster } from "@/lib/settings/stake-office-slugs"
-import { RecurringDutiesCard } from "@/components/meetings/recurring-duties-card"
+import { selectNextAppointment, type NextAppointment } from "@/lib/meetings/next-appointment"
+import { NextAppointmentBar } from "@/components/meetings/next-appointment-bar"
 
 type ViewMode = "calendar" | "list" | "templates"
 
@@ -58,6 +58,7 @@ interface InterviewCalendarRow {
   interview_type: string
   scheduled_date: string
   status: string
+  interviewer_id?: string | null
 }
 
 function parseLocalDateOnly(isoOrDate: string): Date {
@@ -347,7 +348,9 @@ export default function MeetingsPage() {
   const [deletingListItem, setDeletingListItem] = useState<{ kind: "interview" | "meeting"; id: string } | null>(null)
   /** `public.users.role` — used to hide add/edit for high council (view-only on HC + stake council). */
   const [userMeetingRole, setUserMeetingRole] = useState<string | null>(null)
-  const [userStakeId, setUserStakeId] = useState<string | null>(null)
+  /** Signed-in user's id + display name — personalizes the "Next appointment" line. */
+  const [userAuthId, setUserAuthId] = useState<string | null>(null)
+  const [userFullName, setUserFullName] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -377,13 +380,18 @@ export default function MeetingsPage() {
         data: { user },
       } = await supabase.auth.getUser()
       if (!user) {
-        if (!cancelled) setUserMeetingRole(null)
+        if (!cancelled) {
+          setUserMeetingRole(null)
+          setUserAuthId(null)
+          setUserFullName(null)
+        }
         return
       }
-      const { data } = await supabase.from("users").select("role, stake_id").eq("id", user.id).maybeSingle()
+      const { data } = await supabase.from("users").select("role, full_name").eq("id", user.id).maybeSingle()
       if (!cancelled) {
         setUserMeetingRole(data?.role ?? null)
-        setUserStakeId(data?.stake_id ?? null)
+        setUserAuthId(user.id)
+        setUserFullName(data?.full_name ?? null)
       }
     })()
     return () => {
@@ -426,7 +434,7 @@ export default function MeetingsPage() {
     try {
       const { data, error } = await supabase
         .from("interviews")
-        .select("id, interviewee_name, interview_type, scheduled_date, status")
+        .select("id, interviewee_name, interview_type, scheduled_date, status, interviewer_id")
         .eq("status", "scheduled")
         .order("scheduled_date", { ascending: true })
 
@@ -846,6 +854,39 @@ export default function MeetingsPage() {
     return merged.sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())
   }, [meetingCalendarEvents, conferenceCalendarEvents, interviewCalendarEvents])
 
+  /** Earliest upcoming item relevant to the signed-in user (meetings are RLS-filtered per role;
+   *  Sunday visit/teaching rows match by presidency member; interviews match by interviewer). */
+  const nextAppointment = useMemo(
+    () =>
+      selectNextAppointment({
+        now: new Date(),
+        userId: userAuthId,
+        userFullName,
+        userRole: userMeetingRole,
+        meetings: meetingsForCalendar,
+        agendaItemsByMeetingId: agendaItems,
+        conferences: conferencesForCalendar,
+        interviews,
+      }),
+    [userAuthId, userFullName, userMeetingRole, meetingsForCalendar, agendaItems, conferencesForCalendar, interviews]
+  )
+
+  const openNextAppointment = (appt: NextAppointment) => {
+    if (appt.kind === "conference") {
+      router.push(`/modules/conferences/${appt.id}`)
+      return
+    }
+    if (appt.kind === "interview") {
+      void navigateInterviewSelection(supabase, router, {
+        id: appt.id,
+        interview_type: appt.interview_type,
+        interviewee_name: appt.interviewee_name,
+      })
+      return
+    }
+    router.push(`/modules/meetings/${appt.id}?tab=agenda`)
+  }
+
   const listScheduleRows: ListScheduleRow[] = useMemo(() => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -970,9 +1011,7 @@ export default function MeetingsPage() {
         </div>
       </div>
 
-      {userStakeId && userMeetingRole && canEditStakePermissionRoster(userMeetingRole) ? (
-        <RecurringDutiesCard stakeId={userStakeId} />
-      ) : null}
+      <NextAppointmentBar appointment={nextAppointment} onOpen={openNextAppointment} />
 
       {viewMode === "calendar" && (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
