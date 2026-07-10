@@ -112,7 +112,24 @@ const MEETING_TYPE_ROLES: Record<string, string[]> = {
   youth: ["young_men", "young_women"],
   fireside: ["all"],
   training: ["all"],
+  interview: ["stake_presidency"],
+  temple_recommend: ["stake_presidency"],
+  calling: ["stake_presidency"],
+  release: ["stake_presidency"],
 }
+
+/** One-on-one appointment types always offered in the picker (not part of the handbook template catalog). */
+const APPOINTMENT_QUICK_TYPES: StandardMeetingTemplate[] = [
+  { id: "__appt_interview__", title: "Interview", meeting_type: "interview" },
+  { id: "__appt_temple_recommend__", title: "Temple Recommend", meeting_type: "temple_recommend" },
+  { id: "__appt_calling__", title: "Calling", meeting_type: "calling" },
+  { id: "__appt_release__", title: "Release", meeting_type: "release" },
+].map((t) => ({
+  ...t,
+  default_duration_minutes: 30,
+  default_recurrence_type: "none",
+  viewable_by_roles: ["stake_presidency"],
+}))
 
 function getRolesForMeetingType(meetingType: string): string[] {
   const normalized = meetingType.toLowerCase().replace(/[\s-]+/g, "_")
@@ -220,9 +237,9 @@ export function MeetingForm({
   useEffect(() => {
     if (!catalogTemplates.length || !initialData?.meeting_type) return
     const want = normalizeMeetingTypeSlug(initialData.meeting_type)
-    const t = catalogTemplates.find(
-      (x) => normalizeMeetingTypeSlug(x.meeting_type) === want
-    )
+    const t =
+      catalogTemplates.find((x) => normalizeMeetingTypeSlug(x.meeting_type) === want) ??
+      APPOINTMENT_QUICK_TYPES.find((x) => normalizeMeetingTypeSlug(x.meeting_type) === want)
     if (t) setSelectedCatalogId(t.id)
     else setSelectedCatalogId("__custom__")
   }, [catalogTemplates, initialData?.meeting_type])
@@ -379,7 +396,9 @@ export function MeetingForm({
                         }))
                         return
                       }
-                      const template = catalogTemplates.find((t) => t.id === v)
+                      const template =
+                        catalogTemplates.find((t) => t.id === v) ??
+                        APPOINTMENT_QUICK_TYPES.find((t) => t.id === v)
                       if (template) applyTemplateFromCatalog(template)
                     }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -387,6 +406,11 @@ export function MeetingForm({
                     <option value="">{englishMenuTitleCase("Select a meeting type...")}</option>
                     {sortedStandardTemplates.map((t) => (
                       <option key={`${normalizeMeetingTypeSlug(t.meeting_type)}-${t.id}`} value={t.id}>
+                        {englishMenuTitleCase(t.title)}
+                      </option>
+                    ))}
+                    {APPOINTMENT_QUICK_TYPES.map((t) => (
+                      <option key={t.id} value={t.id}>
                         {englishMenuTitleCase(t.title)}
                       </option>
                     ))}
