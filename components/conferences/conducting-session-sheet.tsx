@@ -4,6 +4,7 @@ import { useRef, useEffect, useCallback, useState } from "react"
 import { Copy } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { ConferenceProgramItem, ConferenceSession } from "@/types"
+import { programItemTopicText } from "@/lib/conferences/program-item-fields"
 import { PROGRAM_ITEM_LABELS } from "@/lib/conferences/program-item-labels"
 import { sortProgramItemsByOrder } from "@/lib/conferences/standard-opening-block"
 import { CONDUCTING_SHEET_HEADER_QUOTES } from "@/lib/conferences/conducting-sheet-header-quotes"
@@ -238,7 +239,7 @@ export function ConductingSessionSheet({
                     const label = PROGRAM_ITEM_LABELS[item.item_type] || item.item_type
                     const detailParts: string[] = []
                     if (item.assigned_to) detailParts.push(item.assigned_to)
-                    const musicOrTopic = item.topic || item.hymn_number
+                    const musicOrTopic = programItemTopicText(item)
                     if (musicOrTopic) detailParts.push(musicOrTopic)
                     const detailLine = detailParts.length > 0 ? detailParts.join(" — ") : null
                     return (

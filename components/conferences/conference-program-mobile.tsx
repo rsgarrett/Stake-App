@@ -11,6 +11,11 @@ import type {
   ProgramItemType,
 } from "@/types"
 import { programItemAllowsDuration } from "@/lib/conferences/program-item-duration"
+import {
+  programItemFieldConfig,
+  programItemTopicText,
+  programItemTypeOptions,
+} from "@/lib/conferences/program-item-fields"
 import { PROGRAM_ITEM_LABELS } from "@/lib/conferences/program-item-labels"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 import {
@@ -111,10 +116,6 @@ export function ConferenceProgramMobile({
       : -1
   const lastClosingHymnIdx = sortedProgramItems.map((i) => i.item_type).lastIndexOf("closing_hymn")
   const lastBenedictionIdx = sortedProgramItems.map((i) => i.item_type).lastIndexOf("benediction")
-
-  const typeOptionsForAdd = Object.entries(PROGRAM_ITEM_LABELS).filter(
-    ([val]) => !isStandardLagFixedProgramItemType(val as ProgramItemType)
-  )
 
   if (isPresidencyMeeting) {
     return (
@@ -270,20 +271,20 @@ export function ConferenceProgramMobile({
         const canMove = !isProtected
 
         if (isEditing) {
+          const editType = editForm.item_type || item.item_type
+          const editFields = programItemFieldConfig(editType)
           return (
             <Fragment key={item.id}>
               {addSlot}
               <div className="space-y-2 rounded-xl border border-indigo-300 bg-indigo-50 p-4">
                 <p className="text-xs font-medium text-gray-500">Row {idx + 1}</p>
-                {lag &&
-                isStandardLagFixedProgramItemType(editForm.item_type || item.item_type) ? (
+                {lag && isStandardLagFixedProgramItemType(editType) ? (
                   <span className="font-medium">
-                    {PROGRAM_ITEM_LABELS[editForm.item_type || item.item_type] ||
-                      (editForm.item_type || item.item_type)}
+                    {PROGRAM_ITEM_LABELS[editType] || editType}
                   </span>
                 ) : (
                   <select
-                    value={editForm.item_type || item.item_type}
+                    value={editType}
                     onChange={(e) => {
                       const v = e.target.value as ProgramItemType
                       setEditForm((f) => ({ ...f, item_type: v }))
@@ -293,14 +294,14 @@ export function ConferenceProgramMobile({
                     }}
                     className={`${selectClass} w-full`}
                   >
-                    {typeOptionsForAdd.map(([val, lbl]) => (
+                    {programItemTypeOptions(session.session_type, editType).map(([val, lbl]) => (
                       <option key={val} value={val}>
                         {englishMenuTitleCase(lbl)}
                       </option>
                     ))}
                   </select>
                 )}
-                {programItemAllowsDuration(editForm.item_type || item.item_type) ? (
+                {programItemAllowsDuration(editType) ? (
                   <label className="block text-xs text-gray-500">
                     Minutes
                     <input
@@ -324,32 +325,53 @@ export function ConferenceProgramMobile({
                     />
                   </label>
                 ) : null}
-                <label className="block text-xs text-gray-500">
-                  Assigned to
-                  <input
-                    type="text"
-                    value={editForm.assigned_to ?? item.assigned_to ?? ""}
-                    onChange={(e) => setEditForm((f) => ({ ...f, assigned_to: e.target.value }))}
-                    onBlur={(e) =>
-                      void patchProgramItem(item.id, {
-                        assigned_to: e.target.value.trim() || undefined,
-                      })}
-                    placeholder="Name…"
-                    className={`${inputClass} mt-1`}
-                  />
-                </label>
-                <label className="block text-xs text-gray-500">
-                  Topic / hymn
-                  <input
-                    type="text"
-                    value={editForm.topic ?? item.topic ?? ""}
-                    onChange={(e) => setEditForm((f) => ({ ...f, topic: e.target.value }))}
-                    onBlur={(e) =>
-                      void patchProgramItem(item.id, { topic: e.target.value.trim() || undefined })}
-                    className={`${inputClass} mt-1`}
-                    placeholder="Topic or hymn #"
-                  />
-                </label>
+                {editFields.name ? (
+                  <label className="block text-xs text-gray-500">
+                    {editFields.name.label}
+                    <input
+                      type="text"
+                      value={editForm.assigned_to ?? item.assigned_to ?? ""}
+                      onChange={(e) => setEditForm((f) => ({ ...f, assigned_to: e.target.value }))}
+                      onBlur={(e) =>
+                        void patchProgramItem(item.id, {
+                          assigned_to: e.target.value.trim() || undefined,
+                        })}
+                      placeholder={editFields.name.placeholder}
+                      className={`${inputClass} mt-1`}
+                    />
+                  </label>
+                ) : null}
+                {editFields.hymnNumber ? (
+                  <label className="block text-xs text-gray-500">
+                    {editFields.hymnNumber.label}
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={editForm.hymn_number ?? item.hymn_number ?? ""}
+                      onChange={(e) => setEditForm((f) => ({ ...f, hymn_number: e.target.value }))}
+                      onBlur={(e) =>
+                        void patchProgramItem(item.id, {
+                          hymn_number: e.target.value.trim() || undefined,
+                        })}
+                      placeholder={editFields.hymnNumber.placeholder}
+                      className={`${inputClass} mt-1`}
+                    />
+                  </label>
+                ) : null}
+                {editFields.topic ? (
+                  <label className="block text-xs text-gray-500">
+                    {editFields.topic.label}
+                    <input
+                      type="text"
+                      value={editForm.topic ?? item.topic ?? ""}
+                      onChange={(e) => setEditForm((f) => ({ ...f, topic: e.target.value }))}
+                      onBlur={(e) =>
+                        void patchProgramItem(item.id, { topic: e.target.value.trim() || undefined })}
+                      className={`${inputClass} mt-1`}
+                      placeholder={editFields.topic.placeholder}
+                    />
+                  </label>
+                ) : null}
                 <label className="block text-xs text-gray-500">
                   Notes
                   <textarea
@@ -450,7 +472,7 @@ export function ConferenceProgramMobile({
               </FieldRow>
 
               <FieldRow label="Topic / hymn">
-                <span className="break-words">{item.topic || item.hymn_number || "—"}</span>
+                <span className="break-words">{programItemTopicText(item) || "—"}</span>
               </FieldRow>
 
               <FieldRow label="Notes">

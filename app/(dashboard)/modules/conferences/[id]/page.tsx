@@ -23,6 +23,11 @@ import type {
 } from "@/types"
 import { defaultStakeConferenceSessionDate, normalizeStakeConferenceWeekend } from "@/lib/conferences/stake-conference-schedule"
 import { programItemAllowsDuration, programItemMinutesForTotal } from "@/lib/conferences/program-item-duration"
+import {
+  programItemFieldConfig,
+  programItemTopicText,
+  programItemTypeOptions,
+} from "@/lib/conferences/program-item-fields"
 import { PROGRAM_ITEM_LABELS } from "@/lib/conferences/program-item-labels"
 import { CONDUCTING_SHEET_HEADER_QUOTES } from "@/lib/conferences/conducting-sheet-header-quotes"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
@@ -77,8 +82,9 @@ const INVITE_STATUS_STYLES: Record<InviteStatus, { bg: string; text: string; lab
   completed: { bg: "bg-blue-100", text: "text-blue-700", label: "Completed" },
 }
 
-// Priesthood / leadership session outline (Handbook 29.3.3). Types only — duration, assigned to, topic filled in per conference.
-const DEFAULT_LEADERSHIP_ITEMS: Partial<ConferenceProgramItem>[] = [
+// Stake conference sessions start with only the standard opening + closing blocks.
+// Everything between invocation and closing hymn is added per conference via "Add item".
+const STANDARD_SESSION_SHELL: Partial<ConferenceProgramItem>[] = [
   { item_type: "prelude_music", duration_minutes: 0, display_order: 1 },
   { item_type: "presiding", duration_minutes: 0, display_order: 2 },
   { item_type: "conducting", duration_minutes: 0, display_order: 3 },
@@ -87,60 +93,13 @@ const DEFAULT_LEADERSHIP_ITEMS: Partial<ConferenceProgramItem>[] = [
   { item_type: "music_leader", duration_minutes: 0, display_order: 6 },
   { item_type: "opening_hymn", duration_minutes: 5, display_order: 7 },
   { item_type: "invocation", duration_minutes: 0, display_order: 8 },
-  { item_type: "breakout", duration_minutes: 0, display_order: 9 },
-  { item_type: "discussion", duration_minutes: 0, display_order: 10 },
-  { item_type: "breakout", duration_minutes: 0, display_order: 11 },
-  { item_type: "discussion", duration_minutes: 0, display_order: 12 },
-  { item_type: "breakout", duration_minutes: 0, display_order: 13 },
-  { item_type: "discussion", duration_minutes: 0, display_order: 14 },
-  { item_type: "closing_remarks", duration_minutes: 0, display_order: 15 },
-  { item_type: "closing_hymn", duration_minutes: 5, display_order: 16 },
-  { item_type: "benediction", duration_minutes: 0, display_order: 17 },
+  { item_type: "closing_hymn", duration_minutes: 5, display_order: 9 },
+  { item_type: "benediction", duration_minutes: 0, display_order: 10 },
 ]
 
-const DEFAULT_ADULT_ITEMS: Partial<ConferenceProgramItem>[] = [
-  { item_type: "prelude_music", duration_minutes: 0, display_order: 1 },
-  { item_type: "presiding", duration_minutes: 0, display_order: 2 },
-  { item_type: "conducting", duration_minutes: 0, display_order: 3 },
-  { item_type: "pianist", duration_minutes: 0, display_order: 4 },
-  { item_type: "organist", duration_minutes: 0, display_order: 5 },
-  { item_type: "music_leader", duration_minutes: 0, display_order: 6 },
-  { item_type: "opening_hymn", duration_minutes: 5, display_order: 7 },
-  { item_type: "invocation", duration_minutes: 0, display_order: 8 },
-  { item_type: "speaker", duration_minutes: 7, display_order: 9 },
-  { item_type: "speaker", duration_minutes: 10, display_order: 10 },
-  { item_type: "speaker", duration_minutes: 7, display_order: 11 },
-  { item_type: "speaker", duration_minutes: 15, display_order: 12 },
-  { item_type: "intermediate_hymn", duration_minutes: 5, display_order: 13 },
-  { item_type: "speaker", duration_minutes: 15, display_order: 14 },
-  { item_type: "speaker", duration_minutes: 15, display_order: 15 },
-  { item_type: "speaker", duration_minutes: 20, display_order: 16 },
-  { item_type: "closing_hymn", duration_minutes: 5, display_order: 17 },
-  { item_type: "benediction", duration_minutes: 0, display_order: 18 },
-]
-
-const DEFAULT_GENERAL_ITEMS: Partial<ConferenceProgramItem>[] = [
-  { item_type: "prelude_music", duration_minutes: 0, display_order: 1 },
-  { item_type: "presiding", duration_minutes: 0, display_order: 2 },
-  { item_type: "conducting", duration_minutes: 0, display_order: 3 },
-  { item_type: "pianist", duration_minutes: 0, display_order: 4 },
-  { item_type: "organist", duration_minutes: 0, display_order: 5 },
-  { item_type: "music_leader", duration_minutes: 0, display_order: 6 },
-  { item_type: "opening_hymn", duration_minutes: 5, display_order: 7 },
-  { item_type: "invocation", duration_minutes: 0, display_order: 8 },
-  { item_type: "stake_business", duration_minutes: 5, display_order: 9 },
-  { item_type: "speaker_primary", duration_minutes: 5, display_order: 10 },
-  { item_type: "speaker_youth", duration_minutes: 7, display_order: 11 },
-  { item_type: "speaker", duration_minutes: 15, display_order: 12 },
-  { item_type: "speaker", duration_minutes: 10, display_order: 13 },
-  { item_type: "intermediate_hymn", duration_minutes: 5, display_order: 14 },
-  { item_type: "speaker", duration_minutes: 10, display_order: 15 },
-  { item_type: "speaker", duration_minutes: 15, display_order: 16 },
-  { item_type: "special_musical_number", duration_minutes: 5, display_order: 17 },
-  { item_type: "speaker", duration_minutes: 30, display_order: 18 },
-  { item_type: "closing_hymn", duration_minutes: 5, display_order: 19 },
-  { item_type: "benediction", duration_minutes: 0, display_order: 20 },
-]
+const DEFAULT_LEADERSHIP_ITEMS = STANDARD_SESSION_SHELL
+const DEFAULT_ADULT_ITEMS = STANDARD_SESSION_SHELL
+const DEFAULT_GENERAL_ITEMS = STANDARD_SESSION_SHELL
 
 const DEFAULT_PRESIDENCY_ITEMS: Partial<ConferenceProgramItem>[] = [
   { item_type: "discussion", duration_minutes: 5, display_order: 1 },
@@ -682,7 +641,8 @@ export default function ConferenceDetailPage() {
       const label = PROGRAM_ITEM_LABELS[item.item_type] || item.item_type
       const parts = [label]
       if (item.assigned_to) parts.push(`— ${item.assigned_to}`)
-      if (item.topic || item.hymn_number) parts.push(`| ${item.topic || item.hymn_number}`)
+      const topicText = programItemTopicText(item)
+      if (topicText) parts.push(`| ${topicText}`)
       lines.push(parts.join(" "))
     })
     return lines.join("\n")
@@ -1155,9 +1115,6 @@ export default function ConferenceDetailPage() {
                               : -1
                           const lastClosingHymnIdx = sortedProgramItems.map((i) => i.item_type).lastIndexOf("closing_hymn")
                           const lastBenedictionIdx = sortedProgramItems.map((i) => i.item_type).lastIndexOf("benediction")
-                          const typeOptionsForAdd = Object.entries(PROGRAM_ITEM_LABELS).filter(
-                            ([val]) => !isStandardLagFixedProgramItemType(val as ProgramItemType)
-                          )
                           return (
                         <>
                         <ConferenceProgramMobile
@@ -1281,6 +1238,8 @@ export default function ConferenceDetailPage() {
                                     </tr>
                                   )
                                 }
+                                const editType = editForm.item_type || item.item_type
+                                const editFields = programItemFieldConfig(editType)
                                 return (
                                   <Fragment key={item.id}>
                                     {addItemRow}
@@ -1295,7 +1254,7 @@ export default function ConferenceDetailPage() {
                                         </span>
                                       ) : (
                                       <select
-                                        value={editForm.item_type || item.item_type}
+                                        value={editType}
                                         onChange={(e) => {
                                           const v = e.target.value as ProgramItemType
                                           setEditForm((f) => ({ ...f, item_type: v }))
@@ -1305,7 +1264,7 @@ export default function ConferenceDetailPage() {
                                         }}
                                         className={selectClass}
                                       >
-                                        {typeOptionsForAdd.map(([val, lbl]) => (
+                                        {programItemTypeOptions(session.session_type, editType).map(([val, lbl]) => (
                                           <option key={val} value={val}>
                                             {englishMenuTitleCase(lbl)}
                                           </option>
@@ -1314,7 +1273,7 @@ export default function ConferenceDetailPage() {
                                       )}
                                     </td>
                                     <td className="px-3 py-2">
-                                      {programItemAllowsDuration(editForm.item_type || item.item_type) ? (
+                                      {programItemAllowsDuration(editType) ? (
                                         <input
                                           type="text"
                                           inputMode="numeric"
@@ -1340,32 +1299,57 @@ export default function ConferenceDetailPage() {
                                       )}
                                     </td>
                                     <td className="px-3 py-2">
-                                      <input
-                                        type="text"
-                                        value={editForm.assigned_to ?? item.assigned_to ?? ""}
-                                        onChange={(e) => setEditForm((f) => ({ ...f, assigned_to: e.target.value }))}
-                                        onBlur={(e) =>
-                                        void patchProgramItem(item.id, {
-                                          assigned_to: e.target.value.trim() || undefined,
-                                        })
-                                      }
-                                        placeholder="Name..."
-                                        className={inputClass}
-                                      />
-                                    </td>
-                                    <td className="px-3 py-2">
-                                      <input
-                                        type="text"
-                                        value={editForm.topic ?? item.topic ?? ""}
-                                        onChange={(e) => setEditForm((f) => ({ ...f, topic: e.target.value }))}
-                                        onBlur={(e) =>
+                                      {editFields.name ? (
+                                        <input
+                                          type="text"
+                                          value={editForm.assigned_to ?? item.assigned_to ?? ""}
+                                          onChange={(e) => setEditForm((f) => ({ ...f, assigned_to: e.target.value }))}
+                                          onBlur={(e) =>
                                             void patchProgramItem(item.id, {
-                                              topic: e.target.value.trim() || undefined,
+                                              assigned_to: e.target.value.trim() || undefined,
                                             })
                                           }
-                                        placeholder="Topic or hymn..."
-                                        className={inputClass}
-                                      />
+                                          placeholder={editFields.name.placeholder}
+                                          className={inputClass}
+                                        />
+                                      ) : (
+                                        <span className="text-gray-400 text-sm">—</span>
+                                      )}
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <div className="flex items-center gap-2">
+                                        {editFields.hymnNumber ? (
+                                          <input
+                                            type="text"
+                                            inputMode="numeric"
+                                            value={editForm.hymn_number ?? item.hymn_number ?? ""}
+                                            onChange={(e) => setEditForm((f) => ({ ...f, hymn_number: e.target.value }))}
+                                            onBlur={(e) =>
+                                              void patchProgramItem(item.id, {
+                                                hymn_number: e.target.value.trim() || undefined,
+                                              })
+                                            }
+                                            placeholder={editFields.hymnNumber.placeholder}
+                                            className={`${inputClass} w-16 min-w-[3.25rem]`}
+                                          />
+                                        ) : null}
+                                        {editFields.topic ? (
+                                          <input
+                                            type="text"
+                                            value={editForm.topic ?? item.topic ?? ""}
+                                            onChange={(e) => setEditForm((f) => ({ ...f, topic: e.target.value }))}
+                                            onBlur={(e) =>
+                                              void patchProgramItem(item.id, {
+                                                topic: e.target.value.trim() || undefined,
+                                              })
+                                            }
+                                            placeholder={editFields.topic.placeholder}
+                                            className={inputClass}
+                                          />
+                                        ) : editFields.hymnNumber ? null : (
+                                          <span className="text-gray-400 text-sm">—</span>
+                                        )}
+                                      </div>
                                     </td>
                                     <td className="px-3 py-2">
                                       <input
@@ -1473,8 +1457,8 @@ export default function ConferenceDetailPage() {
                                       item.assigned_to || <span className="text-gray-300 italic">—</span>
                                     )}
                                   </td>
-                                  <td className="px-3 py-2 text-gray-600 max-w-[200px] truncate" title={item.topic || ""}>
-                                    {item.topic || item.hymn_number || "—"}
+                                  <td className="px-3 py-2 text-gray-600 max-w-[200px] truncate" title={programItemTopicText(item)}>
+                                    {programItemTopicText(item) || "—"}
                                   </td>
                                   <td className="px-3 py-2 text-gray-500 text-xs max-w-[150px] truncate" title={item.notes || ""}>
                                     {item.notes || "—"}
