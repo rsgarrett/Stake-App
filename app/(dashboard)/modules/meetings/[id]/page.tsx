@@ -20,6 +20,13 @@ import {
 } from "@/lib/meetings/agenda-field-config"
 import { canManageStakeMeetings } from "@/lib/meetings/meeting-permissions"
 import { useAgendaPeople } from "@/lib/meetings/use-agenda-people"
+import {
+  assignOpeningRotation,
+  isRotatingOpeningTitle,
+  pickNextInRotation,
+  rotationPoolForMeeting,
+  type RotationHistoryEntry,
+} from "@/lib/meetings/opening-rotation"
 import { setAgendaReturn } from "@/lib/navigation/agenda-return"
 
 interface Meeting {
@@ -670,41 +677,60 @@ export default function MeetingDetailPage() {
   }
 
   /**
-   * Suggest the next person for a rotating assignment (prayer, conducting,
-   * handbook trainer, etc.) by round-robin through the presidency + high
-   * council roster, advancing one seat past whoever held that role at the most
-   * recent earlier meeting of this type. Bishops are excluded from the pool.
+   * Fair rotation history: every prior meeting of this type, collecting who
+   * already took a prayer or handbook-training assignment (and conducting).
+   * Least-recently-served wins so everyone participates over time.
    */
-  const suggestRotationFor = async (itemTitle: string): Promise<string | null> => {
-    if (!meeting) return null
-    const pool = agendaPeople.filter((p) => p.role !== "Bishop").map((p) => p.name)
-    if (pool.length === 0) return null
-
-    const { data: prior } = await supabase
+  const loadRotationHistory = async (): Promise<RotationHistoryEntry[]> => {
+    if (!meeting) return []
+    const { data: priors } = await supabase
       .from("meetings")
-      .select("id, scheduled_date")
+      .select("id, scheduled_date, conducting")
       .eq("meeting_type", meeting.meeting_type)
       .lt("scheduled_date", meeting.scheduled_date)
       .order("scheduled_date", { ascending: false })
-      .limit(1)
-      .maybeSingle()
+      .limit(40)
+    if (!priors?.length) return []
 
-    let lastName: string | null = null
-    if (prior) {
-      const { data: priorItems } = await supabase
-        .from("meeting_agendas")
-        .select("title, assigned_to")
-        .eq("meeting_id", prior.id)
-      const match = (priorItems ?? []).find(
-        (i) => i.title.toLowerCase() === itemTitle.toLowerCase()
-      )
-      lastName = (match?.assigned_to ?? "").trim() || null
+    const history: RotationHistoryEntry[] = []
+    for (const p of priors) {
+      const date = (p.scheduled_date as string).slice(0, 10)
+      if ((p.conducting as string | null)?.trim()) {
+        history.push({ date, name: (p.conducting as string).trim() })
+      }
     }
+    const ids = priors.map((p) => p.id as string)
+    const { data: priorItems } = await supabase
+      .from("meeting_agendas")
+      .select("meeting_id, title, assigned_to")
+      .in("meeting_id", ids)
+    const dateById = new Map(priors.map((p) => [p.id as string, (p.scheduled_date as string).slice(0, 10)]))
+    for (const item of priorItems ?? []) {
+      if (!item.assigned_to?.trim()) continue
+      if (!isRotatingOpeningTitle(item.title ?? "")) continue
+      history.push({
+        date: dateById.get(item.meeting_id as string) ?? "",
+        name: item.assigned_to.trim(),
+      })
+    }
+    return history
+  }
 
-    if (!lastName) return pool[0]
-    const idx = pool.findIndex((n) => n.toLowerCase() === lastName!.toLowerCase())
-    if (idx === -1) return pool[0]
-    return pool[(idx + 1) % pool.length]
+  /**
+   * Suggest the next person for a rotating opening (prayer / handbook training)
+   * using fair least-recently-served rotation across the meeting's pool.
+   */
+  const suggestRotationFor = async (itemTitle: string): Promise<string | null> => {
+    if (!meeting) return null
+    const pool = rotationPoolForMeeting(meeting.meeting_type, agendaPeople)
+    if (pool.length === 0) return null
+    const history = await loadRotationHistory()
+    const already = agendaItems
+      .filter((it) => it.title.toLowerCase() !== itemTitle.toLowerCase())
+      .map((it) => (getEditValue(it, "assigned_to") as string) || it.assigned_to || "")
+      .filter(Boolean) as string[]
+    if (conducting?.trim()) already.push(conducting.trim())
+    return pickNextInRotation(pool, history, already)
   }
 
   const rotateAssignment = async (itemTitle: string, apply: (name: string) => void) => {
@@ -712,28 +738,70 @@ export default function MeetingDetailPage() {
     if (name) apply(name)
   }
 
-  /** Conducting lives on the meetings row, so its rotation reads the prior
-   *  meeting's `conducting` column rather than an agenda item. */
+  /** Conducting also rotates fairly through the same pool. */
   const rotateConducting = async () => {
     if (!meeting) return
-    const pool = agendaPeople.filter((p) => p.role !== "Bishop").map((p) => p.name)
+    const pool = rotationPoolForMeeting(meeting.meeting_type, agendaPeople)
     if (pool.length === 0) return
-    const { data: prior } = await supabase
-      .from("meetings")
-      .select("conducting, scheduled_date")
-      .eq("meeting_type", meeting.meeting_type)
-      .lt("scheduled_date", meeting.scheduled_date)
-      .order("scheduled_date", { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    const lastName = (prior?.conducting ?? "").trim() || null
-    if (!lastName) {
-      setConducting(pool[0])
-      return
-    }
-    const idx = pool.findIndex((n) => n.toLowerCase() === lastName.toLowerCase())
-    setConducting(idx === -1 ? pool[0] : pool[(idx + 1) % pool.length])
+    const history = await loadRotationHistory()
+    const already = agendaItems
+      .map((it) => (getEditValue(it, "assigned_to") as string) || it.assigned_to || "")
+      .filter(Boolean) as string[]
+    const pick = pickNextInRotation(pool, history, already)
+    if (pick) setConducting(pick)
   }
+
+  /**
+   * Fill prayer / handbook-training slots (and conducting if blank) from the
+   * fair rotation. `force` reassigns every rotating slot; otherwise only empties.
+   */
+  const fillOpeningRotation = async (items: AgendaItem[], opts: { force?: boolean } = {}) => {
+    if (!meeting) return
+    const pool = rotationPoolForMeeting(meeting.meeting_type, agendaPeople)
+    if (pool.length === 0) return
+    const history = await loadRotationHistory()
+    const rotating = items
+      .filter((it) => isRotatingOpeningTitle(it.title))
+      .sort((a, b) => a.item_order - b.item_order)
+    const currentConducting = (conducting || meeting.conducting || "").trim()
+    const titlesToFill = opts.force
+      ? rotating.map((it) => it.title)
+      : rotating.filter((it) => !it.assigned_to?.trim()).map((it) => it.title)
+    if (titlesToFill.length === 0 && (currentConducting || !opts.force)) return
+
+    const alreadyAssigned = opts.force
+      ? []
+      : [
+          ...(currentConducting ? [currentConducting] : []),
+          ...rotating.map((it) => it.assigned_to?.trim() || "").filter(Boolean),
+        ]
+    const picks = assignOpeningRotation({
+      titles: titlesToFill,
+      pool,
+      history,
+      alreadyAssigned,
+    })
+
+    for (const item of rotating) {
+      const name = picks[item.title]
+      if (!name) continue
+      await supabase.from("meeting_agendas").update({ assigned_to: name }).eq("id", item.id)
+    }
+
+    if (!currentConducting || opts.force) {
+      const pick = pickNextInRotation(pool, history, [
+        ...alreadyAssigned,
+        ...Object.values(picks),
+      ])
+      if (pick) {
+        setConducting(pick)
+        await supabase.from("meetings").update({ conducting: pick }).eq("id", meetingId)
+      }
+    }
+    await loadAgenda()
+  }
+
+  const [openingsFilledForMeetingId, setOpeningsFilledForMeetingId] = useState<string | null>(null)
 
   const moveAgendaItem = async (index: number, direction: "up" | "down") => {
     if (direction === "up" && index === 0) return
@@ -1059,6 +1127,26 @@ export default function MeetingDetailPage() {
     setConducting(meeting.conducting ?? "")
   }, [meeting?.id, meeting?.presiding, meeting?.conducting])
 
+  /**
+   * After the handbook template seeds empty prayer / handbook-training rows,
+   * auto-assign distinct people via fair rotation (once per meeting view).
+   */
+  useEffect(() => {
+    if (loading || !meeting || !meetingWriteAllowed) return
+    if (agendaPeople.length === 0) return
+    if (openingsFilledForMeetingId === meetingId) return
+    const rotating = agendaItems.filter((it) => isRotatingOpeningTitle(it.title))
+    if (rotating.length === 0) return
+    const needsFill = rotating.some((it) => !it.assigned_to?.trim())
+    if (!needsFill) {
+      setOpeningsFilledForMeetingId(meetingId)
+      return
+    }
+    setOpeningsFilledForMeetingId(meetingId)
+    void fillOpeningRotation(agendaItems)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, meeting?.id, meetingId, agendaItems, agendaPeople.length, meetingWriteAllowed, openingsFilledForMeetingId])
+
   const persistPresidingConducting = useCallback(async () => {
     const { error } = await supabase
       .from("meetings")
@@ -1268,16 +1356,19 @@ export default function MeetingDetailPage() {
     )
   }
 
-  const hasRotationPool = agendaPeople.some((p) => p.role !== "Bishop")
+  const rotationPool = meeting
+    ? rotationPoolForMeeting(meeting.meeting_type, agendaPeople)
+    : []
+  const hasRotationPool = rotationPool.length > 0
 
   /** Small "next in rotation" button shown beside rotating person fields. */
   const renderRotateButton = (itemTitle: string, apply: (name: string) => void) => {
-    if (!hasRotationPool) return null
+    if (!hasRotationPool || !isRotatingOpeningTitle(itemTitle)) return null
     return (
       <button
         type="button"
         onClick={() => void rotateAssignment(itemTitle, apply)}
-        title="Suggest the next person in the rotation"
+        title="Suggest next person (fair rotation — least recently assigned)"
         className="shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-md border border-gray-200 text-gray-400 hover:text-indigo-600 hover:border-indigo-300 transition-colors"
       >
         <RefreshCw className="h-3.5 w-3.5" />
@@ -1978,6 +2069,27 @@ export default function MeetingDetailPage() {
                     >
                       <ClipboardList className="h-4 w-4 mr-1.5" />
                       {carryingOver ? "Carrying over…" : "Carry over open items"}
+                    </Button>
+                  )}
+                  {meetingWriteAllowed && hasRotationPool && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        if (
+                          !confirm(
+                            "Reassign opening prayer, handbook training, closing prayer, and conducting using fair rotation (least recently assigned)?"
+                          )
+                        ) {
+                          return
+                        }
+                        setOpeningsFilledForMeetingId(meetingId)
+                        void fillOpeningRotation(agendaItems, { force: true })
+                      }}
+                      title="Reassign prayers and handbook training so everyone participates over time"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-1.5" />
+                      Rotate openings
                     </Button>
                   )}
                   {meetingWriteAllowed && templateConfig && (

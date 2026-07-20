@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { labelForOfficeSlug } from "@/lib/settings/stake-office-slugs"
+import { isHighCouncilSeatSlug, labelForOfficeSlug } from "@/lib/settings/stake-office-slugs"
 
 export interface AgendaPerson {
   name: string

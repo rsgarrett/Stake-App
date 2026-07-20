@@ -15,6 +15,12 @@ import {
 import type { HighCouncilMember, HCWeeklyReport, HCReportResponse } from "@/types"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 import { getHcPresidencyOnlyAssignmentLines } from "@/lib/leadership/hc-presidency-only-assignments"
+import {
+  groupByPresidencyStewardship,
+  stewardshipKeyFromOversight,
+  getPresidencyStewardGroup,
+  type PresidencyStewardKey,
+} from "@/lib/leadership/presidency-stewardship-groups"
 
 type TabView = "reports" | "roster"
 
@@ -54,6 +60,8 @@ export default function HCCommunicationPage() {
   const [tabView, setTabView] = useState<TabView>("reports")
   const [selectedWeek, setSelectedWeek] = useState(getReportingWeekSunday())
   const [expandedReport, setExpandedReport] = useState<string | null>(null)
+  /** Filter reports by stewardship steward; "all" shows every group. */
+  const [stewardFilter, setStewardFilter] = useState<"all" | PresidencyStewardKey>("all")
 
   // Roster form
   const [showAddMember, setShowAddMember] = useState(false)
@@ -235,6 +243,24 @@ export default function HCCommunicationPage() {
   const reportedMemberIds = new Set(weekReports.map((r) => r.member_id))
   const notReported = activeMembers.filter((m) => !reportedMemberIds.has(m.id))
 
+  const reportSections = groupByPresidencyStewardship(
+    weekReports,
+    (r) => r.member?.presidency_oversight
+  ).filter((s) => stewardFilter === "all" || s.group.key === stewardFilter)
+
+  const notReportedSections = groupByPresidencyStewardship(
+    notReported,
+    (m) => m.presidency_oversight
+  ).filter((s) => stewardFilter === "all" || s.group.key === stewardFilter)
+
+  const stewardFilterOptions: { value: "all" | PresidencyStewardKey; label: string }[] = [
+    { value: "all", label: "All stewardships" },
+    { value: "garrett", label: "President Garrett" },
+    { value: "williams", label: "President Williams" },
+    { value: "chandler", label: "President Chandler" },
+    { value: "shared", label: "Shared" },
+  ]
+
   // Generate week options (last 8 weeks + next 2)
   const weekOptions: string[] = []
   for (let i = -2; i <= 8; i++) {
@@ -282,20 +308,40 @@ export default function HCCommunicationPage() {
       {/* ==================== WEEKLY REPORTS TAB ==================== */}
       {tabView === "reports" && (
         <div className="space-y-4">
-          {/* Week selector + submit button */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <label className="text-sm font-medium text-gray-700">Reporting Week:</label>
-              <select value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)} className={`${inputClass} w-auto`}>
-                {weekOptions.map((w) => (
-                  <option key={w} value={w}>
-                    {englishMenuTitleCase("Week of")} {formatWeek(w)}
-                  </option>
-                ))}
-              </select>
+          {/* Week selector + stewardship filter + submit */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center space-x-2">
+                <label className="text-sm font-medium text-gray-700">Reporting Week:</label>
+                <select value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)} className={`${inputClass} w-auto`}>
+                  {weekOptions.map((w) => (
+                    <option key={w} value={w}>
+                      {englishMenuTitleCase("Week of")} {formatWeek(w)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center space-x-2">
+                <label className="text-sm font-medium text-gray-700">View:</label>
+                <select
+                  value={stewardFilter}
+                  onChange={(e) => setStewardFilter(e.target.value as "all" | PresidencyStewardKey)}
+                  className={`${inputClass} w-auto`}
+                  aria-label="Filter by presidency stewardship"
+                >
+                  {stewardFilterOptions.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
             </div>
             <Button onClick={() => setShowSubmitReport(true)}><Plus className="h-4 w-4 mr-2" />Submit Report</Button>
           </div>
+
+          <p className="text-xs text-gray-500">
+            Reports are grouped by presidency stewardship so each president can quickly find the high councilors he oversees.
+            Everyone in the presidency can still read every report.
+          </p>
 
           {/* Submit report form */}
           {showSubmitReport && (
@@ -333,42 +379,75 @@ export default function HCCommunicationPage() {
             </Card>
           )}
 
-          {/* Not yet reported */}
-          {notReported.length > 0 && (
-            <div className="flex items-start space-x-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-amber-800">Not yet reported this week:</p>
-                <p className="text-sm text-amber-700">{notReported.map((m) => m.member_name).join(", ")}</p>
+          {/* Not yet reported — grouped by stewardship */}
+          {notReportedSections.some((s) => s.items.length > 0) && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                <p className="text-sm font-medium text-amber-800">Not yet reported this week</p>
+              </div>
+              <div className="space-y-1.5 pl-6">
+                {notReportedSections.map(({ group, items }) => (
+                  <p key={group.key} className="text-sm text-amber-900">
+                    <span className={`inline-block mr-2 rounded border px-1.5 py-0.5 text-[11px] font-semibold ${group.accent.chip}`}>
+                      {group.shortLabel}
+                    </span>
+                    {items.map((m) => m.member_name).join(", ")}
+                  </p>
+                ))}
               </div>
             </div>
           )}
 
-          {/* Reports for selected week */}
+          {/* Reports grouped by presidency stewardship */}
           {weekReports.length === 0 ? (
             <Card><CardContent className="py-12 text-center text-gray-500">
               No reports submitted for this week yet.
             </CardContent></Card>
+          ) : reportSections.length === 0 ? (
+            <Card><CardContent className="py-12 text-center text-gray-500">
+              No reports in this stewardship filter for this week.
+            </CardContent></Card>
           ) : (
-            weekReports.map((report) => {
+            reportSections.map(({ group, items }) => (
+              <div key={group.key} className="space-y-3">
+                <div className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 ${group.accent.headerBg}`}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${group.accent.bar}`} aria-hidden />
+                    <h3 className={`text-sm font-semibold ${group.accent.headerText}`}>{group.label}</h3>
+                  </div>
+                  <span className={`shrink-0 text-xs font-medium ${group.accent.headerText}`}>
+                    {items.length} report{items.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+                {items.map((report) => {
               const isExpanded = expandedReport === report.id
               const responses = report.responses || []
               const isResponding = respondingTo === report.id
+              const stewardKey = stewardshipKeyFromOversight(report.member?.presidency_oversight)
+              const stewardChip = getPresidencyStewardGroup(stewardKey)
 
               return (
                 <Card key={report.id} className="overflow-hidden">
+                  <div className={`flex overflow-hidden`}>
+                    <div className={`w-1.5 shrink-0 ${group.accent.bar}`} aria-hidden />
+                    <div className="min-w-0 flex-1">
                   {/* Report header */}
                   <div
                     className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50"
                     onClick={() => setExpandedReport(isExpanded ? null : report.id)}
                   >
-                    <div className="flex items-center space-x-3">
-                      {isExpanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
-                      <div>
-                        <div className="font-semibold text-gray-900">{report.member?.member_name || "Unknown"}</div>
+                    <div className="flex items-center space-x-3 min-w-0">
+                      {isExpanded ? <ChevronUp className="h-4 w-4 text-gray-400 shrink-0" /> : <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />}
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-gray-900">{report.member?.member_name || "Unknown"}</span>
+                          <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${stewardChip.accent.chip}`}>
+                            {stewardChip.shortLabel}
+                          </span>
+                        </div>
                         <div className="text-xs text-gray-500">
                           {[
-                            report.member?.presidency_oversight,
                             report.member?.program_assignment,
                             report.member?.stewardships,
                             report.member?.assigned_wards,
@@ -377,7 +456,7 @@ export default function HCCommunicationPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2 shrink-0">
                       {responses.length > 0 && (
                         <span className="px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-700 flex items-center">
                           <MessageSquare className="h-3 w-3 mr-1" />{responses.length}
@@ -456,9 +535,13 @@ export default function HCCommunicationPage() {
                       </div>
                     </div>
                   )}
+                    </div>
+                  </div>
                 </Card>
               )
-            })
+                })}
+              </div>
+            ))
           )}
         </div>
       )}
