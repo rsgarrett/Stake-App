@@ -31,11 +31,11 @@ export function BishopRecommendShareCard() {
         <div className="min-w-0 space-y-1">
           <p className="text-sm font-semibold text-sky-950 flex items-center gap-1.5">
             <Link2 className="h-4 w-4 shrink-0" aria-hidden />
-            Bishop / ward recommendations
+            Calling submission form
           </p>
           <p className="text-xs text-sky-900/80">
-            Share the public link with bishops — they do not need an app seat. Submissions appear as
-            pending names in this tracker for presidency discussion.
+            Share the link with others — they do not need an app seat. Submissions appear as pending
+            names in this tracker for presidency discussion.
           </p>
         </div>
         <div className="flex flex-wrap gap-2 shrink-0">
