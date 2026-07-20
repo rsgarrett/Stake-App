@@ -75,10 +75,15 @@ export async function updateSession(request: NextRequest) {
   if (
     request.nextUrl.pathname.startsWith("/login") ||
     request.nextUrl.pathname.startsWith("/register") ||
-    request.nextUrl.pathname.startsWith("/auth/callback")
+    request.nextUrl.pathname.startsWith("/auth/callback") ||
+    request.nextUrl.pathname.startsWith("/recommend-calling")
   ) {
     // If user is already logged in and trying to access login/register, redirect to dashboard
-    if (user) {
+    if (
+      user &&
+      (request.nextUrl.pathname.startsWith("/login") ||
+        request.nextUrl.pathname.startsWith("/register"))
+    ) {
       const url = request.nextUrl.clone()
       url.pathname = "/modules/leadership"
       return NextResponse.redirect(url)

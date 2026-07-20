@@ -9,6 +9,7 @@ import { clearAgendaReturn, getAgendaReturn } from "@/lib/navigation/agenda-retu
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
 import { Plus, Edit, CheckCircle2, ChevronRight, ChevronLeft, Search, Trash2, ArrowLeft } from "lucide-react"
+import { BishopRecommendShareCard } from "@/components/leadership/bishop-recommend-share-card"
 
 interface Calling {
   id: string
@@ -187,6 +188,10 @@ export default function LeadershipPage() {
         <Link href={`/modules/leadership/recommend${returnQuery}`} className={`${buttonVariants()} shrink-0 self-start sm:self-auto`}>
           <Plus className="h-4 w-4 mr-2" />Submit Name
         </Link>
+      </div>
+
+      <div className="mb-5">
+        <BishopRecommendShareCard />
       </div>
 
       <div className="mb-5 relative max-w-sm">

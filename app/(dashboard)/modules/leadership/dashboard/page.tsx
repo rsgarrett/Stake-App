@@ -20,6 +20,7 @@ import {
   FileText,
   ListFilter,
 } from "lucide-react"
+import { BishopRecommendShareCard } from "@/components/leadership/bishop-recommend-share-card"
 
 interface PipelineStats {
   submitted: number
@@ -121,6 +122,10 @@ export default function CallingsDashboard() {
         <Link href="/modules/leadership/tracker" className={buttonVariants({ variant: "outline", className: "h-auto py-4 justify-start" })}>
           <ListFilter className="h-5 w-5 mr-2" />Full Tracker
         </Link>
+      </div>
+
+      <div className="mb-6">
+        <BishopRecommendShareCard />
       </div>
 
       {/* Pipeline Stages */}

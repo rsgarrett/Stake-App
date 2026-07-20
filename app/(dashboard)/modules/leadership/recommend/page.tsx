@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
+import { BishopRecommendShareCard } from "@/components/leadership/bishop-recommend-share-card"
 
 const ORGANIZATIONS = [
   "Stake Presidency",
@@ -174,6 +175,10 @@ export default function SubmitNamePage() {
         <p className="mt-1 text-gray-600">
           Submit a name for consideration. It will appear in the pipeline for stake presidency review.
         </p>
+      </div>
+
+      <div className="mb-6 max-w-2xl">
+        <BishopRecommendShareCard />
       </div>
 
       <Card className="max-w-2xl">
