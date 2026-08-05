@@ -674,7 +674,7 @@ export default function ConferenceDetailPage() {
   const HANDBOOK_URL = "https://www.churchofjesuschrist.org/study/manual/general-handbook/29-meetings-in-the-church?lang=eng"
 
   return (
-    <div className="conference-detail-root mx-auto max-w-6xl min-w-0 px-3 py-4 sm:px-6 sm:py-6">
+    <div className="conference-detail-root mx-auto w-full max-w-6xl min-w-0 px-3 py-4 sm:px-6 sm:py-6">
       <div className="conference-detail-print-chrome">
       <div className="mb-4 flex flex-col gap-3 flex-wrap sm:flex-row sm:items-start sm:justify-between">
         <Link href="/modules/conferences" className="text-sm text-indigo-600 hover:text-indigo-800 flex shrink-0 items-center">

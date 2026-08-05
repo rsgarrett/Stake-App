@@ -265,13 +265,12 @@ export default function LeadershipPage() {
                                 Released: {c.replaces_person_name}
                               </p>
                             ) : (
-                              <p className="text-xs text-amber-600 truncate">
-                                Release pending: {c.replaces_person_name}
-                                {" · "}
+                              <p className="flex min-w-0 items-center gap-1 text-xs text-amber-600">
+                                <span className="truncate">Release pending: {c.replaces_person_name}</span>
                                 <button
                                   type="button"
                                   onClick={() => markReleaseVerified(c)}
-                                  className="font-medium underline underline-offset-2 hover:text-amber-800"
+                                  className="shrink-0 font-medium underline underline-offset-2 hover:text-amber-800"
                                   title="Record that this person has been released"
                                 >
                                   Mark released

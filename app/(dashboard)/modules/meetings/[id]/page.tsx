@@ -821,7 +821,14 @@ export default function MeetingDetailPage() {
     const titlesToFill = opts.force
       ? rotating.map((it) => it.title)
       : rotating.filter((it) => !it.assigned_to?.trim()).map((it) => it.title)
-    if (titlesToFill.length === 0 && (currentConducting || !opts.force)) return
+    const needsTopicFill =
+      usesHandbookCurriculum(meeting.meeting_type) &&
+      items.some(
+        (it) =>
+          getFieldTypeForTitle(it.title, meeting.meeting_type) === "trainer" &&
+          !(it.description ?? "").trim()
+      )
+    if (titlesToFill.length === 0 && !needsTopicFill && (currentConducting || !opts.force)) return
 
     const alreadyAssigned = opts.force
       ? []
@@ -1209,7 +1216,14 @@ export default function MeetingDetailPage() {
     if (openingsFilledForMeetingId === meetingId) return
     const rotating = agendaItems.filter((it) => isRotatingOpeningTitle(it.title))
     if (rotating.length === 0) return
-    const needsFill = rotating.some((it) => !it.assigned_to?.trim())
+    const needsFill =
+      rotating.some((it) => !it.assigned_to?.trim()) ||
+      (usesHandbookCurriculum(meeting.meeting_type) &&
+        agendaItems.some(
+          (it) =>
+            getFieldTypeForTitle(it.title, meeting.meeting_type) === "trainer" &&
+            !(it.description ?? "").trim()
+        ))
     if (!needsFill) {
       setOpeningsFilledForMeetingId(meetingId)
       return

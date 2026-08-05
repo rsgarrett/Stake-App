@@ -38,7 +38,7 @@ export default function ConferencesPage() {
   if (loading) return <div className="p-6 text-center py-12 text-gray-500">Loading...</div>
 
   return (
-    <div className="mx-auto max-w-6xl min-w-0 px-3 py-4 sm:p-6">
+    <div className="mx-auto w-full max-w-6xl min-w-0 px-3 py-4 sm:p-6">
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold text-gray-900 break-words sm:text-3xl">
