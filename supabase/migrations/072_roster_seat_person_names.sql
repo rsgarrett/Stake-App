@@ -12,10 +12,10 @@ COMMENT ON COLUMN public.stake_permission_roster.person_name IS
 UPDATE public.stake_permission_roster r
 SET person_name = v.name
 FROM (VALUES
-  ('first_counselor',                   'President Chandler'),
-  ('second_counselor',                  'President Williams'),
+  ('first_counselor',                   'Doug Chandler'),
+  ('second_counselor',                  'Christopher Williams'),
   ('stake_clerk',                       'Nathan Lee'),
-  ('assistant_stake_clerk',             'Jeffery Bunderson'),
+  ('assistant_stake_clerk',             'Jeff Bunderson'),
   ('executive_secretary',               'Brad Lester'),
   ('assistant_executive_secretary_1',   'Chriss Rentmeister'),
   ('assistant_executive_secretary_2',   'Darin Winegar')
