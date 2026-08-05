@@ -113,6 +113,22 @@ async function syncSeatHolderNames(
   return notes
 }
 
+/** Marks a person released on the High Council communications roster (no-op if not on it). */
+async function releaseFromHcRoster(
+  admin: ReturnType<typeof createAdminClient>,
+  stakeId: string,
+  personName: string
+): Promise<string[]> {
+  const { data: released } = await admin
+    .from("high_council_members")
+    .update({ status: "released", released_date: new Date().toISOString().slice(0, 10) })
+    .eq("stake_id", stakeId)
+    .eq("status", "active")
+    .ilike("member_name", personName.trim())
+    .select("id")
+  return released?.length ? [`Marked '${personName}' released on the HC roster.`] : []
+}
+
 /** Keeps the High Council communications roster in step with completed HC callings/releases. */
 async function syncHighCouncilRoster(
   admin: ReturnType<typeof createAdminClient>,
@@ -124,14 +140,7 @@ async function syncHighCouncilRoster(
   const today = new Date().toISOString().slice(0, 10)
 
   if (replacesPersonName) {
-    const { data: released } = await admin
-      .from("high_council_members")
-      .update({ status: "released", released_date: today })
-      .eq("stake_id", stakeId)
-      .eq("status", "active")
-      .ilike("member_name", replacesPersonName.trim())
-      .select("id")
-    if (released?.length) notes.push(`Marked '${replacesPersonName}' released on the HC roster.`)
+    notes.push(...(await releaseFromHcRoster(admin, stakeId, replacesPersonName)))
   }
 
   const { data: existing } = await admin
@@ -179,7 +188,7 @@ export async function POST(req: NextRequest) {
 
     const { data: calling, error: callingError } = await admin
       .from("callings")
-      .select("person_name, calling_name, replaces_person_name, ward, stake_id")
+      .select("type, person_name, calling_name, replaces_person_name, ward, stake_id")
       .eq("id", callingId)
       .single()
 
@@ -194,6 +203,24 @@ export async function POST(req: NextRequest) {
     let officeSlug = officeSlugForCallingName(calling.calling_name)
 
     const { rows: rosterRows, personNamesAvailable } = await loadRosterSeats(admin, stakeId)
+
+    // Standalone release (no replacement calling): clear the person's seat,
+    // HC roster entry, and login — they are not a new holder of anything.
+    if (calling.type === "Release") {
+      if (personNamesAvailable) {
+        const cleared = await syncSeatHolderNames(admin, rosterRows, null, "", calling.person_name)
+        results.push(
+          ...(cleared.length ? cleared : [`'${calling.person_name}' did not hold a permission seat.`])
+        )
+      } else {
+        results.push(
+          "Seat holder names could not be updated — run migration 072_roster_seat_person_names.sql."
+        )
+      }
+      results.push(...(await releaseFromHcRoster(admin, stakeId, calling.person_name)))
+      results.push(await revokeReleasedPerson(admin, stakeId, calling.person_name))
+      return NextResponse.json({ success: true, results, release: true })
+    }
 
     if (isHighCouncilCalling(calling.calling_name)) {
       officeSlug = pickHighCouncilSeatSlug(rosterRows, calling.replaces_person_name)
