@@ -62,6 +62,8 @@ export default function HCCommunicationPage() {
   const [expandedReport, setExpandedReport] = useState<string | null>(null)
   /** Filter reports by stewardship steward; "all" shows every group. */
   const [stewardFilter, setStewardFilter] = useState<"all" | PresidencyStewardKey>("all")
+  /** "all" = weekly view; a member id = every report from that person, chronological. */
+  const [personFilter, setPersonFilter] = useState<string>("all")
 
   // Roster form
   const [showAddMember, setShowAddMember] = useState(false)
@@ -261,6 +263,25 @@ export default function HCCommunicationPage() {
     { value: "shared", label: "Shared" },
   ]
 
+  /** Everyone who has ever submitted a report (active roster order, released last). */
+  const memberIdsWithReports = new Set(reports.map((r) => r.member_id))
+  const reportingMembers = [
+    ...activeMembers.filter((m) => memberIdsWithReports.has(m.id)),
+    ...releasedMembers.filter((m) => memberIdsWithReports.has(m.id)),
+  ]
+
+  const selectedPerson = personFilter === "all" ? null : members.find((m) => m.id === personFilter) ?? null
+  /** All reports from the selected person, oldest week first. */
+  const personReports = selectedPerson
+    ? [...reports]
+        .filter((r) => r.member_id === selectedPerson.id)
+        .sort(
+          (a, b) =>
+            (a.reporting_week ?? "").localeCompare(b.reporting_week ?? "") ||
+            (a.submitted_at ?? "").localeCompare(b.submitted_at ?? "")
+        )
+    : []
+
   // Generate week options (last 8 weeks + next 2)
   const weekOptions: string[] = []
   for (let i = -2; i <= 8; i++) {
@@ -269,6 +290,135 @@ export default function HCCommunicationPage() {
     const diff = day === 0 ? 0 : 7 - day
     d.setDate(d.getDate() + diff - i * 7)
     weekOptions.push(d.toISOString().split("T")[0])
+  }
+
+  /** One expandable report card — used by both the weekly view and the per-person history. */
+  const renderReportCard = (
+    report: (typeof reports)[number],
+    opts: { showWeek?: boolean } = {}
+  ) => {
+    const isExpanded = expandedReport === report.id
+    const responses = report.responses || []
+    const isResponding = respondingTo === report.id
+    const stewardKey = stewardshipKeyFromOversight(report.member?.presidency_oversight)
+    const stewardChip = getPresidencyStewardGroup(stewardKey)
+
+    return (
+      <Card key={report.id} className="overflow-hidden">
+        <div className={`flex overflow-hidden`}>
+          <div className={`w-1.5 shrink-0 ${stewardChip.accent.bar}`} aria-hidden />
+          <div className="min-w-0 flex-1">
+            {/* Report header */}
+            <div
+              className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50"
+              onClick={() => setExpandedReport(isExpanded ? null : report.id)}
+            >
+              <div className="flex items-center space-x-3 min-w-0">
+                {isExpanded ? <ChevronUp className="h-4 w-4 text-gray-400 shrink-0" /> : <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />}
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold text-gray-900">
+                      {opts.showWeek
+                        ? `Week of ${formatWeek(report.reporting_week)}`
+                        : report.member?.member_name || "Unknown"}
+                    </span>
+                    <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${stewardChip.accent.chip}`}>
+                      {stewardChip.shortLabel}
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {[
+                      report.member?.program_assignment,
+                      report.member?.stewardships,
+                      report.member?.assigned_wards,
+                    ].filter(Boolean).join(" · ") || ""}
+                    {report.meetings_attended && <span> &middot; Attended: {report.meetings_attended}</span>}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2 shrink-0">
+                {responses.length > 0 && (
+                  <span className="px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-700 flex items-center">
+                    <MessageSquare className="h-3 w-3 mr-1" />{responses.length}
+                  </span>
+                )}
+                <span className="text-xs text-gray-400">
+                  {new Date(report.submitted_at).toLocaleDateString()}
+                </span>
+              </div>
+            </div>
+
+            {/* Expanded report content */}
+            {isExpanded && (
+              <div className="border-t">
+                {/* Stewardship report */}
+                <div className="px-4 py-3">
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Stewardship Report</h4>
+                  <p className="text-sm text-gray-800 whitespace-pre-wrap">{report.stewardship_report}</p>
+                </div>
+
+                {/* Follow-up needed */}
+                {report.followup_needed && (
+                  <div className="px-4 py-3 bg-amber-50 border-t border-b">
+                    <h4 className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">Follow-up Needed</h4>
+                    <p className="text-sm text-amber-900 whitespace-pre-wrap">{report.followup_needed}</p>
+                  </div>
+                )}
+
+                {/* Responses thread */}
+                {responses.length > 0 && (
+                  <div className="px-4 py-3 bg-indigo-50/50 border-t">
+                    <h4 className="text-xs font-semibold text-indigo-700 uppercase tracking-wide mb-2">Responses</h4>
+                    <div className="space-y-2">
+                      {responses.map((resp) => (
+                        <div key={resp.id} className="flex items-start justify-between bg-white p-3 rounded-lg border border-indigo-100">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2 mb-1">
+                              <span className="text-xs font-medium text-indigo-700">{resp.responder_name || "Presidency"}</span>
+                              <span className="text-xs text-gray-400">{new Date(resp.created_at).toLocaleDateString()}</span>
+                            </div>
+                            <p className="text-sm text-gray-800 whitespace-pre-wrap">{resp.response_text}</p>
+                          </div>
+                          <button onClick={() => deleteResponse(resp.id)} className="text-red-300 hover:text-red-500 ml-2 p-1">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Response form */}
+                <div className="px-4 py-3 border-t bg-gray-50">
+                  {isResponding ? (
+                    <div className="space-y-2">
+                      <textarea
+                        value={responseText}
+                        onChange={(e) => setResponseText(e.target.value)}
+                        className={inputClass}
+                        rows={3}
+                        placeholder="Type your response..."
+                        autoFocus
+                      />
+                      <div className="flex space-x-2">
+                        <Button size="sm" onClick={() => submitResponse(report.id)} disabled={!responseText.trim()}>
+                          <Send className="h-3.5 w-3.5 mr-1" />Send Response
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => { setRespondingTo(null); setResponseText("") }}>Cancel</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Button size="sm" variant="outline" onClick={() => setRespondingTo(report.id)}>
+                      <MessageSquare className="h-3.5 w-3.5 mr-1" />Respond
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </Card>
+    )
   }
 
   if (loading) return <div className="p-4 sm:p-6"><div className="text-center py-12">Loading...</div></div>
@@ -312,35 +462,61 @@ export default function HCCommunicationPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center space-x-2">
-                <label className="text-sm font-medium text-gray-700">Reporting Week:</label>
-                <select value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)} className={`${inputClass} w-auto`}>
-                  {weekOptions.map((w) => (
-                    <option key={w} value={w}>
-                      {englishMenuTitleCase("Week of")} {formatWeek(w)}
+                <label className="text-sm font-medium text-gray-700">High Councilor:</label>
+                <select
+                  value={personFilter}
+                  onChange={(e) => setPersonFilter(e.target.value)}
+                  className={`${inputClass} w-auto`}
+                  aria-label="View all reports from one high councilor"
+                >
+                  <option value="all">{englishMenuTitleCase("All — weekly view")}</option>
+                  {reportingMembers.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.member_name}{m.status === "released" ? " (released)" : ""}
                     </option>
                   ))}
                 </select>
               </div>
-              <div className="flex items-center space-x-2">
-                <label className="text-sm font-medium text-gray-700">View:</label>
-                <select
-                  value={stewardFilter}
-                  onChange={(e) => setStewardFilter(e.target.value as "all" | PresidencyStewardKey)}
-                  className={`${inputClass} w-auto`}
-                  aria-label="Filter by presidency stewardship"
-                >
-                  {stewardFilterOptions.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              </div>
+              {personFilter === "all" && (
+                <>
+                  <div className="flex items-center space-x-2">
+                    <label className="text-sm font-medium text-gray-700">Reporting Week:</label>
+                    <select value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)} className={`${inputClass} w-auto`}>
+                      {weekOptions.map((w) => (
+                        <option key={w} value={w}>
+                          {englishMenuTitleCase("Week of")} {formatWeek(w)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <label className="text-sm font-medium text-gray-700">View:</label>
+                    <select
+                      value={stewardFilter}
+                      onChange={(e) => setStewardFilter(e.target.value as "all" | PresidencyStewardKey)}
+                      className={`${inputClass} w-auto`}
+                      aria-label="Filter by presidency stewardship"
+                    >
+                      {stewardFilterOptions.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
             </div>
             <Button onClick={() => setShowSubmitReport(true)}><Plus className="h-4 w-4 mr-2" />Submit Report</Button>
           </div>
 
           <p className="text-xs text-gray-500">
-            Reports are grouped by presidency stewardship so each president can quickly find the high councilors he oversees.
-            Everyone in the presidency can still read every report.
+            {personFilter === "all" ? (
+              <>
+                Reports are grouped by presidency stewardship so each president can quickly find the high councilors he oversees.
+                Everyone in the presidency can still read every report. Pick a high councilor above to see their full report history.
+              </>
+            ) : (
+              <>Showing every report from one high councilor, oldest to newest. Choose “All — weekly view” to return to the week-by-week view.</>
+            )}
           </p>
 
           {/* Submit report form */}
@@ -380,7 +556,7 @@ export default function HCCommunicationPage() {
           )}
 
           {/* Not yet reported — grouped by stewardship */}
-          {notReportedSections.some((s) => s.items.length > 0) && (
+          {personFilter === "all" && notReportedSections.some((s) => s.items.length > 0) && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
               <div className="flex items-start gap-2">
                 <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
@@ -399,149 +575,64 @@ export default function HCCommunicationPage() {
             </div>
           )}
 
+          {/* Per-person history: every report from one high councilor, oldest first */}
+          {personFilter !== "all" && selectedPerson && (
+            <div className="space-y-3">
+              {(() => {
+                const stewardKey = stewardshipKeyFromOversight(selectedPerson.presidency_oversight)
+                const steward = getPresidencyStewardGroup(stewardKey)
+                return (
+                  <div className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 ${steward.accent.headerBg}`}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${steward.accent.bar}`} aria-hidden />
+                      <h3 className={`text-sm font-semibold ${steward.accent.headerText}`}>
+                        {selectedPerson.member_name}
+                        {selectedPerson.status === "released" ? " (released)" : ""}
+                        {" — all reports"}
+                      </h3>
+                    </div>
+                    <span className={`shrink-0 text-xs font-medium ${steward.accent.headerText}`}>
+                      {personReports.length} report{personReports.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                )
+              })()}
+              {personReports.length === 0 ? (
+                <Card><CardContent className="py-12 text-center text-gray-500">
+                  No reports from {selectedPerson.member_name} yet.
+                </CardContent></Card>
+              ) : (
+                personReports.map((report) => renderReportCard(report, { showWeek: true }))
+              )}
+            </div>
+          )}
+
           {/* Reports grouped by presidency stewardship */}
-          {weekReports.length === 0 ? (
-            <Card><CardContent className="py-12 text-center text-gray-500">
-              No reports submitted for this week yet.
-            </CardContent></Card>
-          ) : reportSections.length === 0 ? (
-            <Card><CardContent className="py-12 text-center text-gray-500">
-              No reports in this stewardship filter for this week.
-            </CardContent></Card>
-          ) : (
-            reportSections.map(({ group, items }) => (
-              <div key={group.key} className="space-y-3">
-                <div className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 ${group.accent.headerBg}`}>
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${group.accent.bar}`} aria-hidden />
-                    <h3 className={`text-sm font-semibold ${group.accent.headerText}`}>{group.label}</h3>
+          {personFilter === "all" && (
+            weekReports.length === 0 ? (
+              <Card><CardContent className="py-12 text-center text-gray-500">
+                No reports submitted for this week yet.
+              </CardContent></Card>
+            ) : reportSections.length === 0 ? (
+              <Card><CardContent className="py-12 text-center text-gray-500">
+                No reports in this stewardship filter for this week.
+              </CardContent></Card>
+            ) : (
+              reportSections.map(({ group, items }) => (
+                <div key={group.key} className="space-y-3">
+                  <div className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 ${group.accent.headerBg}`}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${group.accent.bar}`} aria-hidden />
+                      <h3 className={`text-sm font-semibold ${group.accent.headerText}`}>{group.label}</h3>
+                    </div>
+                    <span className={`shrink-0 text-xs font-medium ${group.accent.headerText}`}>
+                      {items.length} report{items.length === 1 ? "" : "s"}
+                    </span>
                   </div>
-                  <span className={`shrink-0 text-xs font-medium ${group.accent.headerText}`}>
-                    {items.length} report{items.length === 1 ? "" : "s"}
-                  </span>
+                  {items.map((report) => renderReportCard(report))}
                 </div>
-                {items.map((report) => {
-              const isExpanded = expandedReport === report.id
-              const responses = report.responses || []
-              const isResponding = respondingTo === report.id
-              const stewardKey = stewardshipKeyFromOversight(report.member?.presidency_oversight)
-              const stewardChip = getPresidencyStewardGroup(stewardKey)
-
-              return (
-                <Card key={report.id} className="overflow-hidden">
-                  <div className={`flex overflow-hidden`}>
-                    <div className={`w-1.5 shrink-0 ${group.accent.bar}`} aria-hidden />
-                    <div className="min-w-0 flex-1">
-                  {/* Report header */}
-                  <div
-                    className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50"
-                    onClick={() => setExpandedReport(isExpanded ? null : report.id)}
-                  >
-                    <div className="flex items-center space-x-3 min-w-0">
-                      {isExpanded ? <ChevronUp className="h-4 w-4 text-gray-400 shrink-0" /> : <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />}
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold text-gray-900">{report.member?.member_name || "Unknown"}</span>
-                          <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${stewardChip.accent.chip}`}>
-                            {stewardChip.shortLabel}
-                          </span>
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {[
-                            report.member?.program_assignment,
-                            report.member?.stewardships,
-                            report.member?.assigned_wards,
-                          ].filter(Boolean).join(" · ") || ""}
-                          {report.meetings_attended && <span> &middot; Attended: {report.meetings_attended}</span>}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2 shrink-0">
-                      {responses.length > 0 && (
-                        <span className="px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-700 flex items-center">
-                          <MessageSquare className="h-3 w-3 mr-1" />{responses.length}
-                        </span>
-                      )}
-                      <span className="text-xs text-gray-400">
-                        {new Date(report.submitted_at).toLocaleDateString()}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Expanded report content */}
-                  {isExpanded && (
-                    <div className="border-t">
-                      {/* Stewardship report */}
-                      <div className="px-4 py-3">
-                        <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Stewardship Report</h4>
-                        <p className="text-sm text-gray-800 whitespace-pre-wrap">{report.stewardship_report}</p>
-                      </div>
-
-                      {/* Follow-up needed */}
-                      {report.followup_needed && (
-                        <div className="px-4 py-3 bg-amber-50 border-t border-b">
-                          <h4 className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">Follow-up Needed</h4>
-                          <p className="text-sm text-amber-900 whitespace-pre-wrap">{report.followup_needed}</p>
-                        </div>
-                      )}
-
-                      {/* Responses thread */}
-                      {responses.length > 0 && (
-                        <div className="px-4 py-3 bg-indigo-50/50 border-t">
-                          <h4 className="text-xs font-semibold text-indigo-700 uppercase tracking-wide mb-2">Responses</h4>
-                          <div className="space-y-2">
-                            {responses.map((resp) => (
-                              <div key={resp.id} className="flex items-start justify-between bg-white p-3 rounded-lg border border-indigo-100">
-                                <div className="flex-1">
-                                  <div className="flex items-center space-x-2 mb-1">
-                                    <span className="text-xs font-medium text-indigo-700">{resp.responder_name || "Presidency"}</span>
-                                    <span className="text-xs text-gray-400">{new Date(resp.created_at).toLocaleDateString()}</span>
-                                  </div>
-                                  <p className="text-sm text-gray-800 whitespace-pre-wrap">{resp.response_text}</p>
-                                </div>
-                                <button onClick={() => deleteResponse(resp.id)} className="text-red-300 hover:text-red-500 ml-2 p-1">
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Response form */}
-                      <div className="px-4 py-3 border-t bg-gray-50">
-                        {isResponding ? (
-                          <div className="space-y-2">
-                            <textarea
-                              value={responseText}
-                              onChange={(e) => setResponseText(e.target.value)}
-                              className={inputClass}
-                              rows={3}
-                              placeholder="Type your response..."
-                              autoFocus
-                            />
-                            <div className="flex space-x-2">
-                              <Button size="sm" onClick={() => submitResponse(report.id)} disabled={!responseText.trim()}>
-                                <Send className="h-3.5 w-3.5 mr-1" />Send Response
-                              </Button>
-                              <Button size="sm" variant="outline" onClick={() => { setRespondingTo(null); setResponseText("") }}>Cancel</Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <Button size="sm" variant="outline" onClick={() => setRespondingTo(report.id)}>
-                            <MessageSquare className="h-3.5 w-3.5 mr-1" />Respond
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                    </div>
-                  </div>
-                </Card>
-              )
-                })}
-              </div>
-            ))
+              ))
+            )
           )}
         </div>
       )}
