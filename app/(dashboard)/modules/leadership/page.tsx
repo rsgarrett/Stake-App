@@ -96,6 +96,13 @@ export default function LeadershipPage() {
     return true
   }
 
+  /** Record that the person being replaced has been released from the calling. */
+  const markReleaseVerified = async (c: Calling) => {
+    if (!c.replaces_person_name) return
+    if (!confirm(`Confirm ${c.replaces_person_name} has been released from ${c.calling_name}?`)) return
+    await updateCalling(c.id, { previous_release_verified: true })
+  }
+
   const advance = async (c: Calling) => {
     const s = getStage(c)
     if (s >= 5) return
@@ -103,10 +110,26 @@ export default function LeadershipPage() {
     const updates: Record<string, unknown> = [
       { presidency_approval: true },
       { bishop_approval: true },
-      { high_council_approval: true, previous_release_verified: true },
+      { high_council_approval: true },
       { sustained_date: today },
       { set_apart_date: today, status: "active" },
     ][s]
+
+    // Release-before-calling guard: when this calling replaces someone, their
+    // release must be recorded before the new person is sustained or set
+    // apart, so two people never hold the same calling (or permission seat).
+    if ((s === 3 || s === 4) && c.replaces_person_name && !c.previous_release_verified) {
+      const ok = confirm(
+        `${c.replaces_person_name} has not been recorded as released yet.\n\n` +
+          `The release should happen before ${c.person_name} is ${s === 3 ? "sustained" : "set apart"}, ` +
+          `so two people never hold the same calling or seat.\n\n` +
+          `OK — the release has happened; record it and continue.\n` +
+          `Cancel — hold this calling until the release is completed.`
+      )
+      if (!ok) return
+      updates.previous_release_verified = true
+    }
+
     const success = await updateCalling(c.id, updates)
 
     if (success && s === 4) {
@@ -236,7 +259,25 @@ export default function LeadershipPage() {
                           <p className="text-sm font-medium text-gray-900 truncate">{c.person_name}</p>
                           <p className="text-xs text-gray-500 truncate">{c.calling_name}{c.ward ? ` · ${c.ward}` : ""}</p>
                           {c.replaces_person_name && (
-                            <p className="text-xs text-orange-500 truncate">Replaces {c.replaces_person_name}</p>
+                            c.previous_release_verified ? (
+                              <p className="text-xs text-green-600 truncate flex items-center gap-1">
+                                <CheckCircle2 className="h-3 w-3 shrink-0" aria-hidden />
+                                Released: {c.replaces_person_name}
+                              </p>
+                            ) : (
+                              <p className="text-xs text-amber-600 truncate">
+                                Release pending: {c.replaces_person_name}
+                                {" · "}
+                                <button
+                                  type="button"
+                                  onClick={() => markReleaseVerified(c)}
+                                  className="font-medium underline underline-offset-2 hover:text-amber-800"
+                                  title="Record that this person has been released"
+                                >
+                                  Mark released
+                                </button>
+                              </p>
+                            )
                           )}
                         </div>
 
