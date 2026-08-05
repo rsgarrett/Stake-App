@@ -27,6 +27,13 @@ import {
   rotationPoolForMeeting,
   type RotationHistoryEntry,
 } from "@/lib/meetings/opening-rotation"
+import {
+  findCurriculumSegment,
+  nextCurriculumSegment,
+  segmentHandbookUrl,
+  segmentTopicText,
+  usesHandbookCurriculum,
+} from "@/lib/meetings/handbook-training-curriculum"
 import { setAgendaReturn } from "@/lib/navigation/agenda-return"
 
 interface Meeting {
@@ -738,6 +745,53 @@ export default function MeetingDetailPage() {
     if (name) apply(name)
   }
 
+  /**
+   * Most recent handbook-training topic used in a prior meeting of this type,
+   * so the section rotation picks up where the council left off.
+   */
+  const loadLastHandbookTopic = async (): Promise<string | null> => {
+    if (!meeting) return null
+    const { data: priors } = await supabase
+      .from("meetings")
+      .select("id, scheduled_date")
+      .eq("meeting_type", meeting.meeting_type)
+      .lt("scheduled_date", meeting.scheduled_date)
+      .order("scheduled_date", { ascending: false })
+      .limit(24)
+    if (!priors?.length) return null
+    const ids = priors.map((p) => p.id as string)
+    const { data: priorItems } = await supabase
+      .from("meeting_agendas")
+      .select("meeting_id, title, description")
+      .in("meeting_id", ids)
+    const orderById = new Map(priors.map((p, i) => [p.id as string, i]))
+    let best: { order: number; topic: string } | null = null
+    for (const item of priorItems ?? []) {
+      if (getFieldTypeForTitle(item.title ?? "", meeting.meeting_type) !== "trainer") continue
+      const topic = (item.description as string | null)?.trim()
+      if (!topic || !findCurriculumSegment(topic)) continue
+      const order = orderById.get(item.meeting_id as string) ?? Number.MAX_SAFE_INTEGER
+      if (!best || order < best.order) best = { order, topic }
+    }
+    return best?.topic ?? null
+  }
+
+  /**
+   * Advance the handbook-training topic. High council / stake council agendas
+   * follow the stake's handbook curriculum (chapters 1–4, 6, 17, 29–31 broken
+   * into 5–7 minute segments); other meetings keep the simple section bump.
+   */
+  const rotateHandbookTopic = async (item: AgendaItem) => {
+    const current = ((getEditValue(item, "description") as string) || "").trim()
+    if (usesHandbookCurriculum(meeting?.meeting_type)) {
+      const base = current || (await loadLastHandbookTopic()) || ""
+      const seg = nextCurriculumSegment(base)
+      setEditField(item.id, "description", segmentTopicText(seg))
+      return
+    }
+    setEditField(item.id, "description", nextHandbookTopic(current))
+  }
+
   /** Conducting also rotates fairly through the same pool. */
   const rotateConducting = async () => {
     if (!meeting) return
@@ -796,6 +850,24 @@ export default function MeetingDetailPage() {
       if (pick) {
         setConducting(pick)
         await supabase.from("meetings").update({ conducting: pick }).eq("id", meetingId)
+      }
+    }
+
+    // High council / stake council agendas also rotate the handbook-training
+    // topic through the stake's curriculum (next section after the last one taught).
+    if (usesHandbookCurriculum(meeting.meeting_type)) {
+      const trainerItems = items.filter(
+        (it) => getFieldTypeForTitle(it.title, meeting.meeting_type) === "trainer"
+      )
+      for (const trainerItem of trainerItems) {
+        const currentTopic = (trainerItem.description ?? "").trim()
+        if (currentTopic && !opts.force) continue
+        const base = currentTopic || (await loadLastHandbookTopic()) || ""
+        const seg = nextCurriculumSegment(base)
+        await supabase
+          .from("meeting_agendas")
+          .update({ description: segmentTopicText(seg) })
+          .eq("id", trainerItem.id)
       }
     }
     await loadAgenda()
@@ -1420,7 +1492,10 @@ export default function MeetingDetailPage() {
           </div>
         )
 
-      case "trainer":
+      case "trainer": {
+        const onCurriculum = usesHandbookCurriculum(meeting?.meeting_type)
+        const topicValue = getEditValue(item, "description") as string
+        const topicSegment = onCurriculum ? findCurriculumSegment(topicValue) : null
         return (
           <div className="space-y-1.5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1438,21 +1513,23 @@ export default function MeetingDetailPage() {
               <div className="flex items-center gap-2">
                 <input
                   type="text"
-                  placeholder="Section / topic (e.g. 1.3)"
-                  value={getEditValue(item, "description") as string}
+                  placeholder={
+                    onCurriculum
+                      ? "Handbook section (rotates through the training plan)"
+                      : "Section / topic (e.g. 1.3)"
+                  }
+                  value={topicValue}
                   onChange={(e) => setEditField(item.id, "description", e.target.value)}
                   className={`${inputClass} text-sm py-1.5`}
                 />
                 <button
                   type="button"
-                  onClick={() =>
-                    setEditField(
-                      item.id,
-                      "description",
-                      nextHandbookTopic(getEditValue(item, "description") as string)
-                    )
+                  onClick={() => void rotateHandbookTopic(item)}
+                  title={
+                    onCurriculum
+                      ? "Advance to the next section in the handbook training plan (chapters 1–4, 6, 17, 29–31)"
+                      : "Advance to the next handbook section number"
                   }
-                  title="Advance to the next handbook section number"
                   className="shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-md border border-gray-200 text-gray-400 hover:text-indigo-600 hover:border-indigo-300 transition-colors"
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
@@ -1460,15 +1537,19 @@ export default function MeetingDetailPage() {
               </div>
             </div>
             <a
-              href={GENERAL_HANDBOOK_URL}
+              href={topicSegment ? segmentHandbookUrl(topicSegment) : GENERAL_HANDBOOK_URL}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800"
             >
-              Open the General Handbook <ExternalLink className="h-3 w-3" />
+              {topicSegment
+                ? `Open Handbook chapter ${topicSegment.chapter}: ${topicSegment.chapterTitle}`
+                : "Open the General Handbook"}{" "}
+              <ExternalLink className="h-3 w-3" />
             </a>
           </div>
         )
+      }
 
       case "calendar":
         return renderCalendarRows(item)
@@ -2076,9 +2157,13 @@ export default function MeetingDetailPage() {
                       size="sm"
                       variant="outline"
                       onClick={() => {
+                        const topicNote = usesHandbookCurriculum(meeting?.meeting_type)
+                          ? " The handbook training topic will also advance to the next section in the training plan."
+                          : ""
                         if (
                           !confirm(
-                            "Reassign opening prayer, handbook training, closing prayer, and conducting using fair rotation (least recently assigned)?"
+                            "Reassign opening prayer, handbook training, closing prayer, and conducting using fair rotation (least recently assigned)?" +
+                              topicNote
                           )
                         ) {
                           return
