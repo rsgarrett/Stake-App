@@ -281,6 +281,22 @@ type MeetingAgendaListRow = {
   duration_minutes?: number | null
 }
 
+/**
+ * Compact calendar-chip label for Sunday ward visits / teaching assignments:
+ * the agenda rows hold "President Garrett — 18th"-style assignments, so the
+ * chip can show who is going where without opening the meeting. Titles are
+ * shortened ("President " dropped) to fit the small chip.
+ */
+function assignmentChipLabel(items: MeetingAgendaListRow[] | undefined): string | null {
+  if (!items?.length) return null
+  const parts = [...items]
+    .sort((a, b) => a.item_order - b.item_order)
+    .map((it) => (it.title ?? "").replace(/^(president|pres\.?)\s+/i, "").trim())
+    .filter(Boolean)
+  if (parts.length === 0) return null
+  return parts.join(" · ")
+}
+
 /** Start time for each agenda row: meeting start, then +duration for prior rows when set. */
 function presidencyAgendaStartTimes(scheduledIso: string, items: MeetingAgendaListRow[]): Date[] {
   const sorted = [...items].sort((a, b) => a.item_order - b.item_order)
@@ -879,17 +895,25 @@ export default function MeetingsPage() {
 
   const meetingCalendarEvents: CalendarEvent[] = useMemo(
     () =>
-      meetingsForCalendar.map((meeting) => ({
-        id: meeting.id,
-        title: meeting.title,
-        start_date: meeting.scheduled_date,
-        end_date: meeting.end_date,
-        meeting_type: meeting.meeting_type,
-        location: meeting.location,
-        color: meeting.color || "#3b82f6",
-        calendarRecordType: "meeting" as const,
-      })),
-    [meetingsForCalendar]
+      meetingsForCalendar.map((meeting) => {
+        // Sunday ward visits / teaching: show who is attending where right on
+        // the chip instead of the generic "Sunday Ward Visits" title.
+        const chipTitle =
+          meeting.meeting_type === "ward_visit" || meeting.meeting_type === "teaching"
+            ? assignmentChipLabel(agendaItems[meeting.id]) ?? meeting.title
+            : meeting.title
+        return {
+          id: meeting.id,
+          title: chipTitle,
+          start_date: meeting.scheduled_date,
+          end_date: meeting.end_date,
+          meeting_type: meeting.meeting_type,
+          location: meeting.location,
+          color: meeting.color || "#3b82f6",
+          calendarRecordType: "meeting" as const,
+        }
+      }),
+    [meetingsForCalendar, agendaItems]
   )
 
   const conferenceCalendarEvents: CalendarEvent[] = useMemo(
