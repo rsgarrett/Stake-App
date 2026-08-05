@@ -263,18 +263,41 @@ export default function HCCommunicationPage() {
     { value: "shared", label: "Shared" },
   ]
 
-  /** Everyone who has ever submitted a report (active roster order, released last). */
+  /** Released members whose seat was taken by a successor — their report history
+   *  lives under the successor's name (succession chain from migration 073). */
+  const succeededMemberIds = new Set(
+    members.map((m) => m.replaced_member_id).filter((id): id is string => Boolean(id))
+  )
+
+  /** Everyone who has ever submitted a report (active roster order, released last).
+   *  Released members with a successor are folded into the successor's history. */
   const memberIdsWithReports = new Set(reports.map((r) => r.member_id))
   const reportingMembers = [
     ...activeMembers.filter((m) => memberIdsWithReports.has(m.id)),
-    ...releasedMembers.filter((m) => memberIdsWithReports.has(m.id)),
+    ...releasedMembers.filter((m) => memberIdsWithReports.has(m.id) && !succeededMemberIds.has(m.id)),
   ]
 
   const selectedPerson = personFilter === "all" ? null : members.find((m) => m.id === personFilter) ?? null
-  /** All reports from the selected person, oldest week first. */
+
+  /** The selected member plus every predecessor whose seat they inherited. */
+  const personChain: HighCouncilMember[] = []
+  if (selectedPerson) {
+    const byId = new Map(members.map((m) => [m.id, m]))
+    const seen = new Set<string>()
+    let current: HighCouncilMember | undefined = selectedPerson
+    while (current && !seen.has(current.id)) {
+      personChain.push(current)
+      seen.add(current.id)
+      current = current.replaced_member_id ? byId.get(current.replaced_member_id) : undefined
+    }
+  }
+  const personChainIds = new Set(personChain.map((m) => m.id))
+  const inheritedFrom = personChain.slice(1).map((m) => m.member_name)
+
+  /** All reports from the selected person's seat (them + predecessors), oldest week first. */
   const personReports = selectedPerson
     ? [...reports]
-        .filter((r) => r.member_id === selectedPerson.id)
+        .filter((r) => personChainIds.has(r.member_id))
         .sort(
           (a, b) =>
             (a.reporting_week ?? "").localeCompare(b.reporting_week ?? "") ||
@@ -295,7 +318,7 @@ export default function HCCommunicationPage() {
   /** One expandable report card — used by both the weekly view and the per-person history. */
   const renderReportCard = (
     report: (typeof reports)[number],
-    opts: { showWeek?: boolean } = {}
+    opts: { showWeek?: boolean; authorLabel?: string } = {}
   ) => {
     const isExpanded = expandedReport === report.id
     const responses = report.responses || []
@@ -322,6 +345,11 @@ export default function HCCommunicationPage() {
                         ? `Week of ${formatWeek(report.reporting_week)}`
                         : report.member?.member_name || "Unknown"}
                     </span>
+                    {opts.authorLabel && (
+                      <span className="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">
+                        {opts.authorLabel}
+                      </span>
+                    )}
                     <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${stewardChip.accent.chip}`}>
                       {stewardChip.shortLabel}
                     </span>
@@ -582,18 +610,25 @@ export default function HCCommunicationPage() {
                 const stewardKey = stewardshipKeyFromOversight(selectedPerson.presidency_oversight)
                 const steward = getPresidencyStewardGroup(stewardKey)
                 return (
-                  <div className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 ${steward.accent.headerBg}`}>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${steward.accent.bar}`} aria-hidden />
-                      <h3 className={`text-sm font-semibold ${steward.accent.headerText}`}>
-                        {selectedPerson.member_name}
-                        {selectedPerson.status === "released" ? " (released)" : ""}
-                        {" — all reports"}
-                      </h3>
+                  <div className={`rounded-lg border px-3 py-2 ${steward.accent.headerBg}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${steward.accent.bar}`} aria-hidden />
+                        <h3 className={`text-sm font-semibold ${steward.accent.headerText}`}>
+                          {selectedPerson.member_name}
+                          {selectedPerson.status === "released" ? " (released)" : ""}
+                          {" — all reports"}
+                        </h3>
+                      </div>
+                      <span className={`shrink-0 text-xs font-medium ${steward.accent.headerText}`}>
+                        {personReports.length} report{personReports.length === 1 ? "" : "s"}
+                      </span>
                     </div>
-                    <span className={`shrink-0 text-xs font-medium ${steward.accent.headerText}`}>
-                      {personReports.length} report{personReports.length === 1 ? "" : "s"}
-                    </span>
+                    {inheritedFrom.length > 0 && (
+                      <p className={`mt-1 pl-5 text-xs ${steward.accent.headerText} opacity-80`}>
+                        Includes seat history from {inheritedFrom.join(", ")} — inherited reports are labeled with their author.
+                      </p>
+                    )}
                   </div>
                 )
               })()}
@@ -602,7 +637,15 @@ export default function HCCommunicationPage() {
                   No reports from {selectedPerson.member_name} yet.
                 </CardContent></Card>
               ) : (
-                personReports.map((report) => renderReportCard(report, { showWeek: true }))
+                personReports.map((report) =>
+                  renderReportCard(report, {
+                    showWeek: true,
+                    authorLabel:
+                      report.member_id !== selectedPerson.id
+                        ? report.member?.member_name || "Previous councilor"
+                        : undefined,
+                  })
+                )
               )}
             </div>
           )}

@@ -650,6 +650,8 @@ export interface HighCouncilMember {
   status: "active" | "released"
   called_date?: string
   released_date?: string
+  /** Released councilor this member replaced (migration 073) — links seat report history. */
+  replaced_member_id?: string | null
   display_order: number
   created_at: string
   updated_at: string

@@ -129,6 +129,10 @@ async function releaseFromHcRoster(
   return released?.length ? [`Marked '${personName}' released on the HC roster.`] : []
 }
 
+function isMissingSuccessionColumn(error: { message?: string } | null): boolean {
+  return /replaced_member_id/i.test(error?.message ?? "")
+}
+
 /** Keeps the High Council communications roster in step with completed HC callings/releases. */
 async function syncHighCouncilRoster(
   admin: ReturnType<typeof createAdminClient>,
@@ -139,7 +143,18 @@ async function syncHighCouncilRoster(
   const notes: string[] = []
   const today = new Date().toISOString().slice(0, 10)
 
+  // Predecessor row id — links the seat's report history to the new holder.
+  let predecessorId: string | null = null
   if (replacesPersonName) {
+    const { data: predecessor } = await admin
+      .from("high_council_members")
+      .select("id")
+      .eq("stake_id", stakeId)
+      .ilike("member_name", replacesPersonName.trim())
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    predecessorId = predecessor?.id ?? null
     notes.push(...(await releaseFromHcRoster(admin, stakeId, replacesPersonName)))
   }
 
@@ -151,22 +166,57 @@ async function syncHighCouncilRoster(
     .limit(1)
     .maybeSingle()
 
+  const successionPatch =
+    predecessorId && predecessorId !== existing?.id ? { replaced_member_id: predecessorId } : {}
+
+  let successionLinked = false
+
   if (existing) {
+    const patch: Record<string, unknown> = { ...successionPatch }
     if (existing.status !== "active") {
-      await admin
-        .from("high_council_members")
-        .update({ status: "active", called_date: today, released_date: null })
-        .eq("id", existing.id)
-      notes.push(`Reactivated '${newPersonName}' on the HC roster.`)
+      Object.assign(patch, { status: "active", called_date: today, released_date: null })
+    }
+    if (Object.keys(patch).length > 0) {
+      let { error } = await admin.from("high_council_members").update(patch).eq("id", existing.id)
+      if (error && isMissingSuccessionColumn(error)) {
+        delete patch.replaced_member_id
+        notes.push("Seat history link not saved — run migration 073_hc_member_succession.sql.")
+        if (Object.keys(patch).length > 0) {
+          ;({ error } = await admin.from("high_council_members").update(patch).eq("id", existing.id))
+        } else {
+          error = null
+        }
+      }
+      if (!error) {
+        successionLinked = "replaced_member_id" in patch
+        if (existing.status !== "active") notes.push(`Reactivated '${newPersonName}' on the HC roster.`)
+      }
     }
   } else {
-    const { error } = await admin.from("high_council_members").insert({
+    const baseRow = {
       stake_id: stakeId,
       member_name: newPersonName.trim(),
       status: "active",
       called_date: today,
-    })
-    if (!error) notes.push(`Added '${newPersonName}' to the HC roster.`)
+    }
+    const withSuccession = Object.keys(successionPatch).length > 0
+    let { error } = await admin
+      .from("high_council_members")
+      .insert({ ...baseRow, ...successionPatch })
+    let insertedWithSuccession = withSuccession
+    if (error && isMissingSuccessionColumn(error)) {
+      notes.push("Seat history link not saved — run migration 073_hc_member_succession.sql.")
+      insertedWithSuccession = false
+      ;({ error } = await admin.from("high_council_members").insert(baseRow))
+    }
+    if (!error) {
+      notes.push(`Added '${newPersonName}' to the HC roster.`)
+      successionLinked = insertedWithSuccession
+    }
+  }
+
+  if (successionLinked) {
+    notes.push(`Linked ${newPersonName}'s seat history to ${replacesPersonName}.`)
   }
   return notes
 }
