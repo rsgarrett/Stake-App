@@ -148,7 +148,17 @@ export default function CallingTrackerPage() {
               </CardHeader>
               <CardContent className="pt-0">
                 {items.length === 0 ? (
-                  <p className="text-xs text-gray-400 text-center py-4">None</p>
+                  si === 0 ? (
+                    <Link
+                      href="/modules/leadership/recommend"
+                      className="flex items-center justify-center gap-1 py-4 text-xs font-medium text-blue-700 hover:text-blue-900"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Add name
+                    </Link>
+                  ) : (
+                    <p className="text-xs text-gray-400 text-center py-4">None</p>
+                  )
                 ) : (
                   <div className="divide-y divide-gray-200">
                     {items.map((c) => (
@@ -188,6 +198,15 @@ export default function CallingTrackerPage() {
                     ))}
                   </div>
                 )}
+                {si === 0 && items.length > 0 ? (
+                  <Link
+                    href="/modules/leadership/recommend"
+                    className="mt-2 flex items-center justify-center gap-1 rounded-md border border-dashed border-blue-300 bg-white/60 px-2 py-2 text-xs font-medium text-blue-700 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-800"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add name
+                  </Link>
+                ) : null}
               </CardContent>
             </Card>
           )
