@@ -11,9 +11,8 @@ import {
 } from "@/lib/callings/recommend-links"
 
 const ORGANIZATIONS = [
+  "Stake Presidency",
   "High Council",
-  "Stake Clerks",
-  "Stake Executive Secretary",
   "Bishopric",
   "Elders Quorum",
   "Relief Society",

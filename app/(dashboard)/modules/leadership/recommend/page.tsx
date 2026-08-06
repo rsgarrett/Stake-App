@@ -10,11 +10,11 @@ import Link from "next/link"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 import { BishopRecommendShareCard } from "@/components/leadership/bishop-recommend-share-card"
 
+const CUSTOM_CALLING_VALUE = "__custom__"
+
 const ORGANIZATIONS = [
   "Stake Presidency",
   "High Council",
-  "Stake Clerks",
-  "Stake Executive Secretary",
   "Bishopric",
   "Elders Quorum",
   "Relief Society",
@@ -37,11 +37,24 @@ const ORGANIZATIONS = [
 ] as const
 
 const CALLINGS_BY_ORG: Record<string, string[]> = {
-  "Stake Presidency": ["Stake Patriarch", "Stake President (submitted to First Presidency)"],
+  "Stake Presidency": [
+    "Stake Executive Secretary",
+    "Assistant Stake Executive Secretary",
+    "Stake Clerk",
+    "Assistant Stake Clerk",
+  ],
   "High Council": ["High Councilor"],
-  "Stake Clerks": ["Stake Clerk", "Assistant Stake Clerk", "Assistant Stake Clerk — Finance", "Assistant Stake Clerk — Membership"],
-  "Stake Executive Secretary": ["Stake Executive Secretary", "Assistant Stake Executive Secretary"],
-  "Bishopric": ["Bishop", "First Counselor in the Bishopric", "Second Counselor in the Bishopric", "Ward Clerk", "Assistant Ward Clerk", "Assistant Ward Clerk — Finance", "Assistant Ward Clerk — Membership", "Ward Executive Secretary", "Ward Mission Leader", "Ward Temple & Family History Leader"],
+  "Bishopric": [
+    "First Counselor in the Bishopric",
+    "Second Counselor in the Bishopric",
+    "Ward Clerk",
+    "Assistant Ward Clerk",
+    "Assistant Ward Clerk — Finance",
+    "Assistant Ward Clerk — Membership",
+    "Ward Executive Secretary",
+    "Ward Mission Leader",
+    "Ward Temple & Family History Leader",
+  ],
   "Elders Quorum": ["Elders Quorum President", "First Counselor in the Elders Quorum Presidency", "Second Counselor in the Elders Quorum Presidency", "Elders Quorum Secretary", "Stake Elders Quorum Adviser (High Councilor)"],
   "Relief Society": ["Stake Relief Society President", "First Counselor in the Stake Relief Society Presidency", "Second Counselor in the Stake Relief Society Presidency", "Stake Relief Society Secretary", "Ward Relief Society President", "First Counselor in the Ward Relief Society Presidency", "Second Counselor in the Ward Relief Society Presidency", "Ward Relief Society Secretary"],
   "Young Men": ["Stake Young Men President", "First Counselor in the Stake Young Men Presidency", "Second Counselor in the Stake Young Men Presidency", "Stake Young Men Secretary", "Ward Young Men President", "First Counselor in the Ward Young Men Presidency", "Second Counselor in the Ward Young Men Presidency", "Ward Young Men Secretary", "Priests Quorum Adviser", "Teachers Quorum Adviser", "Deacons Quorum Adviser"],
@@ -103,12 +116,23 @@ export default function SubmitNamePage() {
   }, [])
 
   const handleOrgChange = (org: string) => {
-    setFormData({ ...formData, organization: org, calling_name: "" })
+    setUseCustomCalling(false)
+    setFormData({ ...formData, organization: org, calling_name: "", custom_calling: "" })
   }
 
   const filteredCallings = formData.organization
     ? CALLINGS_BY_ORG[formData.organization] || []
     : ALL_CALLINGS.map((c) => c.calling)
+
+  const handleCallingSelect = (value: string) => {
+    if (value === CUSTOM_CALLING_VALUE) {
+      setUseCustomCalling(true)
+      setFormData({ ...formData, calling_name: "", custom_calling: "" })
+      return
+    }
+    setUseCustomCalling(false)
+    setFormData({ ...formData, calling_name: value, custom_calling: "" })
+  }
 
   const effectiveCallingName = useCustomCalling
     ? formData.custom_calling
@@ -267,24 +291,46 @@ export default function SubmitNamePage() {
               </select>
             </div>
 
-            <div className="flex items-center space-x-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setUseCustomCalling(!useCustomCalling)
-                  setFormData({ ...formData, calling_name: "", custom_calling: "" })
-                }}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${useCustomCalling ? "bg-indigo-600" : "bg-gray-200"}`}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Calling / assignment <span className="text-red-500">*</span>
+              </label>
+              <select
+                required={!useCustomCalling}
+                value={useCustomCalling ? CUSTOM_CALLING_VALUE : formData.calling_name}
+                onChange={(e) => handleCallingSelect(e.target.value)}
+                className={inputClass}
               >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${useCustomCalling ? "translate-x-6" : "translate-x-1"}`} />
-              </button>
-              <label className="text-sm text-gray-700">Custom calling name</label>
+                <option value="">
+                  {formData.organization
+                    ? `-- ${englishMenuTitleCase(`Select calling in ${formData.organization}`)} --`
+                    : `-- ${englishMenuTitleCase("Select organization first")} --`}
+                </option>
+                {formData.organization ? (
+                  filteredCallings.map((c) => (
+                    <option key={c} value={c}>
+                      {englishMenuTitleCase(c)}
+                    </option>
+                  ))
+                ) : (
+                  Object.entries(CALLINGS_BY_ORG).map(([org, callings]) => (
+                    <optgroup key={org} label={englishMenuTitleCase(org)}>
+                      {callings.map((c) => (
+                        <option key={`${org}-${c}`} value={c}>
+                          {englishMenuTitleCase(c)}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))
+                )}
+                <option value={CUSTOM_CALLING_VALUE}>Other (enter custom name)…</option>
+              </select>
             </div>
 
             {useCustomCalling ? (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Custom Calling <span className="text-red-500">*</span>
+                  Custom calling or assignment <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -292,45 +338,11 @@ export default function SubmitNamePage() {
                   value={formData.custom_calling}
                   onChange={(e) => setFormData({ ...formData, custom_calling: e.target.value })}
                   className={inputClass}
-                  placeholder="Enter the calling title"
+                  placeholder="Enter the calling or assignment title"
+                  autoFocus
                 />
               </div>
-            ) : (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Calling <span className="text-red-500">*</span>
-                </label>
-                <select
-                  required={!useCustomCalling}
-                  value={formData.calling_name}
-                  onChange={(e) => setFormData({ ...formData, calling_name: e.target.value })}
-                  className={inputClass}
-                >
-                  <option value="">
-                    {formData.organization
-                      ? `-- ${englishMenuTitleCase(`Select calling in ${formData.organization}`)} --`
-                      : `-- ${englishMenuTitleCase("Select organization first")} --`}
-                  </option>
-                  {formData.organization ? (
-                    filteredCallings.map((c) => (
-                      <option key={c} value={c}>
-                        {englishMenuTitleCase(c)}
-                      </option>
-                    ))
-                  ) : (
-                    Object.entries(CALLINGS_BY_ORG).map(([org, callings]) => (
-                      <optgroup key={org} label={englishMenuTitleCase(org)}>
-                        {callings.map((c) => (
-                          <option key={`${org}-${c}`} value={c}>
-                            {englishMenuTitleCase(c)}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))
-                  )}
-                </select>
-              </div>
-            )}
+            ) : null}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Current Calling</label>

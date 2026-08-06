@@ -11,9 +11,8 @@ import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 import { clearAgendaReturn, getAgendaReturn } from "@/lib/navigation/agenda-return"
 
 const ORGANIZATIONS = [
-  "Stake Presidency", "High Council", "Stake Clerk", "Stake Executive Secretary",
-  "Bishopric", "Relief Society", "Elders Quorum", "Young Men", "Young Women",
-  "Primary", "Sunday School", "Music", "Seminary & Institute",
+  "Stake Presidency", "High Council", "Bishopric", "Relief Society", "Elders Quorum",
+  "Young Men", "Young Women", "Primary", "Sunday School", "Music", "Seminary & Institute",
   "Stake Communication", "Stake Temple & Family History", "Stake Missionary",
   "Stake Welfare & Self-Reliance", "Stake Auditing", "Stake Technology",
   "Stake Facilities", "Stake Emergency Preparedness", "Stake Activities",
