@@ -21,6 +21,9 @@ import {
   getPresidencyStewardGroup,
   type PresidencyStewardKey,
 } from "@/lib/leadership/presidency-stewardship-groups"
+import { canManageHcCommunication, isHighCouncilOnly } from "@/lib/auth/module-access"
+import { hcSeatHistoryIds, matchHcMembersForUser } from "@/lib/settings/hc-member-match"
+import { isHighCouncilSeatSlug } from "@/lib/settings/stake-office-slugs"
 
 type TabView = "reports" | "roster"
 
@@ -64,6 +67,8 @@ export default function HCCommunicationPage() {
   const [stewardFilter, setStewardFilter] = useState<"all" | PresidencyStewardKey>("all")
   /** "all" = weekly view; a member id = every report from that person, chronological. */
   const [personFilter, setPersonFilter] = useState<string>("all")
+  const [myRole, setMyRole] = useState<string | null>(null)
+  const [myMemberId, setMyMemberId] = useState<string | null>(null)
 
   // Roster form
   const [showAddMember, setShowAddMember] = useState(false)
@@ -87,15 +92,67 @@ export default function HCCommunicationPage() {
   const [respondingTo, setRespondingTo] = useState<string | null>(null)
   const [responseText, setResponseText] = useState("")
 
+  const canManage = canManageHcCommunication(myRole)
+  const hcOnly = isHighCouncilOnly(myRole)
+
   const loadData = useCallback(async () => {
     try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      let role: string | null = null
+      let profileEmail: string | null = null
+      let profileName: string | null = null
+      let rosterNames: string[] = []
+      if (user) {
+        const { data: profile } = await supabase
+          .from("users")
+          .select("role, email, full_name, stake_id")
+          .eq("id", user.id)
+          .maybeSingle()
+        role = profile?.role ?? null
+        profileEmail = profile?.email ?? null
+        profileName = profile?.full_name ?? null
+        setMyRole(role)
+        if (profile?.stake_id && role === "high_council") {
+          const { data: seats } = await supabase
+            .from("stake_permission_roster")
+            .select("person_name, office_slug")
+            .eq("stake_id", profile.stake_id)
+            .eq("assigned_user_id", user.id)
+          rosterNames = (seats || [])
+            .filter((s) => isHighCouncilSeatSlug(s.office_slug))
+            .map((s) => s.person_name)
+            .filter((n): n is string => Boolean(n?.trim()))
+        }
+      }
+
       const [membersRes, reportsRes] = await Promise.all([
         safeQuery(supabase.from("high_council_members").select("*").order("display_order")),
         safeQuery(supabase.from("hc_weekly_reports").select("*").order("submitted_at", { ascending: false })),
       ])
 
-      const membersData: HighCouncilMember[] = membersRes.data || []
-      const reportsData: HCWeeklyReport[] = reportsRes.data || []
+      let membersData: HighCouncilMember[] = membersRes.data || []
+      let reportsData: HCWeeklyReport[] = reportsRes.data || []
+
+      let resolvedMemberId: string | null = null
+      if (role === "high_council") {
+        const matched = matchHcMembersForUser(
+          membersData,
+          { email: profileEmail, full_name: profileName },
+          rosterNames
+        )
+        resolvedMemberId = matched[0]?.id ?? null
+        setMyMemberId(resolvedMemberId)
+        const seatIds = hcSeatHistoryIds(membersData, matched[0])
+        membersData = membersData.filter((m) => seatIds.has(m.id))
+        reportsData = reportsData.filter((r) => seatIds.has(r.member_id))
+        if (resolvedMemberId) {
+          setReportForm((prev) => ({ ...prev, member_id: resolvedMemberId }))
+        }
+      } else {
+        setMyMemberId(null)
+      }
 
       // Load responses for all reports
       if (reportsData.length > 0) {
@@ -128,12 +185,14 @@ export default function HCCommunicationPage() {
     } finally {
       setLoading(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => { loadData() }, [loadData])
 
   // --- Roster CRUD ---
   const addMember = async () => {
+    if (!canManage) return
     if (!memberForm.member_name.trim()) return
     const { data: { user } } = await supabase.auth.getUser()
     const { data: userData } = user ? await supabase.from("users").select("stake_id").eq("id", user!.id).single() : { data: null }
@@ -168,6 +227,7 @@ export default function HCCommunicationPage() {
   }
 
   const releaseMember = async (id: string) => {
+    if (!canManage) return
     if (!confirm("Release this high councilor? Their historical reports will be preserved.")) return
     await supabase.from("high_council_members").update({
       status: "released",
@@ -177,6 +237,7 @@ export default function HCCommunicationPage() {
   }
 
   const reactivateMember = async (id: string) => {
+    if (!canManage) return
     await supabase.from("high_council_members").update({
       status: "active",
       released_date: null,
@@ -185,6 +246,7 @@ export default function HCCommunicationPage() {
   }
 
   const updateMember = async (id: string) => {
+    if (!canManage) return
     await supabase.from("high_council_members").update({
       member_name: editMemberForm.member_name,
       email: editMemberForm.email || null,
@@ -200,6 +262,7 @@ export default function HCCommunicationPage() {
   }
 
   const deleteMember = async (id: string) => {
+    if (!canManage) return
     if (!confirm("Permanently delete this member and all their reports? Use 'Release' instead to preserve history.")) return
     await supabase.from("high_council_members").delete().eq("id", id)
     await loadData()
@@ -207,9 +270,10 @@ export default function HCCommunicationPage() {
 
   // --- Report CRUD ---
   const submitReport = async () => {
-    if (!reportForm.member_id || !reportForm.stewardship_report.trim()) return
+    const memberId = hcOnly && myMemberId ? myMemberId : reportForm.member_id
+    if (!memberId || !reportForm.stewardship_report.trim()) return
     await supabase.from("hc_weekly_reports").insert({
-      member_id: reportForm.member_id,
+      member_id: memberId,
       reporting_week: selectedWeek,
       meetings_attended: reportForm.meetings_attended || null,
       stewardship_report: reportForm.stewardship_report.trim(),
@@ -222,6 +286,7 @@ export default function HCCommunicationPage() {
 
   // --- Response CRUD ---
   const submitResponse = async (reportId: string) => {
+    if (!canManage) return
     if (!responseText.trim()) return
     await supabase.from("hc_report_responses").insert({
       report_id: reportId,
@@ -234,6 +299,7 @@ export default function HCCommunicationPage() {
   }
 
   const deleteResponse = async (id: string) => {
+    if (!canManage) return
     await supabase.from("hc_report_responses").delete().eq("id", id)
     await loadData()
   }
@@ -407,40 +473,44 @@ export default function HCCommunicationPage() {
                             </div>
                             <p className="text-sm text-gray-800 whitespace-pre-wrap">{resp.response_text}</p>
                           </div>
-                          <button onClick={() => deleteResponse(resp.id)} className="text-red-300 hover:text-red-500 ml-2 p-1">
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                          {canManage ? (
+                            <button onClick={() => deleteResponse(resp.id)} className="text-red-300 hover:text-red-500 ml-2 p-1">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          ) : null}
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
 
-                {/* Response form */}
-                <div className="px-4 py-3 border-t bg-gray-50">
-                  {isResponding ? (
-                    <div className="space-y-2">
-                      <textarea
-                        value={responseText}
-                        onChange={(e) => setResponseText(e.target.value)}
-                        className={inputClass}
-                        rows={3}
-                        placeholder="Type your response..."
-                        autoFocus
-                      />
-                      <div className="flex space-x-2">
-                        <Button size="sm" onClick={() => submitResponse(report.id)} disabled={!responseText.trim()}>
-                          <Send className="h-3.5 w-3.5 mr-1" />Send Response
-                        </Button>
-                        <Button size="sm" variant="outline" onClick={() => { setRespondingTo(null); setResponseText("") }}>Cancel</Button>
+                {/* Response form — presidency / clerks only */}
+                {canManage ? (
+                  <div className="px-4 py-3 border-t bg-gray-50">
+                    {isResponding ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={responseText}
+                          onChange={(e) => setResponseText(e.target.value)}
+                          className={inputClass}
+                          rows={3}
+                          placeholder="Type your response..."
+                          autoFocus
+                        />
+                        <div className="flex space-x-2">
+                          <Button size="sm" onClick={() => submitResponse(report.id)} disabled={!responseText.trim()}>
+                            <Send className="h-3.5 w-3.5 mr-1" />Send Response
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => { setRespondingTo(null); setResponseText("") }}>Cancel</Button>
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <Button size="sm" variant="outline" onClick={() => setRespondingTo(report.id)}>
-                      <MessageSquare className="h-3.5 w-3.5 mr-1" />Respond
-                    </Button>
-                  )}
-                </div>
+                    ) : (
+                      <Button size="sm" variant="outline" onClick={() => setRespondingTo(report.id)}>
+                        <MessageSquare className="h-3.5 w-3.5 mr-1" />Respond
+                      </Button>
+                    )}
+                  </div>
+                ) : null}
               </div>
             )}
           </div>
@@ -453,35 +523,54 @@ export default function HCCommunicationPage() {
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
-      <Link href="/modules/leadership" className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center mb-4">
-        <ArrowLeft className="h-4 w-4 mr-1" /> Back to Leadership
+      <Link
+        href={hcOnly ? "/modules/communication" : "/modules/leadership"}
+        className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center mb-4"
+      >
+        <ArrowLeft className="h-4 w-4 mr-1" /> {hcOnly ? "Back to Communication" : "Back to Leadership"}
       </Link>
 
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900">High Council Communication</h1>
-        <p className="mt-1 text-gray-600">Weekly return &amp; report from high councilors with presidency responses</p>
+        <p className="mt-1 text-gray-600">
+          {hcOnly
+            ? "Your weekly return & report for your seat. Presidency responses appear here when they reply."
+            : "Weekly return & report from high councilors with presidency responses"}
+        </p>
+        {hcOnly && !myMemberId ? (
+          <p className="mt-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+            We could not match your login to an HC roster seat yet. Ask the stake presidency to confirm your name/email
+            on the HC roster and your permission seat in Settings.
+          </p>
+        ) : null}
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 max-w-xl">
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-gray-500">Active Members</CardTitle></CardHeader>
-          <CardContent><div className="text-2xl font-bold text-indigo-600">{activeMembers.length}</div></CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-gray-500">Reported This Week</CardTitle></CardHeader>
-          <CardContent><div className="text-2xl font-bold text-green-600">{weekReports.length}</div></CardContent></Card>
-      </div>
+      {!hcOnly ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 max-w-xl">
+          <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-gray-500">Active Members</CardTitle></CardHeader>
+            <CardContent><div className="text-2xl font-bold text-indigo-600">{activeMembers.length}</div></CardContent></Card>
+          <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-gray-500">Reported This Week</CardTitle></CardHeader>
+            <CardContent><div className="text-2xl font-bold text-green-600">{weekReports.length}</div></CardContent></Card>
+        </div>
+      ) : null}
 
-      {/* Tabs */}
-      <div className="flex gap-2 overflow-x-auto border-b pb-px mb-6 -mx-1 px-1 sm:mx-0 sm:px-0">
-        {([
-          { key: "reports" as const, label: "Weekly Reports", icon: MessageSquare },
-          { key: "roster" as const, label: `Roster (${activeMembers.length})`, icon: Users },
-        ]).map(({ key, label, icon: Icon }) => (
-          <button key={key} onClick={() => setTabView(key)}
-            className={`flex items-center px-4 py-2 text-sm font-medium border-b-2 -mb-px whitespace-nowrap ${tabView === key ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
-            <Icon className="h-4 w-4 mr-2" />{label}
-          </button>
-        ))}
-      </div>
+      {/* Tabs — roster management is presidency/clerks only */}
+      {canManage ? (
+        <div className="flex gap-2 overflow-x-auto border-b pb-px mb-6 -mx-1 px-1 sm:mx-0 sm:px-0">
+          {([
+            { key: "reports" as const, label: "Weekly Reports", icon: MessageSquare },
+            { key: "roster" as const, label: `Roster (${activeMembers.length})`, icon: Users },
+          ]).map(({ key, label, icon: Icon }) => (
+            <button key={key} onClick={() => setTabView(key)}
+              className={`flex items-center px-4 py-2 text-sm font-medium border-b-2 -mb-px whitespace-nowrap ${tabView === key ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
+              <Icon className="h-4 w-4 mr-2" />{label}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="mb-6" />
+      )}
 
       {/* ==================== WEEKLY REPORTS TAB ==================== */}
       {tabView === "reports" && (
@@ -489,23 +578,36 @@ export default function HCCommunicationPage() {
           {/* Week selector + stewardship filter + submit */}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center space-x-2">
-                <label className="text-sm font-medium text-gray-700">High Councilor:</label>
-                <select
-                  value={personFilter}
-                  onChange={(e) => setPersonFilter(e.target.value)}
-                  className={`${inputClass} w-auto`}
-                  aria-label="View all reports from one high councilor"
-                >
-                  <option value="all">{englishMenuTitleCase("All — weekly view")}</option>
-                  {reportingMembers.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.member_name}{m.status === "released" ? " (released)" : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {personFilter === "all" && (
+              {!hcOnly ? (
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm font-medium text-gray-700">High Councilor:</label>
+                  <select
+                    value={personFilter}
+                    onChange={(e) => setPersonFilter(e.target.value)}
+                    className={`${inputClass} w-auto`}
+                    aria-label="View all reports from one high councilor"
+                  >
+                    <option value="all">{englishMenuTitleCase("All — weekly view")}</option>
+                    {reportingMembers.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.member_name}{m.status === "released" ? " (released)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm font-medium text-gray-700">Reporting Week:</label>
+                  <select value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)} className={`${inputClass} w-auto`}>
+                    {weekOptions.map((w) => (
+                      <option key={w} value={w}>
+                        {englishMenuTitleCase("Week of")} {formatWeek(w)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {!hcOnly && personFilter === "all" && (
                 <>
                   <div className="flex items-center space-x-2">
                     <label className="text-sm font-medium text-gray-700">Reporting Week:</label>
@@ -533,11 +635,23 @@ export default function HCCommunicationPage() {
                 </>
               )}
             </div>
-            <Button onClick={() => setShowSubmitReport(true)}><Plus className="h-4 w-4 mr-2" />Submit Report</Button>
+            <Button
+              onClick={() => {
+                if (hcOnly && myMemberId) {
+                  setReportForm((prev) => ({ ...prev, member_id: myMemberId }))
+                }
+                setShowSubmitReport(true)
+              }}
+              disabled={hcOnly && !myMemberId}
+            >
+              <Plus className="h-4 w-4 mr-2" />Submit Report
+            </Button>
           </div>
 
           <p className="text-xs text-gray-500">
-            {personFilter === "all" ? (
+            {hcOnly ? (
+              <>This view shows only your seat’s return &amp; report history (including prior holders of your seat when linked).</>
+            ) : personFilter === "all" ? (
               <>
                 Reports are grouped by presidency stewardship so each president can quickly find the high councilors he oversees.
                 Everyone in the presidency can still read every report. Pick a high councilor above to see their full report history.
@@ -555,12 +669,18 @@ export default function HCCommunicationPage() {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">High Councilor</label>
-                    <select value={reportForm.member_id} onChange={(e) => setReportForm({ ...reportForm, member_id: e.target.value })} className={inputClass}>
-                      <option value="">{englishMenuTitleCase("Select member...")}</option>
-                      {activeMembers.map((m) => (
-                        <option key={m.id} value={m.id}>{m.member_name}</option>
-                      ))}
-                    </select>
+                    {hcOnly && myMemberId ? (
+                      <p className="text-sm text-gray-900 font-medium px-1 py-2">
+                        {members.find((m) => m.id === myMemberId)?.member_name || "Your seat"}
+                      </p>
+                    ) : (
+                      <select value={reportForm.member_id} onChange={(e) => setReportForm({ ...reportForm, member_id: e.target.value })} className={inputClass}>
+                        <option value="">{englishMenuTitleCase("Select member...")}</option>
+                        {activeMembers.map((m) => (
+                          <option key={m.id} value={m.id}>{m.member_name}</option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Meetings Attended This Week</label>
@@ -575,7 +695,14 @@ export default function HCCommunicationPage() {
                     <textarea value={reportForm.followup_needed} onChange={(e) => setReportForm({ ...reportForm, followup_needed: e.target.value })} className={inputClass} rows={3} placeholder="What follow-up is needed and how can the Stake Presidency help?" />
                   </div>
                   <div className="flex space-x-2">
-                    <Button onClick={submitReport} disabled={!reportForm.member_id || !reportForm.stewardship_report.trim()}>Submit Report</Button>
+                    <Button
+                      onClick={submitReport}
+                      disabled={
+                        !(hcOnly ? myMemberId : reportForm.member_id) || !reportForm.stewardship_report.trim()
+                      }
+                    >
+                      Submit Report
+                    </Button>
                     <Button variant="outline" onClick={() => setShowSubmitReport(false)}>Cancel</Button>
                   </div>
                 </div>
@@ -583,8 +710,8 @@ export default function HCCommunicationPage() {
             </Card>
           )}
 
-          {/* Not yet reported — grouped by stewardship */}
-          {personFilter === "all" && notReportedSections.some((s) => s.items.length > 0) && (
+          {/* Not yet reported — grouped by stewardship (presidency view) */}
+          {!hcOnly && personFilter === "all" && notReportedSections.some((s) => s.items.length > 0) && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
               <div className="flex items-start gap-2">
                 <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
@@ -681,7 +808,7 @@ export default function HCCommunicationPage() {
       )}
 
       {/* ==================== ROSTER TAB ==================== */}
-      {tabView === "roster" && (
+      {canManage && tabView === "roster" && (
         <div className="space-y-4">
           {/* Presidency-only stewardship lines from the HC assignment spreadsheet (editable in code until a DB column exists). */}
           <Card className="border-slate-200 bg-slate-50/70">

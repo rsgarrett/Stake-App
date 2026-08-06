@@ -93,7 +93,9 @@ export default function CommunicationPage() {
                 </div>
                 <div>
                   <CardTitle className="text-lg">HC Communication</CardTitle>
-                  <CardDescription>Weekly return &amp; report from high councilors</CardDescription>
+                  <CardDescription>
+                    Weekly return &amp; report — high councilors see only their own seat; presidency sees all
+                  </CardDescription>
                 </div>
               </div>
             </CardHeader>

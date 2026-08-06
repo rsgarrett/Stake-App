@@ -1,8 +1,11 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils/cn"
+import { createClient } from "@/lib/supabase/client"
+import { canAccessCallingTracker, canAccessInterviews } from "@/lib/auth/module-access"
 import {
   Users,
   Calendar,
@@ -16,11 +19,11 @@ import {
 
 const navigation = [
   { name: "Meetings", href: "/modules/meetings", icon: Calendar },
-  { name: "Callings", href: "/modules/leadership", icon: Users },
+  { name: "Callings", href: "/modules/leadership", icon: Users, requiresCallingTracker: true },
   { name: "Communication", href: "/modules/communication", icon: MessageSquare },
   { name: "Conferences", href: "/modules/conferences", icon: Mic },
   { name: "Training", href: "/modules/training", icon: GraduationCap },
-  { name: "Interviews", href: "/modules/interviews", icon: FileText },
+  { name: "Interviews", href: "/modules/interviews", icon: FileText, requiresInterviews: true },
   { name: "Settings", href: "/settings", icon: Settings },
 ]
 
@@ -35,6 +38,33 @@ export function Sidebar({
 }) {
   const pathname = usePathname()
   const showClose = variant === "overlay" && !!onItemSelect
+  const [role, setRole] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase.from("users").select("role").eq("id", user.id).maybeSingle()
+      if (!cancelled) setRole(data?.role ?? null)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const items = navigation.filter((item) => {
+    if ("requiresCallingTracker" in item && item.requiresCallingTracker) {
+      return canAccessCallingTracker(role)
+    }
+    if ("requiresInterviews" in item && item.requiresInterviews) {
+      return canAccessInterviews(role)
+    }
+    return true
+  })
 
   return (
     <div
@@ -57,7 +87,7 @@ export function Sidebar({
         ) : null}
       </div>
       <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {navigation.map((item) => {
+        {items.map((item) => {
           const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
           return (
             <Link
@@ -85,4 +115,3 @@ export function Sidebar({
     </div>
   )
 }
-

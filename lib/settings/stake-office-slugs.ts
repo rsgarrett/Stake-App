@@ -82,7 +82,7 @@ export const ROLE_CAPABILITY_SUMMARY: Record<UserRole, string> = {
   executive_secretary: "Executive secretary access; elevated like clerk for scheduling, meetings, and stake coordination in this app.",
   assistant_executive_secretary: "Assistant executive secretary; elevated for stake scheduling and operational modules.",
   high_council:
-    "Stake-facing access without presidency write tools: filtered meeting visibility (High Council / Stake Council), stake callings and modules per RLS, interviews where configured. Seat assignments use Settings → roster.",
+    "Filtered meetings (High Council / Stake Council), own-seat return & report only, and training. No calling tracker or interviews. Seat assignments use Settings → roster.",
   bishop: "Ward bishop tools in this app where linked to a ward.",
   auxiliary_leader: "Auxiliary-oriented access (narrower than presidency).",
   viewer: "Read-only baseline for assigned modules only.",
