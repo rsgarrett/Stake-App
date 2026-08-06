@@ -119,7 +119,7 @@ export default function CallingsDashboard() {
         <Link href="/modules/leadership/workflow" className={buttonVariants({ variant: "outline", className: "h-auto py-4 justify-start" })}>
           <Clock className="h-5 w-5 mr-2" />View Workflow
         </Link>
-        <Link href="/modules/leadership/tracker" className={buttonVariants({ variant: "outline", className: "h-auto py-4 justify-start" })}>
+        <Link href="/modules/leadership" className={buttonVariants({ variant: "outline", className: "h-auto py-4 justify-start" })}>
           <ListFilter className="h-5 w-5 mr-2" />Full Tracker
         </Link>
       </div>
@@ -154,7 +154,7 @@ export default function CallingsDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-green-700">{loading ? "..." : stats.completed}</div>
-            <Link href="/modules/leadership/tracker" className="inline-flex items-center mt-2 text-sm text-indigo-600 hover:underline">
+            <Link href="/modules/leadership/completed" className="inline-flex items-center mt-2 text-sm text-indigo-600 hover:underline">
               View all <ArrowRight className="h-4 w-4 ml-1" />
             </Link>
           </CardContent>
