@@ -1,4 +1,5 @@
 import { samePersonName } from "@/lib/settings/calling-office-map"
+import { sameCallingTitle } from "@/lib/callings/calling-name-aliases"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 export interface CallingHolderRow {
@@ -18,9 +19,7 @@ export function normalizeCallingName(name: string | null | undefined): string {
 }
 
 export function sameCallingName(a: string | null | undefined, b: string | null | undefined): boolean {
-  const na = normalizeCallingName(a)
-  const nb = normalizeCallingName(b)
-  return na.length > 0 && na === nb
+  return sameCallingTitle(a, b)
 }
 
 type AdminClient = SupabaseClient

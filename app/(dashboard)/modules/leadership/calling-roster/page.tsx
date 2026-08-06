@@ -5,7 +5,7 @@ import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, Plus, Trash2 } from "lucide-react"
+import { ArrowLeft, Plus, Search, Trash2 } from "lucide-react"
 
 interface Holder {
   id: string
@@ -27,6 +27,7 @@ export default function CallingRosterPage() {
   const [error, setError] = useState<string | null>(null)
   const [migrationNeeded, setMigrationNeeded] = useState(false)
   const [stakeId, setStakeId] = useState<string | null>(null)
+  const [search, setSearch] = useState("")
   const [form, setForm] = useState({
     person_name: "",
     calling_name: "",
@@ -55,6 +56,7 @@ export default function CallingRosterPage() {
       .from("stake_calling_holders")
       .select("id, organization, calling_name, person_name, ward, status, called_date")
       .eq("status", "active")
+      .order("organization")
       .order("calling_name")
       .order("person_name")
 
@@ -75,16 +77,30 @@ export default function CallingRosterPage() {
     void load()
   }, [load])
 
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return holders
+    return holders.filter(
+      (h) =>
+        h.person_name.toLowerCase().includes(q) ||
+        h.calling_name.toLowerCase().includes(q) ||
+        (h.organization ?? "").toLowerCase().includes(q) ||
+        (h.ward ?? "").toLowerCase().includes(q)
+    )
+  }, [holders, search])
+
   const grouped = useMemo(() => {
-    const map = new Map<string, Holder[]>()
-    for (const h of holders) {
-      const key = h.calling_name
-      const list = map.get(key) ?? []
+    const map = new Map<string, Map<string, Holder[]>>()
+    for (const h of filtered) {
+      const org = h.organization || "Unassigned"
+      if (!map.has(org)) map.set(org, new Map())
+      const byCalling = map.get(org)!
+      const list = byCalling.get(h.calling_name) ?? []
       list.push(h)
-      map.set(key, list)
+      byCalling.set(h.calling_name, list)
     }
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]))
-  }, [holders])
+  }, [filtered])
 
   const addHolder = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -143,11 +159,18 @@ export default function CallingRosterPage() {
         Back to Calling Tracker
       </Link>
       <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Stake calling roster</h1>
-      <p className="mt-1 text-sm text-gray-600 mb-6">
-        Who currently holds each stake calling. The Replaces dropdown on Submit a Name only shows
-        people listed here for that calling. Completing a calling in the tracker updates this
-        automatically — use this page to seed or correct names.
+      <p className="mt-1 text-sm text-gray-600 mb-4">
+        Who currently holds each stake calling (High Priests Quorum and Stake President are not
+        tracked). The Replaces dropdown only shows people listed here for the selected calling.
       </p>
+
+      <div className="mb-4 flex flex-wrap items-center gap-3 text-sm text-gray-600">
+        <span className="font-medium text-gray-900">{holders.length} active</span>
+        <span>·</span>
+        <Link href="/modules/leadership/recommend" className="text-indigo-600 hover:underline">
+          Submit a name
+        </Link>
+      </div>
 
       {migrationNeeded ? (
         <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -162,11 +185,23 @@ export default function CallingRosterPage() {
         </div>
       ) : null}
 
+      <div className="relative mb-5 max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search name, calling, org, ward…"
+          className={`${inputClass} pl-10`}
+        />
+      </div>
+
       <Card className="mb-6">
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Add current holder</CardTitle>
           <CardDescription>
-            Enter someone already serving so they appear in Replaces for that calling.
+            Use this for corrections. Completing a calling in the tracker updates the roster
+            automatically.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -207,7 +242,7 @@ export default function CallingRosterPage() {
                   className={inputClass}
                   value={form.ward}
                   onChange={(e) => setForm({ ...form, ward: e.target.value })}
-                  placeholder="Optional"
+                  placeholder="e.g. 18th"
                 />
               </div>
             </div>
@@ -222,39 +257,53 @@ export default function CallingRosterPage() {
       {loading ? (
         <p className="text-sm text-gray-500">Loading…</p>
       ) : grouped.length === 0 ? (
-        <p className="text-sm text-gray-500">No active holders yet. Add people above.</p>
+        <p className="text-sm text-gray-500">
+          {search ? "No matches." : "No active holders yet. Add people above."}
+        </p>
       ) : (
-        <div className="space-y-4">
-          {grouped.map(([calling, people]) => (
-            <Card key={calling}>
-              <CardHeader className="pb-2 pt-4">
-                <CardTitle className="text-sm font-semibold flex items-center justify-between">
-                  {calling}
-                  <span className="text-xs font-normal text-gray-500">{people.length}</span>
-                </CardTitle>
-                {people[0]?.organization ? (
-                  <CardDescription className="text-xs">{people[0].organization}</CardDescription>
-                ) : null}
-              </CardHeader>
-              <CardContent className="pt-0 divide-y">
-                {people.map((h) => (
-                  <div key={h.id} className="flex items-center gap-2 py-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-gray-900 truncate">{h.person_name}</p>
-                      {h.ward ? <p className="text-xs text-gray-500">{h.ward}</p> : null}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => releaseHolder(h)}
-                      className="text-gray-300 hover:text-red-500 shrink-0 p-1"
-                      title="Mark released"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
+        <div className="space-y-6">
+          {grouped.map(([org, byCalling]) => (
+            <section key={org}>
+              <h2 className="text-sm font-semibold text-gray-800 mb-2 sticky top-0 bg-gray-50/95 py-1">
+                {org}
+              </h2>
+              <div className="space-y-3">
+                {[...byCalling.entries()].map(([calling, people]) => (
+                  <Card key={`${org}-${calling}`}>
+                    <CardHeader className="pb-2 pt-3">
+                      <CardTitle className="text-sm font-semibold flex items-center justify-between gap-2">
+                        <span className="min-w-0 break-words">{calling}</span>
+                        <span className="text-xs font-normal text-gray-500 shrink-0">
+                          {people.length}
+                        </span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0 divide-y">
+                      {people.map((h) => (
+                        <div key={h.id} className="flex items-center gap-2 py-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {h.person_name}
+                            </p>
+                            {h.ward ? (
+                              <p className="text-xs text-gray-500">{h.ward}</p>
+                            ) : null}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => releaseHolder(h)}
+                            className="text-gray-300 hover:text-red-500 shrink-0 p-1"
+                            title="Mark released"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
                 ))}
-              </CardContent>
-            </Card>
+              </div>
+            </section>
           ))}
         </div>
       )}

@@ -15,29 +15,39 @@ const CUSTOM_CALLING_VALUE = "__custom__"
 const CUSTOM_ORG_VALUE = "__custom_org__"
 const CUSTOM_REPLACES_VALUE = "__custom_replaces__"
 
+/** Core org list; live roster orgs are merged in so LCR imports stay available. */
 const ORGANIZATIONS = [
   "Stake Presidency",
   "High Council",
+  "Patriarch",
+  "Stake Relief Society",
+  "Stake Young Men",
+  "Stake Young Women",
+  "Stake Sunday School",
+  "Stake Primary",
+  "Young Single Adult",
+  "Single Adult",
+  "Stake Temple and Family History",
+  "Activities and Sports",
+  "Auditing",
+  "Church Communication",
+  "Church Service Missionaries",
+  "Facilities",
+  "Music",
+  "Seminary and Institute",
+  "Technology",
+  "Welfare and Self-Reliance",
+  "Additional Callings",
   "Bishopric",
   "Elders Quorum",
-  "Relief Society",
-  "Young Men",
-  "Young Women",
-  "Primary",
-  "Sunday School",
-  "Music",
-  "Seminary & Institute",
-  "Stake Communication",
-  "Stake Temple & Family History",
-  "Stake Missionary",
-  "Stake Welfare & Self-Reliance",
-  "Stake Auditing",
-  "Stake Technology",
-  "Stake Facilities",
-  "Stake Emergency Preparedness",
-  "Stake Activities",
-  "Stake Single Adults / Young Single Adults",
 ] as const
+
+function orgMatches(holderOrg: string | null | undefined, selected: string): boolean {
+  if (!holderOrg || !selected) return false
+  const a = holderOrg.toLowerCase()
+  const b = selected.toLowerCase()
+  return a === b || a.includes(b) || b.includes(a)
+}
 
 const CALLINGS_BY_ORG: Record<string, string[]> = {
   "Stake Presidency": [
@@ -45,8 +55,11 @@ const CALLINGS_BY_ORG: Record<string, string[]> = {
     "Assistant Stake Executive Secretary",
     "Stake Clerk",
     "Assistant Stake Clerk",
+    "Assistant Stake Clerk — Membership",
+    "Assistant Stake Clerk — Finance",
   ],
   "High Council": ["High Councilor"],
+  "Patriarch": ["Patriarch"],
   "Bishopric": [
     "First Counselor in the Bishopric",
     "Second Counselor in the Bishopric",
@@ -108,8 +121,13 @@ export default function SubmitNamePage() {
   })
 
   const [useCustomReplaces, setUseCustomReplaces] = useState(false)
-  /** Active calling holders from the stake roster: { calling_name, person_name }. */
-  const [holders, setHolders] = useState<{ calling_name: string; person_name: string }[]>([])
+  type HolderRow = {
+    organization: string | null
+    calling_name: string
+    person_name: string
+    ward: string | null
+  }
+  const [holders, setHolders] = useState<HolderRow[]>([])
   const [holdersReady, setHoldersReady] = useState(false)
 
   useEffect(() => {
@@ -117,7 +135,7 @@ export default function SubmitNamePage() {
     void (async () => {
       const { data, error } = await supabase
         .from("stake_calling_holders")
-        .select("calling_name, person_name")
+        .select("organization, calling_name, person_name, ward")
         .eq("status", "active")
         .order("person_name")
       if (!error && data) {
@@ -125,60 +143,25 @@ export default function SubmitNamePage() {
           data
             .filter((r) => r.person_name?.trim() && r.calling_name?.trim())
             .map((r) => ({
+              organization: (r.organization as string | null) ?? null,
               calling_name: r.calling_name as string,
               person_name: (r.person_name as string).trim(),
+              ward: (r.ward as string | null) ?? null,
             }))
         )
         setHoldersReady(true)
         return
       }
-      // Fallback before migration 074: HC + permission seats (never stake president).
-      const namesByCalling = new Map<string, string[]>()
-      const [{ data: hc }, { data: seats }] = await Promise.all([
-        supabase
-          .from("high_council_members")
-          .select("member_name")
-          .eq("status", "active")
-          .order("member_name"),
-        supabase
-          .from("stake_permission_roster")
-          .select("person_name, office_slug")
-          .not("person_name", "is", null),
-      ])
-      for (const row of hc ?? []) {
-        const n = (row.member_name as string | null)?.trim()
-        if (!n) continue
-        const list = namesByCalling.get("High Councilor") ?? []
-        list.push(n)
-        namesByCalling.set("High Councilor", list)
-      }
-      const seatCalling: Record<string, string> = {
-        stake_clerk: "Stake Clerk",
-        assistant_stake_clerk: "Assistant Stake Clerk",
-        executive_secretary: "Stake Executive Secretary",
-        assistant_executive_secretary_1: "Assistant Stake Executive Secretary",
-        assistant_executive_secretary_2: "Assistant Stake Executive Secretary",
-      }
-      for (const row of seats ?? []) {
-        if (row.office_slug === "stake_president") continue
-        const calling =
-          seatCalling[row.office_slug] ||
-          (row.office_slug?.startsWith("high_council_") ? "High Councilor" : null)
-        if (!calling) continue
-        const n = (row.person_name as string | null)?.trim()
-        if (!n) continue
-        const list = namesByCalling.get(calling) ?? []
-        list.push(n)
-        namesByCalling.set(calling, list)
-      }
-      setHolders(
-        [...namesByCalling.entries()].flatMap(([calling_name, people]) =>
-          people.map((person_name) => ({ calling_name, person_name }))
-        )
-      )
       setHoldersReady(true)
     })()
   }, [])
+
+  const organizationOptions = useMemo(() => {
+    const fromRoster = holders
+      .map((h) => h.organization)
+      .filter((o): o is string => !!o?.trim())
+    return [...new Set([...ORGANIZATIONS, ...fromRoster])].sort((a, b) => a.localeCompare(b))
+  }, [holders])
 
   const selectedCallingForReplaces = (
     useCustomCalling ? formData.custom_calling : formData.calling_name
@@ -222,11 +205,20 @@ export default function SubmitNamePage() {
     })
   }
 
-  const filteredCallings = useCustomOrg
-    ? []
-    : formData.organization
-      ? CALLINGS_BY_ORG[formData.organization] || []
-      : ALL_CALLINGS.map((c) => c.calling)
+  const filteredCallings = useMemo(() => {
+    if (useCustomOrg) return [] as string[]
+    if (!formData.organization) {
+      return [...new Set([
+        ...ALL_CALLINGS.map((c) => c.calling),
+        ...holders.map((h) => h.calling_name),
+      ])].sort((a, b) => a.localeCompare(b))
+    }
+    const fromStatic = CALLINGS_BY_ORG[formData.organization] || []
+    const fromRoster = holders
+      .filter((h) => orgMatches(h.organization, formData.organization))
+      .map((h) => h.calling_name)
+    return [...new Set([...fromStatic, ...fromRoster])].sort((a, b) => a.localeCompare(b))
+  }, [useCustomOrg, formData.organization, holders])
 
   const handleCallingSelect = (value: string) => {
     if (value === CUSTOM_CALLING_VALUE) {
@@ -429,7 +421,7 @@ export default function SubmitNamePage() {
                 className={inputClass}
               >
                 <option value="">-- {englishMenuTitleCase("Select organization")} --</option>
-                {ORGANIZATIONS.map((org) => (
+                {organizationOptions.map((org) => (
                   <option key={org} value={org}>
                     {englishMenuTitleCase(org)}
                   </option>
@@ -535,11 +527,23 @@ export default function SubmitNamePage() {
                     ? englishMenuTitleCase("Select a calling first")
                     : englishMenuTitleCase("N/A — New calling (no one to replace)")}
                 </option>
-                {replaceCandidates.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
+                {holders
+                  .filter(
+                    (h) =>
+                      selectedCallingForReplaces &&
+                      sameCallingName(h.calling_name, selectedCallingForReplaces)
+                  )
+                  .filter(
+                    (h, i, arr) =>
+                      arr.findIndex((x) => x.person_name === h.person_name) === i
+                  )
+                  .sort((a, b) => a.person_name.localeCompare(b.person_name))
+                  .map((h) => (
+                    <option key={`${h.person_name}-${h.ward ?? ""}`} value={h.person_name}>
+                      {h.person_name}
+                      {h.ward ? ` (${h.ward})` : ""}
+                    </option>
+                  ))}
                 <option value={CUSTOM_REPLACES_VALUE}>Other (enter name)…</option>
               </select>
               {useCustomReplaces ? (
@@ -554,9 +558,15 @@ export default function SubmitNamePage() {
                 />
               ) : null}
               <p className="text-xs text-gray-500 mt-1">
-                {holdersReady && selectedCallingForReplaces && replaceCandidates.length === 0
-                  ? "No one is currently listed in this calling. Choose Other to type a name, or add holders on the Calling roster."
-                  : "Shows only people currently holding this calling. Completing the calling updates the roster automatically."}
+                {!selectedCallingForReplaces
+                  ? "Pick a calling first — then only current holders of that calling appear here."
+                  : holdersReady && replaceCandidates.length === 0
+                    ? "No one is currently listed in this calling. Choose Other to type a name, or update the Calling roster."
+                    : `${replaceCandidates.length} current holder${replaceCandidates.length === 1 ? "" : "s"} for this calling. Completing the calling updates the roster automatically.`}
+                {" "}
+                <Link href="/modules/leadership/calling-roster" className="text-indigo-600 hover:underline">
+                  Calling roster
+                </Link>
               </p>
             </div>
 
