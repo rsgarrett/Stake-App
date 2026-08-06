@@ -12,6 +12,7 @@ import { BishopRecommendShareCard } from "@/components/leadership/bishop-recomme
 
 const CUSTOM_CALLING_VALUE = "__custom__"
 const CUSTOM_ORG_VALUE = "__custom_org__"
+const CUSTOM_REPLACES_VALUE = "__custom_replaces__"
 
 const ORGANIZATIONS = [
   "Stake Presidency",
@@ -101,21 +102,40 @@ export default function SubmitNamePage() {
     custom_organization: "",
     current_calling: "",
     replaces_person_name: "",
+    custom_replaces: "",
     reason: "",
   })
 
-  const [roleUsers, setRoleUsers] = useState<{ full_name: string; role: string }[]>([])
+  const [useCustomReplaces, setUseCustomReplaces] = useState(false)
+  /** Names of current calling holders (not app logins) — stake president excluded. */
+  const [replaceCandidates, setReplaceCandidates] = useState<string[]>([])
 
   useEffect(() => {
     const supabase = createClient()
-    supabase
-      .from("users")
-      .select("full_name, role")
-      .neq("role", "viewer")
-      .order("full_name")
-      .then(({ data }) => {
-        setRoleUsers((data || []).filter((u) => u.full_name))
-      })
+    void (async () => {
+      const names = new Set<string>()
+      const [{ data: hc }, { data: seats }] = await Promise.all([
+        supabase
+          .from("high_council_members")
+          .select("member_name")
+          .eq("status", "active")
+          .order("member_name"),
+        supabase
+          .from("stake_permission_roster")
+          .select("person_name, office_slug")
+          .not("person_name", "is", null),
+      ])
+      for (const row of hc ?? []) {
+        const n = (row.member_name as string | null)?.trim()
+        if (n) names.add(n)
+      }
+      for (const row of seats ?? []) {
+        if (row.office_slug === "stake_president") continue
+        const n = (row.person_name as string | null)?.trim()
+        if (n) names.add(n)
+      }
+      setReplaceCandidates([...names].sort((a, b) => a.localeCompare(b)))
+    })()
   }, [])
 
   const handleOrgChange = (org: string) => {
@@ -164,6 +184,19 @@ export default function SubmitNamePage() {
   const effectiveOrganization = useCustomOrg
     ? formData.custom_organization
     : formData.organization
+  const effectiveReplacesName = useCustomReplaces
+    ? formData.custom_replaces.trim()
+    : formData.replaces_person_name.trim()
+
+  const handleReplacesSelect = (value: string) => {
+    if (value === CUSTOM_REPLACES_VALUE) {
+      setUseCustomReplaces(true)
+      setFormData({ ...formData, replaces_person_name: "", custom_replaces: "" })
+      return
+    }
+    setUseCustomReplaces(false)
+    setFormData({ ...formData, replaces_person_name: value, custom_replaces: "" })
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -178,6 +211,12 @@ export default function SubmitNamePage() {
 
     if (!effectiveCallingName.trim()) {
       setError("Please select or enter a calling name")
+      setLoading(false)
+      return
+    }
+
+    if (useCustomReplaces && !effectiveReplacesName) {
+      setError("Please enter the name of the person being replaced, or choose N/A")
       setLoading(false)
       return
     }
@@ -207,7 +246,7 @@ export default function SubmitNamePage() {
             formData.current_calling ? `Current calling: ${formData.current_calling}` : "",
             formData.reason || "",
           ].filter(Boolean).join("\n") || null,
-          replaces_person_name: formData.replaces_person_name || null,
+          replaces_person_name: effectiveReplacesName || null,
           submitted_by: userId,
           stake_id: stakeId,
           status: "pending",
@@ -412,17 +451,29 @@ export default function SubmitNamePage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Replaces (person currently in the calling)</label>
               <select
-                value={formData.replaces_person_name}
-                onChange={(e) => setFormData({ ...formData, replaces_person_name: e.target.value })}
+                value={useCustomReplaces ? CUSTOM_REPLACES_VALUE : formData.replaces_person_name}
+                onChange={(e) => handleReplacesSelect(e.target.value)}
                 className={inputClass}
               >
                 <option value="">{englishMenuTitleCase("N/A — New calling (no one to replace)")}</option>
-                {roleUsers.map((u) => (
-                  <option key={u.full_name} value={u.full_name}>
-                    {u.full_name} ({englishMenuTitleCase(u.role?.replace(/_/g, " ") || "")})
+                {replaceCandidates.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
                   </option>
                 ))}
+                <option value={CUSTOM_REPLACES_VALUE}>Other (enter name)…</option>
               </select>
+              {useCustomReplaces ? (
+                <input
+                  type="text"
+                  required={useCustomReplaces}
+                  value={formData.custom_replaces}
+                  onChange={(e) => setFormData({ ...formData, custom_replaces: e.target.value })}
+                  className={`${inputClass} mt-2`}
+                  placeholder="Name of the person being replaced"
+                  autoFocus
+                />
+              ) : null}
               <p className="text-xs text-gray-500 mt-1">
                 When this calling is completed, the replaced person&apos;s app permissions will be updated automatically.
               </p>
