@@ -11,6 +11,7 @@ import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 import { BishopRecommendShareCard } from "@/components/leadership/bishop-recommend-share-card"
 
 const CUSTOM_CALLING_VALUE = "__custom__"
+const CUSTOM_ORG_VALUE = "__custom_org__"
 
 const ORGANIZATIONS = [
   "Stake Presidency",
@@ -89,6 +90,7 @@ export default function SubmitNamePage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [useCustomCalling, setUseCustomCalling] = useState(false)
+  const [useCustomOrg, setUseCustomOrg] = useState(false)
   const [formData, setFormData] = useState({
     type: "Calling" as "Calling" | "Release" | "Assignment" | "MP",
     person_name: "",
@@ -96,6 +98,7 @@ export default function SubmitNamePage() {
     calling_name: "",
     custom_calling: "",
     organization: "",
+    custom_organization: "",
     current_calling: "",
     replaces_person_name: "",
     reason: "",
@@ -116,13 +119,34 @@ export default function SubmitNamePage() {
   }, [])
 
   const handleOrgChange = (org: string) => {
+    if (org === CUSTOM_ORG_VALUE) {
+      setUseCustomOrg(true)
+      setUseCustomCalling(true)
+      setFormData({
+        ...formData,
+        organization: "",
+        custom_organization: "",
+        calling_name: "",
+        custom_calling: "",
+      })
+      return
+    }
+    setUseCustomOrg(false)
     setUseCustomCalling(false)
-    setFormData({ ...formData, organization: org, calling_name: "", custom_calling: "" })
+    setFormData({
+      ...formData,
+      organization: org,
+      custom_organization: "",
+      calling_name: "",
+      custom_calling: "",
+    })
   }
 
-  const filteredCallings = formData.organization
-    ? CALLINGS_BY_ORG[formData.organization] || []
-    : ALL_CALLINGS.map((c) => c.calling)
+  const filteredCallings = useCustomOrg
+    ? []
+    : formData.organization
+      ? CALLINGS_BY_ORG[formData.organization] || []
+      : ALL_CALLINGS.map((c) => c.calling)
 
   const handleCallingSelect = (value: string) => {
     if (value === CUSTOM_CALLING_VALUE) {
@@ -137,11 +161,20 @@ export default function SubmitNamePage() {
   const effectiveCallingName = useCustomCalling
     ? formData.custom_calling
     : formData.calling_name
+  const effectiveOrganization = useCustomOrg
+    ? formData.custom_organization
+    : formData.organization
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
+
+    if (!effectiveOrganization.trim()) {
+      setError("Please select or enter an organization")
+      setLoading(false)
+      return
+    }
 
     if (!effectiveCallingName.trim()) {
       setError("Please select or enter a calling name")
@@ -169,7 +202,7 @@ export default function SubmitNamePage() {
           person_name: formData.person_name,
           ward: wardValue,
           calling_name: effectiveCallingName,
-          organization: formData.organization || null,
+          organization: effectiveOrganization.trim() || null,
           notes: [
             formData.current_calling ? `Current calling: ${formData.current_calling}` : "",
             formData.reason || "",
@@ -277,8 +310,8 @@ export default function SubmitNamePage() {
                 Organization <span className="text-red-500">*</span>
               </label>
               <select
-                required
-                value={formData.organization}
+                required={!useCustomOrg}
+                value={useCustomOrg ? CUSTOM_ORG_VALUE : formData.organization}
                 onChange={(e) => handleOrgChange(e.target.value)}
                 className={inputClass}
               >
@@ -288,8 +321,26 @@ export default function SubmitNamePage() {
                     {englishMenuTitleCase(org)}
                   </option>
                 ))}
+                <option value={CUSTOM_ORG_VALUE}>Other (enter custom organization)…</option>
               </select>
             </div>
+
+            {useCustomOrg ? (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Custom organization <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required={useCustomOrg}
+                  value={formData.custom_organization}
+                  onChange={(e) => setFormData({ ...formData, custom_organization: e.target.value })}
+                  className={inputClass}
+                  placeholder="Enter the organization name"
+                  autoFocus
+                />
+              </div>
+            ) : null}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -302,17 +353,20 @@ export default function SubmitNamePage() {
                 className={inputClass}
               >
                 <option value="">
-                  {formData.organization
-                    ? `-- ${englishMenuTitleCase(`Select calling in ${formData.organization}`)} --`
-                    : `-- ${englishMenuTitleCase("Select organization first")} --`}
+                  {useCustomOrg
+                    ? `-- ${englishMenuTitleCase("Select other for a custom name")} --`
+                    : formData.organization
+                      ? `-- ${englishMenuTitleCase(`Select calling in ${formData.organization}`)} --`
+                      : `-- ${englishMenuTitleCase("Select organization first")} --`}
                 </option>
-                {formData.organization ? (
+                {!useCustomOrg && formData.organization ? (
                   filteredCallings.map((c) => (
                     <option key={c} value={c}>
                       {englishMenuTitleCase(c)}
                     </option>
                   ))
-                ) : (
+                ) : null}
+                {!useCustomOrg && !formData.organization ? (
                   Object.entries(CALLINGS_BY_ORG).map(([org, callings]) => (
                     <optgroup key={org} label={englishMenuTitleCase(org)}>
                       {callings.map((c) => (
@@ -322,7 +376,7 @@ export default function SubmitNamePage() {
                       ))}
                     </optgroup>
                   ))
-                )}
+                ) : null}
                 <option value={CUSTOM_CALLING_VALUE}>Other (enter custom name)…</option>
               </select>
             </div>
@@ -339,7 +393,7 @@ export default function SubmitNamePage() {
                   onChange={(e) => setFormData({ ...formData, custom_calling: e.target.value })}
                   className={inputClass}
                   placeholder="Enter the calling or assignment title"
-                  autoFocus
+                  autoFocus={!useCustomOrg}
                 />
               </div>
             ) : null}
