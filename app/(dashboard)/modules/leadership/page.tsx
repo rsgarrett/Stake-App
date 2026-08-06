@@ -208,9 +208,17 @@ export default function LeadershipPage() {
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Calling Tracker</h1>
           <p className="mt-1 text-sm sm:text-base text-gray-600">Manage callings through each stage of the process</p>
         </div>
-        <Link href={`/modules/leadership/recommend${returnQuery}`} className={`${buttonVariants()} shrink-0 self-start sm:self-auto`}>
-          <Plus className="h-4 w-4 mr-2" />Submit Name
-        </Link>
+        <div className="flex flex-wrap gap-2 shrink-0 self-start sm:self-auto">
+          <Link
+            href="/modules/leadership/calling-roster"
+            className={`${buttonVariants({ variant: "outline" })}`}
+          >
+            Calling roster
+          </Link>
+          <Link href={`/modules/leadership/recommend${returnQuery}`} className={`${buttonVariants()}`}>
+            <Plus className="h-4 w-4 mr-2" />Submit Name
+          </Link>
+        </div>
       </div>
 
       <div className="mb-5">

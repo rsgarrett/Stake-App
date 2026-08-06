@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -9,6 +9,7 @@ import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 import { BishopRecommendShareCard } from "@/components/leadership/bishop-recommend-share-card"
+import { sameCallingName } from "@/lib/callings/calling-holders"
 
 const CUSTOM_CALLING_VALUE = "__custom__"
 const CUSTOM_ORG_VALUE = "__custom_org__"
@@ -107,13 +108,32 @@ export default function SubmitNamePage() {
   })
 
   const [useCustomReplaces, setUseCustomReplaces] = useState(false)
-  /** Names of current calling holders (not app logins) — stake president excluded. */
-  const [replaceCandidates, setReplaceCandidates] = useState<string[]>([])
+  /** Active calling holders from the stake roster: { calling_name, person_name }. */
+  const [holders, setHolders] = useState<{ calling_name: string; person_name: string }[]>([])
+  const [holdersReady, setHoldersReady] = useState(false)
 
   useEffect(() => {
     const supabase = createClient()
     void (async () => {
-      const names = new Set<string>()
+      const { data, error } = await supabase
+        .from("stake_calling_holders")
+        .select("calling_name, person_name")
+        .eq("status", "active")
+        .order("person_name")
+      if (!error && data) {
+        setHolders(
+          data
+            .filter((r) => r.person_name?.trim() && r.calling_name?.trim())
+            .map((r) => ({
+              calling_name: r.calling_name as string,
+              person_name: (r.person_name as string).trim(),
+            }))
+        )
+        setHoldersReady(true)
+        return
+      }
+      // Fallback before migration 074: HC + permission seats (never stake president).
+      const namesByCalling = new Map<string, string[]>()
       const [{ data: hc }, { data: seats }] = await Promise.all([
         supabase
           .from("high_council_members")
@@ -127,38 +147,78 @@ export default function SubmitNamePage() {
       ])
       for (const row of hc ?? []) {
         const n = (row.member_name as string | null)?.trim()
-        if (n) names.add(n)
+        if (!n) continue
+        const list = namesByCalling.get("High Councilor") ?? []
+        list.push(n)
+        namesByCalling.set("High Councilor", list)
+      }
+      const seatCalling: Record<string, string> = {
+        stake_clerk: "Stake Clerk",
+        assistant_stake_clerk: "Assistant Stake Clerk",
+        executive_secretary: "Stake Executive Secretary",
+        assistant_executive_secretary_1: "Assistant Stake Executive Secretary",
+        assistant_executive_secretary_2: "Assistant Stake Executive Secretary",
       }
       for (const row of seats ?? []) {
         if (row.office_slug === "stake_president") continue
+        const calling =
+          seatCalling[row.office_slug] ||
+          (row.office_slug?.startsWith("high_council_") ? "High Councilor" : null)
+        if (!calling) continue
         const n = (row.person_name as string | null)?.trim()
-        if (n) names.add(n)
+        if (!n) continue
+        const list = namesByCalling.get(calling) ?? []
+        list.push(n)
+        namesByCalling.set(calling, list)
       }
-      setReplaceCandidates([...names].sort((a, b) => a.localeCompare(b)))
+      setHolders(
+        [...namesByCalling.entries()].flatMap(([calling_name, people]) =>
+          people.map((person_name) => ({ calling_name, person_name }))
+        )
+      )
+      setHoldersReady(true)
     })()
   }, [])
+
+  const selectedCallingForReplaces = (
+    useCustomCalling ? formData.custom_calling : formData.calling_name
+  ).trim()
+
+  const replaceCandidates = useMemo(() => {
+    if (!selectedCallingForReplaces) return [] as string[]
+    const names = holders
+      .filter((h) => sameCallingName(h.calling_name, selectedCallingForReplaces))
+      .map((h) => h.person_name)
+    return [...new Set(names)].sort((a, b) => a.localeCompare(b))
+  }, [holders, selectedCallingForReplaces])
 
   const handleOrgChange = (org: string) => {
     if (org === CUSTOM_ORG_VALUE) {
       setUseCustomOrg(true)
       setUseCustomCalling(true)
+      setUseCustomReplaces(false)
       setFormData({
         ...formData,
         organization: "",
         custom_organization: "",
         calling_name: "",
         custom_calling: "",
+        replaces_person_name: "",
+        custom_replaces: "",
       })
       return
     }
     setUseCustomOrg(false)
     setUseCustomCalling(false)
+    setUseCustomReplaces(false)
     setFormData({
       ...formData,
       organization: org,
       custom_organization: "",
       calling_name: "",
       custom_calling: "",
+      replaces_person_name: "",
+      custom_replaces: "",
     })
   }
 
@@ -171,11 +231,25 @@ export default function SubmitNamePage() {
   const handleCallingSelect = (value: string) => {
     if (value === CUSTOM_CALLING_VALUE) {
       setUseCustomCalling(true)
-      setFormData({ ...formData, calling_name: "", custom_calling: "" })
+      setUseCustomReplaces(false)
+      setFormData({
+        ...formData,
+        calling_name: "",
+        custom_calling: "",
+        replaces_person_name: "",
+        custom_replaces: "",
+      })
       return
     }
     setUseCustomCalling(false)
-    setFormData({ ...formData, calling_name: value, custom_calling: "" })
+    setUseCustomReplaces(false)
+    setFormData({
+      ...formData,
+      calling_name: value,
+      custom_calling: "",
+      replaces_person_name: "",
+      custom_replaces: "",
+    })
   }
 
   const effectiveCallingName = useCustomCalling
@@ -454,8 +528,13 @@ export default function SubmitNamePage() {
                 value={useCustomReplaces ? CUSTOM_REPLACES_VALUE : formData.replaces_person_name}
                 onChange={(e) => handleReplacesSelect(e.target.value)}
                 className={inputClass}
+                disabled={!selectedCallingForReplaces && !useCustomReplaces}
               >
-                <option value="">{englishMenuTitleCase("N/A — New calling (no one to replace)")}</option>
+                <option value="">
+                  {!selectedCallingForReplaces
+                    ? englishMenuTitleCase("Select a calling first")
+                    : englishMenuTitleCase("N/A — New calling (no one to replace)")}
+                </option>
                 {replaceCandidates.map((name) => (
                   <option key={name} value={name}>
                     {name}
@@ -475,7 +554,9 @@ export default function SubmitNamePage() {
                 />
               ) : null}
               <p className="text-xs text-gray-500 mt-1">
-                When this calling is completed, the replaced person&apos;s app permissions will be updated automatically.
+                {holdersReady && selectedCallingForReplaces && replaceCandidates.length === 0
+                  ? "No one is currently listed in this calling. Choose Other to type a name, or add holders on the Calling roster."
+                  : "Shows only people currently holding this calling. Completing the calling updates the roster automatically."}
               </p>
             </div>
 

@@ -15,6 +15,10 @@ import {
   seatUserOnRoster,
   userHasOtherRosterSeats,
 } from "@/lib/settings/roster-login"
+import {
+  releaseCallingHolder,
+  syncCallingHolderOnComplete,
+} from "@/lib/callings/calling-holders"
 
 async function findUserByName(
   admin: ReturnType<typeof createAdminClient>,
@@ -238,7 +242,7 @@ export async function POST(req: NextRequest) {
 
     const { data: calling, error: callingError } = await admin
       .from("callings")
-      .select("type, person_name, calling_name, replaces_person_name, ward, stake_id")
+      .select("type, person_name, calling_name, organization, replaces_person_name, ward, stake_id")
       .eq("id", callingId)
       .single()
 
@@ -267,6 +271,14 @@ export async function POST(req: NextRequest) {
           "Seat holder names could not be updated — run migration 072_roster_seat_person_names.sql."
         )
       }
+      results.push(
+        ...(await releaseCallingHolder(
+          admin,
+          stakeId,
+          calling.person_name,
+          calling.calling_name
+        ))
+      )
       results.push(...(await releaseFromHcRoster(admin, stakeId, calling.person_name)))
       results.push(await revokeReleasedPerson(admin, stakeId, calling.person_name))
       return NextResponse.json({ success: true, results, release: true })
@@ -316,6 +328,18 @@ export async function POST(req: NextRequest) {
         ))
       )
     }
+
+    results.push(
+      ...(await syncCallingHolderOnComplete(admin, {
+        stakeId,
+        personName: calling.person_name,
+        callingName: calling.calling_name,
+        organization: calling.organization,
+        ward: calling.ward,
+        replacesPersonName: calling.replaces_person_name,
+        sourceCallingId: callingId,
+      }))
+    )
 
     if (calling.replaces_person_name) {
       results.push(
