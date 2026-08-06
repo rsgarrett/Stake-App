@@ -71,10 +71,11 @@ export async function updateSession(request: NextRequest) {
     })
   }
 
-  // Allow access to login and register pages without authentication
+  // Allow access to login, register, and one-time seat claim without authentication
   if (
     request.nextUrl.pathname.startsWith("/login") ||
-    request.nextUrl.pathname.startsWith("/register")
+    request.nextUrl.pathname.startsWith("/register") ||
+    request.nextUrl.pathname.startsWith("/claim-seat")
   ) {
     // If user is already logged in and trying to access login/register, redirect to dashboard
     if (user) {

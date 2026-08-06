@@ -13,7 +13,7 @@ import {
 } from "@/lib/settings/stake-office-slugs"
 import type { UserRole } from "@/types"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
-import { AlertCircle, KeyRound, Plus, Shield, Trash2, UserPlus, UserRoundCog } from "lucide-react"
+import { AlertCircle, Copy, KeyRound, Plus, Shield, Trash2, UserPlus, UserRoundCog } from "lucide-react"
 
 export interface StakePermissionRosterRow {
   id: string
@@ -93,8 +93,52 @@ export function PermissionsRoster() {
   const [createPassword, setCreatePassword] = useState("")
   const [createMode, setCreateMode] = useState<"create" | "invite">("create")
   const [lastProvisionMessage, setLastProvisionMessage] = useState<string | null>(null)
+  const [lastClaimUrl, setLastClaimUrl] = useState<string | null>(null)
+  const [claimingForRowId, setClaimingForRowId] = useState<string | null>(null)
 
   const canEdit = canEditStakePermissionRoster(myRole)
+
+  const copyClaimLinkForSeat = async (row: StakePermissionRosterRow) => {
+    if (!canEdit) return
+    const holder = row.person_name?.trim()
+    if (!holder) {
+      window.alert(
+        "This seat has no calling-holder name yet. Complete Set Apart on the calling tracker (with Replaces when needed), then try again."
+      )
+      return
+    }
+    setClaimingForRowId(row.id)
+    setError(null)
+    setLastClaimUrl(null)
+    setLastProvisionMessage(null)
+    try {
+      const res = await fetch("/api/admin/seats/claim-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rosterRowId: row.id, personName: holder }),
+      })
+      const payload = (await res.json()) as {
+        error?: string
+        claimUrl?: string
+        message?: string
+      }
+      if (!res.ok) throw new Error(payload.error || "Could not create claim link.")
+      if (!payload.claimUrl) throw new Error("No claim URL returned.")
+      setLastClaimUrl(payload.claimUrl)
+      setLastProvisionMessage(payload.message || "Claim link ready — copy and send it.")
+      try {
+        await navigator.clipboard.writeText(payload.claimUrl)
+      } catch {
+        // Still show the URL below for manual copy.
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setError(msg)
+      window.alert(msg)
+    } finally {
+      setClaimingForRowId(null)
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -432,7 +476,8 @@ export function PermissionsRoster() {
             {subtitle ? <p className="text-xs text-gray-500">{subtitle}</p> : null}
             {!seated && callingHolder ? (
               <p className="text-xs text-sky-800 bg-sky-50 border border-sky-100 rounded px-2 py-1 inline-block">
-                Holds this calling (synced from the calling tracker) — no app login yet. Create a login below to give them access.
+                Holds this calling — no app login yet. Copy a one-time claim link to send them (they set their own email
+                &amp; password), or create a login manually below.
               </p>
             ) : null}
             {!seated && !callingHolder ? (
@@ -468,6 +513,18 @@ export function PermissionsRoster() {
               })}
             </select>
             <div className="flex flex-col gap-2">
+              {canEdit && !seated && callingHolder ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="w-full"
+                  disabled={savingId === row.id || claimingForRowId === row.id}
+                  onClick={() => void copyClaimLinkForSeat(row)}
+                >
+                  <Copy className="h-3.5 w-3.5 mr-1.5 inline" aria-hidden />
+                  {claimingForRowId === row.id ? "Creating claim link…" : "Copy claim link"}
+                </Button>
+              ) : null}
               {canEdit && !seated ? (
                 <Button
                   type="button"
@@ -478,12 +535,12 @@ export function PermissionsRoster() {
                   onClick={() => {
                     setCreatingForRowId(creatingForRowId === row.id ? null : row.id)
                     setCreateEmail("")
-                    setCreateFullName("")
+                    setCreateFullName(callingHolder || "")
                     setCreatePassword("")
                   }}
                 >
                   <UserPlus className="h-3.5 w-3.5 mr-1.5 inline" aria-hidden />
-                  {creatingForRowId === row.id ? "Cancel create login" : "Create login for this seat"}
+                  {creatingForRowId === row.id ? "Cancel create login" : "Create login manually"}
                 </Button>
               ) : null}
               {canEdit && row.assigned_user_id ? (
@@ -636,9 +693,10 @@ export function PermissionsRoster() {
               <CardTitle className="text-xl">Stake leadership roster &amp; app permissions</CardTitle>
             </div>
             <CardDescription>
-              Create and manage logins for stake presidency, clerks, executive secretaries, and high councilors.
-              Each seat maps to app permissions. When someone is released, use <strong>Remove from seat</strong> or{" "}
-              <strong>Revoke login</strong> so the previous person loses access.
+              Manage stake leadership seats and app permissions. Prefer <strong>Copy claim link</strong> (or Set Apart on
+              the calling tracker) so the new holder sets their own email and password — no need to type names into
+              Supabase. When someone is released, use <strong>Remove from seat</strong> or{" "}
+              <strong>Revoke login</strong> so they lose access.
               {canEdit
                 ? " If the stake president seat was still empty after migration, it links to your account the first time you open this screen as president."
                 : " Contact stake presidency or a clerk to change assignments."}
@@ -682,6 +740,24 @@ export function PermissionsRoster() {
             <p className="text-sm rounded-md bg-emerald-50 border border-emerald-200 px-3 py-2 text-emerald-900">
               {lastProvisionMessage}
             </p>
+          ) : null}
+
+          {lastClaimUrl ? (
+            <div className="text-sm rounded-md bg-sky-50 border border-sky-200 px-3 py-2 text-sky-950 space-y-2">
+              <p className="font-medium">One-time claim link (send via text or email)</p>
+              <code className="block break-all text-xs bg-white border border-sky-100 rounded px-2 py-1.5">
+                {lastClaimUrl}
+              </code>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => void navigator.clipboard.writeText(lastClaimUrl)}
+              >
+                <Copy className="h-3.5 w-3.5 mr-1.5 inline" aria-hidden />
+                Copy again
+              </Button>
+            </div>
           ) : null}
 
           <div className="space-y-2">

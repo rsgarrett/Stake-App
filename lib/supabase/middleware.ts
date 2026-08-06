@@ -76,7 +76,8 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/login") ||
     request.nextUrl.pathname.startsWith("/register") ||
     request.nextUrl.pathname.startsWith("/auth/callback") ||
-    request.nextUrl.pathname.startsWith("/recommend-calling")
+    request.nextUrl.pathname.startsWith("/recommend-calling") ||
+    request.nextUrl.pathname.startsWith("/claim-seat")
   ) {
     // If user is already logged in and trying to access login/register, redirect to dashboard
     if (

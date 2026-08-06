@@ -19,6 +19,11 @@ import {
   releaseCallingHolder,
   syncCallingHolderOnComplete,
 } from "@/lib/callings/calling-holders"
+import {
+  claimUrlForToken,
+  createSeatClaimToken,
+  resolveAppOrigin,
+} from "@/lib/settings/seat-claim"
 
 async function findUserByName(
   admin: ReturnType<typeof createAdminClient>,
@@ -362,9 +367,35 @@ export async function POST(req: NextRequest) {
         await admin.from("users").update({ role: roleMap.app_role }).eq("id", newUser.id)
         results.push(`Updated ${calling.person_name} role to ${roleMap.app_role}.`)
       }
+    } else if (rosterRowId) {
+      const minted = await createSeatClaimToken(admin, {
+        stakeId,
+        rosterRowId,
+        personName: calling.person_name,
+        createdBy: auth.ctx.userId,
+      })
+      if ("error" in minted) {
+        results.push(
+          `No login for '${calling.person_name}' — could not create claim link (${minted.error}). Use Settings → Copy claim link.`
+        )
+        return NextResponse.json({ success: true, results, rosterRowId, officeSlug })
+      }
+      const claimUrl = claimUrlForToken(resolveAppOrigin(req.nextUrl.origin), minted.rawToken)
+      results.push(
+        `No login yet for '${calling.person_name}'. Send them this one-time claim link (they set their own email & password; expires in 14 days):`
+      )
+      results.push(claimUrl)
+      return NextResponse.json({
+        success: true,
+        results,
+        rosterRowId,
+        officeSlug,
+        claimUrl,
+        claimExpiresAt: minted.expiresAt,
+      })
     } else {
       results.push(
-        `No login for '${calling.person_name}' — create one in Settings → Stake leadership roster (email required).`
+        `No login for '${calling.person_name}' and no matching permission seat — add/check the seat in Settings, then use Copy claim link.`
       )
     }
 

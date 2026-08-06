@@ -140,7 +140,21 @@ export default function LeadershipPage() {
           body: JSON.stringify({ callingId: c.id }),
         })
         const result = await res.json()
-        if (result.results && result.results.length > 0) {
+        if (result.claimUrl && typeof result.claimUrl === "string") {
+          try {
+            await navigator.clipboard.writeText(result.claimUrl)
+          } catch {
+            // Clipboard may be blocked; still show the link in the alert.
+          }
+          alert(
+            "Permissions updated — first-time claim link ready (also copied to clipboard if allowed):\n\n" +
+              result.claimUrl +
+              "\n\nSend this link to " +
+              c.person_name +
+              ". They choose their own email and password. It works once and expires in 14 days.\n\n" +
+              (result.results?.length ? result.results.join("\n") : "")
+          )
+        } else if (result.results && result.results.length > 0) {
           alert("Permissions updated:\n\n" + result.results.join("\n"))
         }
       } catch {
