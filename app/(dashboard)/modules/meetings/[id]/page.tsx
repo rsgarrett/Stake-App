@@ -217,21 +217,6 @@ function isNotesColumnError(err: unknown): boolean {
 const GENERAL_HANDBOOK_URL =
   "https://www.churchofjesuschrist.org/study/manual/general-handbook?lang=eng"
 
-/**
- * Advance a handbook topic to the next section number. The stake marches
- * through the Handbook sequentially (1.0 → 1.1 → 1.2 …), so the trailing
- * numeric segment is incremented. Returns just the number (the new section's
- * title is left for the user to fill). Non-numeric topics are returned as-is.
- */
-function nextHandbookTopic(prev: string | null | undefined): string {
-  const raw = (prev ?? "").trim()
-  const m = /^(\d+(?:\.\d+)*)/.exec(raw)
-  if (!m) return raw
-  const parts = m[1].split(".").map((n) => parseInt(n, 10))
-  parts[parts.length - 1] += 1
-  return parts.join(".")
-}
-
 function fieldIcon(ft: AgendaFieldType) {
   const Icon = FIELD_ICONS[ft]
   return Icon ? <Icon className="h-3.5 w-3.5 text-gray-400 shrink-0" /> : null
@@ -907,28 +892,6 @@ export default function MeetingDetailPage() {
   }
 
   /**
-   * Suggest the next person for a rotating opening (prayer / handbook training)
-   * using fair least-recently-served rotation across the meeting's pool.
-   */
-  const suggestRotationFor = async (itemTitle: string): Promise<string | null> => {
-    if (!meeting) return null
-    const pool = rotationPoolForMeeting(meeting.meeting_type, agendaPeople)
-    if (pool.length === 0) return null
-    const history = await loadRotationHistory()
-    const already = agendaItems
-      .filter((it) => it.title.toLowerCase() !== itemTitle.toLowerCase())
-      .map((it) => (getEditValue(it, "assigned_to") as string) || it.assigned_to || "")
-      .filter(Boolean) as string[]
-    if (conducting?.trim()) already.push(conducting.trim())
-    return pickNextInRotation(pool, history, already)
-  }
-
-  const rotateAssignment = async (itemTitle: string, apply: (name: string) => void) => {
-    const name = await suggestRotationFor(itemTitle)
-    if (name) apply(name)
-  }
-
-  /**
    * Most recent handbook-training topic used in a prior meeting of this type,
    * so the section rotation picks up where the council left off.
    */
@@ -957,22 +920,6 @@ export default function MeetingDetailPage() {
       if (!best || order < best.order) best = { order, topic }
     }
     return best?.topic ?? null
-  }
-
-  /**
-   * Advance the handbook-training topic. High council / stake council agendas
-   * follow the stake's handbook curriculum (chapters 1–4, 6, 17, 29–31 broken
-   * into 5–7 minute segments); other meetings keep the simple section bump.
-   */
-  const rotateHandbookTopic = async (item: AgendaItem) => {
-    const current = ((getEditValue(item, "description") as string) || "").trim()
-    if (usesHandbookCurriculum(meeting?.meeting_type)) {
-      const base = current || (await loadLastHandbookTopic()) || ""
-      const seg = nextCurriculumSegment(base)
-      setEditField(item.id, "description", segmentTopicText(seg))
-      return
-    }
-    setEditField(item.id, "description", nextHandbookTopic(current))
   }
 
   /** Conducting also rotates fairly through the same pool. */
@@ -1729,21 +1676,6 @@ export default function MeetingDetailPage() {
     : []
   const hasRotationPool = rotationPool.length > 0
 
-  /** Small "next in rotation" button shown beside rotating person fields. */
-  const renderRotateButton = (itemTitle: string, apply: (name: string) => void) => {
-    if (!hasRotationPool || !isRotatingOpeningTitle(itemTitle)) return null
-    return (
-      <button
-        type="button"
-        onClick={() => void rotateAssignment(itemTitle, apply)}
-        title="Suggest next person (fair rotation — least recently assigned)"
-        className="shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-md border border-gray-200 text-gray-400 hover:text-indigo-600 hover:border-indigo-300 transition-colors"
-      >
-        <RefreshCw className="h-3.5 w-3.5" />
-      </button>
-    )
-  }
-
   // --- Field renderer per item ---
   const renderItemFields = (item: AgendaItem) => {
     const ft = getFieldTypeForTitle(item.title, meeting?.meeting_type)
@@ -1756,16 +1688,13 @@ export default function MeetingDetailPage() {
       case "person":
         // Prayers: free-text name — no people datalist dropdown.
         return (
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              placeholder={item.description || "Name"}
-              value={getEditValue(item, "assigned_to") as string}
-              onChange={(e) => setEditField(item.id, "assigned_to", e.target.value)}
-              className={`${inputClass} text-sm py-1.5`}
-            />
-            {renderRotateButton(item.title, (n) => setEditField(item.id, "assigned_to", n))}
-          </div>
+          <input
+            type="text"
+            placeholder={item.description || "Name"}
+            value={getEditValue(item, "assigned_to") as string}
+            onChange={(e) => setEditField(item.id, "assigned_to", e.target.value)}
+            className={`${inputClass} text-sm py-1.5`}
+          />
         )
 
       case "hymn":
@@ -1795,41 +1724,20 @@ export default function MeetingDetailPage() {
         return (
           <div className="space-y-1.5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  placeholder="Trainer name"
-                  value={getEditValue(item, "assigned_to") as string}
-                  onChange={(e) => setEditField(item.id, "assigned_to", e.target.value)}
-                  className={`${inputClass} text-sm py-1.5`}
-                />
-                {renderRotateButton(item.title, (n) => setEditField(item.id, "assigned_to", n))}
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  placeholder={
-                    onCurriculum
-                      ? "Handbook section (rotates through the training plan)"
-                      : "Section / topic (e.g. 1.3)"
-                  }
-                  value={topicValue}
-                  onChange={(e) => setEditField(item.id, "description", e.target.value)}
-                  className={`${inputClass} text-sm py-1.5`}
-                />
-                <button
-                  type="button"
-                  onClick={() => void rotateHandbookTopic(item)}
-                  title={
-                    onCurriculum
-                      ? "Advance to the next section in the handbook training plan (chapters 1–4, 6, 17, 29–31)"
-                      : "Advance to the next handbook section number"
-                  }
-                  className="shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-md border border-gray-200 text-gray-400 hover:text-indigo-600 hover:border-indigo-300 transition-colors"
-                >
-                  <RefreshCw className="h-3.5 w-3.5" />
-                </button>
-              </div>
+              <input
+                type="text"
+                placeholder="Trainer name"
+                value={getEditValue(item, "assigned_to") as string}
+                onChange={(e) => setEditField(item.id, "assigned_to", e.target.value)}
+                className={`${inputClass} text-sm py-1.5`}
+              />
+              <input
+                type="text"
+                placeholder={onCurriculum ? "Handbook section / topic" : "Section / topic (e.g. 1.3)"}
+                value={topicValue}
+                onChange={(e) => setEditField(item.id, "description", e.target.value)}
+                className={`${inputClass} text-sm py-1.5`}
+              />
             </div>
             <a
               href={topicSegment ? segmentHandbookUrl(topicSegment) : GENERAL_HANDBOOK_URL}
