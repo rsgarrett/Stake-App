@@ -318,8 +318,11 @@ export default function MeetingDetailPage() {
   const minutesContentRef = useRef("")
   const minutesRef = useRef<Minutes | null>(null)
   const [liveStatus, setLiveStatus] = useState<"connecting" | "live" | "off">("connecting")
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null)
 
   const supabase = createClient()
+  const supabaseRef = useRef(supabase)
+  supabaseRef.current = supabase
 
   useEffect(() => {
     let cancelled = false
@@ -362,7 +365,8 @@ export default function MeetingDetailPage() {
    * pending field edits so typing is not wiped mid-keystroke.
    */
   const refreshAgendaFromServer = useCallback(async () => {
-    const { data } = await supabase
+    const sb = supabaseRef.current
+    const { data } = await sb
       .from("meeting_agendas")
       .select("*")
       .eq("meeting_id", meetingId)
@@ -377,105 +381,146 @@ export default function MeetingDetailPage() {
       }
       return next
     })
-  }, [meetingId, supabase])
+    setLastSyncedAt(new Date())
+  }, [meetingId])
 
-  // Live sync while the presidency meets — others see notes/items without refresh.
+  const refreshMeetingFromServer = useCallback(async () => {
+    const sb = supabaseRef.current
+    const { data } = await sb.from("meetings").select("*").eq("id", meetingId).single()
+    if (data) setMeeting(data as Meeting)
+  }, [meetingId])
+
+  const refreshMinutesFromServer = useCallback(async () => {
+    const sb = supabaseRef.current
+    const { data } = await sb
+      .from("meeting_minutes")
+      .select("*")
+      .eq("meeting_id", meetingId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const row = (data as Minutes | null) ?? null
+    const prevContent = minutesRef.current?.content ?? ""
+    const localContent = minutesContentRef.current
+    setMinutes(row)
+    minutesRef.current = row
+    if (localContent === prevContent) {
+      const nextContent = row?.content ?? ""
+      setMinutesContent(nextContent)
+      minutesContentRef.current = nextContent
+    }
+  }, [meetingId])
+
+  // Live sync while meeting together: Realtime (with auth) + polling fallback.
   useEffect(() => {
     if (!meetingId) return
+    const sb = supabaseRef.current
     let cancelled = false
     let agendaTimer: ReturnType<typeof setTimeout> | null = null
     let meetingTimer: ReturnType<typeof setTimeout> | null = null
     let minutesTimer: ReturnType<typeof setTimeout> | null = null
+    let pollTimer: ReturnType<typeof setInterval> | null = null
+    let channel: ReturnType<typeof sb.channel> | null = null
 
     const scheduleAgenda = () => {
       if (agendaTimer) clearTimeout(agendaTimer)
       agendaTimer = setTimeout(() => {
         if (!cancelled) void refreshAgendaFromServer()
-      }, 150)
+      }, 100)
     }
-
     const scheduleMeeting = () => {
       if (meetingTimer) clearTimeout(meetingTimer)
-      meetingTimer = setTimeout(async () => {
-        const { data } = await supabase.from("meetings").select("*").eq("id", meetingId).single()
-        if (cancelled || !data) return
-        // Presiding/conducting local fields sync via the meeting.* effect below
-        // (keeps mid-edit typing from being overwritten).
-        setMeeting(data as Meeting)
-      }, 150)
+      meetingTimer = setTimeout(() => {
+        if (!cancelled) void refreshMeetingFromServer()
+      }, 100)
     }
-
     const scheduleMinutes = () => {
       if (minutesTimer) clearTimeout(minutesTimer)
-      minutesTimer = setTimeout(async () => {
-        const { data } = await supabase
-          .from("meeting_minutes")
-          .select("*")
-          .eq("meeting_id", meetingId)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle()
-        if (cancelled) return
-        const row = (data as Minutes | null) ?? null
-        const prevContent = minutesRef.current?.content ?? ""
-        const localContent = minutesContentRef.current
-        setMinutes(row)
-        minutesRef.current = row
-        if (localContent === prevContent) {
-          const nextContent = row?.content ?? ""
-          setMinutesContent(nextContent)
-          minutesContentRef.current = nextContent
-        }
-      }, 150)
+      minutesTimer = setTimeout(() => {
+        if (!cancelled) void refreshMinutesFromServer()
+      }, 100)
     }
 
-    setLiveStatus("connecting")
-    const channel = supabase
-      .channel(`meeting-live-${meetingId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "meeting_agendas",
-          filter: `meeting_id=eq.${meetingId}`,
-        },
-        () => scheduleAgenda()
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "meetings",
-          filter: `id=eq.${meetingId}`,
-        },
-        () => scheduleMeeting()
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "meeting_minutes",
-          filter: `meeting_id=eq.${meetingId}`,
-        },
-        () => scheduleMinutes()
-      )
-      .subscribe((status) => {
-        if (cancelled) return
-        if (status === "SUBSCRIBED") setLiveStatus("live")
-        else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") setLiveStatus("off")
-      })
+    const pollAll = () => {
+      if (cancelled) return
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return
+      void refreshAgendaFromServer()
+      void refreshMeetingFromServer()
+      void refreshMinutesFromServer()
+    }
+
+    ;(async () => {
+      setLiveStatus("connecting")
+      // Realtime websocket needs the JWT explicitly — otherwise RLS silently
+      // drops postgres_changes events even when REST queries work.
+      const { data: sessionData } = await sb.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (token) {
+        await sb.realtime.setAuth(token)
+      }
+      if (cancelled) return
+
+      channel = sb
+        .channel(`meeting-live-${meetingId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "meeting_agendas",
+            filter: `meeting_id=eq.${meetingId}`,
+          },
+          () => scheduleAgenda()
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "meetings",
+            filter: `id=eq.${meetingId}`,
+          },
+          () => scheduleMeeting()
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "meeting_minutes",
+            filter: `meeting_id=eq.${meetingId}`,
+          },
+          () => scheduleMinutes()
+        )
+        .subscribe((status) => {
+          if (cancelled) return
+          if (status === "SUBSCRIBED") setLiveStatus("live")
+          else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") setLiveStatus("off")
+        })
+
+      // Polling fallback so collaboration still works if Realtime auth/replication glitches.
+      pollTimer = setInterval(pollAll, 2500)
+    })()
+
+    const onAuth = (event: string) => {
+      if (event === "TOKEN_REFRESHED" || event === "SIGNED_IN") {
+        void sb.auth.getSession().then(({ data }) => {
+          if (data.session?.access_token) void sb.realtime.setAuth(data.session.access_token)
+        })
+      }
+    }
+    const { data: authSub } = sb.auth.onAuthStateChange(onAuth)
 
     return () => {
       cancelled = true
       if (agendaTimer) clearTimeout(agendaTimer)
       if (meetingTimer) clearTimeout(meetingTimer)
       if (minutesTimer) clearTimeout(minutesTimer)
-      void supabase.removeChannel(channel)
+      if (pollTimer) clearInterval(pollTimer)
+      authSub.subscription.unsubscribe()
+      if (channel) void sb.removeChannel(channel)
     }
-  }, [meetingId, supabase, refreshAgendaFromServer])
+  }, [meetingId, refreshAgendaFromServer, refreshMeetingFromServer, refreshMinutesFromServer])
 
   /** Older seeded agendas put calendar fourth; handbook order expects it first. */
   const ensureCalendarReviewFirst = useCallback(
@@ -2121,18 +2166,23 @@ export default function MeetingDetailPage() {
               ? "bg-emerald-50 text-emerald-700"
               : liveStatus === "connecting"
                 ? "bg-amber-50 text-amber-700"
-                : "bg-gray-100 text-gray-500"
+                : "bg-sky-50 text-sky-700"
           }`}
           title={
             liveStatus === "live"
-              ? "Live — agenda changes from others appear here automatically"
+              ? "Live sync on — others’ agenda saves appear here within a couple seconds"
               : liveStatus === "connecting"
                 ? "Connecting live updates…"
-                : "Live updates unavailable — refresh to see others’ changes (run migration 077 if needed)"
+                : "Using backup sync (every few seconds). Hard refresh both browsers after deploy if needed."
           }
         >
           <Radio className="h-3 w-3" aria-hidden />
-          {liveStatus === "live" ? "Live" : liveStatus === "connecting" ? "Connecting" : "Offline"}
+          {liveStatus === "live" ? "Live" : liveStatus === "connecting" ? "Connecting" : "Syncing"}
+          {lastSyncedAt ? (
+            <span className="font-normal opacity-80">
+              · {lastSyncedAt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" })}
+            </span>
+          ) : null}
         </span>
       </div>
 
