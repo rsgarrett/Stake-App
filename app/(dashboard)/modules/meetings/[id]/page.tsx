@@ -12,7 +12,7 @@ import {
   ArrowLeft, Plus, Trash2, Clock, FileText, ListOrdered,
   User, MapPin, ChevronDown, ChevronUp, Music,
   BookOpen, CheckCircle2, Users, MessageSquare, CalendarDays, ClipboardList,
-  RefreshCw, ExternalLink,
+  RefreshCw, ExternalLink, Radio,
 } from "lucide-react"
 import {
   getFieldTypeForTitle, getSubItemPlaceholder, getTemplateForMeetingType,
@@ -314,6 +314,10 @@ export default function MeetingDetailPage() {
   const notesColumnAvailableRef = useRef<boolean | null>(null)
   const calendarReorderAttempted = useRef<string | null>(null)
   const addAgendaItemAttempted = useRef<string | null>(null)
+  const visitDirtyRef = useRef(false)
+  const minutesContentRef = useRef("")
+  const minutesRef = useRef<Minutes | null>(null)
+  const [liveStatus, setLiveStatus] = useState<"connecting" | "live" | "off">("connecting")
 
   const supabase = createClient()
 
@@ -352,6 +356,126 @@ export default function MeetingDetailPage() {
     const { data } = await supabase.from("meeting_agendas").select("*").eq("meeting_id", meetingId).order("item_order", { ascending: true })
     setAgendaItems(data || [])
   }
+
+  /**
+   * Soft agenda refresh for realtime: pull latest rows but keep any local
+   * pending field edits so typing is not wiped mid-keystroke.
+   */
+  const refreshAgendaFromServer = useCallback(async () => {
+    const { data } = await supabase
+      .from("meeting_agendas")
+      .select("*")
+      .eq("meeting_id", meetingId)
+      .order("item_order", { ascending: true })
+    const items = (data || []) as AgendaItem[]
+    setAgendaItems(items)
+    const ids = new Set(items.map((i) => i.id))
+    setEditingItems((prev) => {
+      const next: Record<string, Partial<AgendaItem>> = {}
+      for (const [id, edits] of Object.entries(prev)) {
+        if (ids.has(id)) next[id] = edits
+      }
+      return next
+    })
+  }, [meetingId, supabase])
+
+  // Live sync while the presidency meets — others see notes/items without refresh.
+  useEffect(() => {
+    if (!meetingId) return
+    let cancelled = false
+    let agendaTimer: ReturnType<typeof setTimeout> | null = null
+    let meetingTimer: ReturnType<typeof setTimeout> | null = null
+    let minutesTimer: ReturnType<typeof setTimeout> | null = null
+
+    const scheduleAgenda = () => {
+      if (agendaTimer) clearTimeout(agendaTimer)
+      agendaTimer = setTimeout(() => {
+        if (!cancelled) void refreshAgendaFromServer()
+      }, 150)
+    }
+
+    const scheduleMeeting = () => {
+      if (meetingTimer) clearTimeout(meetingTimer)
+      meetingTimer = setTimeout(async () => {
+        const { data } = await supabase.from("meetings").select("*").eq("id", meetingId).single()
+        if (cancelled || !data) return
+        // Presiding/conducting local fields sync via the meeting.* effect below
+        // (keeps mid-edit typing from being overwritten).
+        setMeeting(data as Meeting)
+      }, 150)
+    }
+
+    const scheduleMinutes = () => {
+      if (minutesTimer) clearTimeout(minutesTimer)
+      minutesTimer = setTimeout(async () => {
+        const { data } = await supabase
+          .from("meeting_minutes")
+          .select("*")
+          .eq("meeting_id", meetingId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        if (cancelled) return
+        const row = (data as Minutes | null) ?? null
+        const prevContent = minutesRef.current?.content ?? ""
+        const localContent = minutesContentRef.current
+        setMinutes(row)
+        minutesRef.current = row
+        if (localContent === prevContent) {
+          const nextContent = row?.content ?? ""
+          setMinutesContent(nextContent)
+          minutesContentRef.current = nextContent
+        }
+      }, 150)
+    }
+
+    setLiveStatus("connecting")
+    const channel = supabase
+      .channel(`meeting-live-${meetingId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "meeting_agendas",
+          filter: `meeting_id=eq.${meetingId}`,
+        },
+        () => scheduleAgenda()
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "meetings",
+          filter: `id=eq.${meetingId}`,
+        },
+        () => scheduleMeeting()
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "meeting_minutes",
+          filter: `meeting_id=eq.${meetingId}`,
+        },
+        () => scheduleMinutes()
+      )
+      .subscribe((status) => {
+        if (cancelled) return
+        if (status === "SUBSCRIBED") setLiveStatus("live")
+        else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") setLiveStatus("off")
+      })
+
+    return () => {
+      cancelled = true
+      if (agendaTimer) clearTimeout(agendaTimer)
+      if (meetingTimer) clearTimeout(meetingTimer)
+      if (minutesTimer) clearTimeout(minutesTimer)
+      void supabase.removeChannel(channel)
+    }
+  }, [meetingId, supabase, refreshAgendaFromServer])
 
   /** Older seeded agendas put calendar fourth; handbook order expects it first. */
   const ensureCalendarReviewFirst = useCallback(
@@ -483,10 +607,21 @@ export default function MeetingDetailPage() {
   ])
 
   const loadMinutes = async () => {
-    const { data } = await supabase.from("meeting_minutes").select("*").eq("meeting_id", meetingId).order("created_at", { ascending: false }).limit(1).single()
+    const { data } = await supabase
+      .from("meeting_minutes")
+      .select("*")
+      .eq("meeting_id", meetingId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
     if (data) {
       setMinutes(data)
-      setMinutesContent(data.content)
+      minutesRef.current = data
+      setMinutesContent(data.content || "")
+      minutesContentRef.current = data.content || ""
+    } else {
+      setMinutes(null)
+      minutesRef.current = null
     }
   }
 
@@ -1141,6 +1276,14 @@ export default function MeetingDetailPage() {
     await loadMinutes()
   }, [minutes, minutesContent, meetingId, supabase])
 
+  useEffect(() => {
+    minutesContentRef.current = minutesContent
+  }, [minutesContent])
+
+  useEffect(() => {
+    minutesRef.current = minutes
+  }, [minutes])
+
   const minutesAutosave = useAutosave({
     hasPending: minutesContent !== (minutes?.content ?? ""),
     save: persistMinutes,
@@ -1164,7 +1307,11 @@ export default function MeetingDetailPage() {
   const [visitDirty, setVisitDirty] = useState(false)
 
   useEffect(() => {
-    if (meeting) setVisitNames(getVisitedNames())
+    visitDirtyRef.current = visitDirty
+  }, [visitDirty])
+
+  useEffect(() => {
+    if (meeting && !visitDirtyRef.current) setVisitNames(getVisitedNames())
   }, [meeting?.description]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const addVisitName = () => {
@@ -1192,6 +1339,7 @@ export default function MeetingDetailPage() {
       .eq("id", meetingId)
     if (error) throw error
     setVisitDirty(false)
+    visitDirtyRef.current = false
     await loadMeeting()
   }, [visitNames, meetingId, supabase])
 
@@ -1199,11 +1347,33 @@ export default function MeetingDetailPage() {
 
   const [presiding, setPresiding] = useState("")
   const [conducting, setConducting] = useState("")
+  const presidingRef = useRef("")
+  const conductingRef = useRef("")
+  const meetingPcRef = useRef({ presiding: "", conducting: "" })
+  const pcSyncedMeetingId = useRef<string | null>(null)
+
+  useEffect(() => {
+    presidingRef.current = presiding
+    conductingRef.current = conducting
+  }, [presiding, conducting])
 
   useEffect(() => {
     if (!meeting) return
-    setPresiding(meeting.presiding ?? "")
-    setConducting(meeting.conducting ?? "")
+    const serverP = meeting.presiding ?? ""
+    const serverC = meeting.conducting ?? ""
+    // First load (or switched meetings): take server values.
+    if (pcSyncedMeetingId.current !== meeting.id) {
+      pcSyncedMeetingId.current = meeting.id
+      setPresiding(serverP)
+      setConducting(serverC)
+      meetingPcRef.current = { presiding: serverP, conducting: serverC }
+      return
+    }
+    // Live/remote updates: adopt only fields the user is not mid-edit on.
+    const prevServer = meetingPcRef.current
+    if (presidingRef.current === prevServer.presiding) setPresiding(serverP)
+    if (conductingRef.current === prevServer.conducting) setConducting(serverC)
+    meetingPcRef.current = { presiding: serverP, conducting: serverC }
   }, [meeting?.id, meeting?.presiding, meeting?.conducting])
 
   /**
@@ -1234,14 +1404,17 @@ export default function MeetingDetailPage() {
   }, [loading, meeting?.id, meetingId, agendaItems, agendaPeople.length, meetingWriteAllowed, openingsFilledForMeetingId])
 
   const persistPresidingConducting = useCallback(async () => {
-    const { error } = await supabase
-      .from("meetings")
-      .update({
-        presiding: presiding.trim() || null,
-        conducting: conducting.trim() || null,
-      })
-      .eq("id", meetingId)
+    const payload = {
+      presiding: presiding.trim() || null,
+      conducting: conducting.trim() || null,
+    }
+    const { error } = await supabase.from("meetings").update(payload).eq("id", meetingId)
     if (error) throw error
+    setMeeting((prev) => (prev ? { ...prev, ...payload } : prev))
+    meetingPcRef.current = {
+      presiding: payload.presiding ?? "",
+      conducting: payload.conducting ?? "",
+    }
   }, [presiding, conducting, meetingId, supabase])
 
   const presidingConductingAutosave = useAutosave({
@@ -1472,11 +1645,11 @@ export default function MeetingDetailPage() {
         return null
 
       case "person":
+        // Prayers: free-text name — no people datalist dropdown.
         return (
           <div className="flex items-center gap-2">
             <input
               type="text"
-              list="agenda-people-list"
               placeholder={item.description || "Name"}
               value={getEditValue(item, "assigned_to") as string}
               onChange={(e) => setEditField(item.id, "assigned_to", e.target.value)}
@@ -1516,7 +1689,6 @@ export default function MeetingDetailPage() {
               <div className="flex items-center gap-2">
                 <input
                   type="text"
-                  list="agenda-people-list"
                   placeholder="Trainer name"
                   value={getEditValue(item, "assigned_to") as string}
                   onChange={(e) => setEditField(item.id, "assigned_to", e.target.value)}
@@ -1925,22 +2097,43 @@ export default function MeetingDetailPage() {
       <>
 
       {/* Tab Navigation */}
-      <div className="flex space-x-1 mb-6 border-b overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-        {([
-          { key: "details" as Tab, label: "Details", icon: FileText },
-          { key: "agenda" as Tab, label: `Agenda (${agendaItems.length})`, icon: ListOrdered },
-          { key: "minutes" as Tab, label: "Minutes", icon: FileText },
-        ]).map(({ key, label, icon: Icon }) => (
-          <button
-            key={key}
-            onClick={() => setActiveTab(key)}
-            className={`flex items-center shrink-0 px-3 sm:px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              activeTab === key ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            <Icon className="h-4 w-4 mr-2" />{label}
-          </button>
-        ))}
+      <div className="flex items-center gap-3 mb-6 border-b overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+        <div className="flex space-x-1 flex-1 min-w-0">
+          {([
+            { key: "details" as Tab, label: "Details", icon: FileText },
+            { key: "agenda" as Tab, label: `Agenda (${agendaItems.length})`, icon: ListOrdered },
+            { key: "minutes" as Tab, label: "Minutes", icon: FileText },
+          ]).map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`flex items-center shrink-0 px-3 sm:px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                activeTab === key ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <Icon className="h-4 w-4 mr-2" />{label}
+            </button>
+          ))}
+        </div>
+        <span
+          className={`shrink-0 mb-px inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+            liveStatus === "live"
+              ? "bg-emerald-50 text-emerald-700"
+              : liveStatus === "connecting"
+                ? "bg-amber-50 text-amber-700"
+                : "bg-gray-100 text-gray-500"
+          }`}
+          title={
+            liveStatus === "live"
+              ? "Live — agenda changes from others appear here automatically"
+              : liveStatus === "connecting"
+                ? "Connecting live updates…"
+                : "Live updates unavailable — refresh to see others’ changes (run migration 077 if needed)"
+          }
+        >
+          <Radio className="h-3 w-3" aria-hidden />
+          {liveStatus === "live" ? "Live" : liveStatus === "connecting" ? "Connecting" : "Offline"}
+        </span>
       </div>
 
       {/* Details Tab */}

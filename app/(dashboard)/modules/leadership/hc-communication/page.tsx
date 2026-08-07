@@ -148,7 +148,7 @@ export default function HCCommunicationPage() {
         membersData = membersData.filter((m) => seatIds.has(m.id))
         reportsData = reportsData.filter((r) => seatIds.has(r.member_id))
         if (resolvedMemberId) {
-          setReportForm((prev) => ({ ...prev, member_id: resolvedMemberId }))
+          setReportForm((prev) => ({ ...prev, member_id: resolvedMemberId! }))
         }
       } else {
         setMyMemberId(null)

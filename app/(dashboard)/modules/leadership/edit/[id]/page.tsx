@@ -26,7 +26,7 @@ const WORKFLOW_STEPS = [
   { key: "sp_consideration", label: "SP Considered", icon: Users },
   { key: "bishop_approval", label: "Bishop Approved", icon: ShieldCheck },
   { key: "hc_sustained", label: "HC Sustained", icon: Vote },
-  { key: "ward_sustained", label: "Ward Sustained", icon: Hand },
+  { key: "ward_sustained", label: "Ward / Stake Sustained", icon: Hand },
   { key: "set_apart", label: "Set Apart", icon: Sparkles },
 ]
 

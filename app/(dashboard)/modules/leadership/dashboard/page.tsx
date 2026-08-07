@@ -85,7 +85,7 @@ export default function CallingsDashboard() {
     { label: "SP Consideration", value: stats.spConsideration, icon: Users, color: "border-blue-200 bg-blue-50 text-blue-900", link: "/modules/leadership/workflow?filter=sp_consideration" },
     { label: "Bishop Approval", value: stats.bishopApproval, icon: ShieldCheck, color: "border-purple-200 bg-purple-50 text-purple-900", link: "/modules/leadership/workflow?filter=bishop_approval" },
     { label: "HC Sustained", value: stats.hcSustained, icon: Vote, color: "border-indigo-200 bg-indigo-50 text-indigo-900", link: "/modules/leadership/workflow?filter=hc_sustained" },
-    { label: "Ward Sustained", value: stats.wardSustained, icon: Hand, color: "border-teal-200 bg-teal-50 text-teal-900", link: "/modules/leadership/workflow?filter=ward_sustained" },
+    { label: "Ward / Stake Sustained", value: stats.wardSustained, icon: Hand, color: "border-teal-200 bg-teal-50 text-teal-900", link: "/modules/leadership/workflow?filter=ward_sustained" },
     { label: "Set Apart", value: stats.setApart, icon: Sparkles, color: "border-green-200 bg-green-50 text-green-900", link: "/modules/leadership/workflow?filter=set_apart" },
   ]
 

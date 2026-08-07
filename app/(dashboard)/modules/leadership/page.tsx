@@ -35,7 +35,7 @@ const STAGES = [
   { key: "sp", label: "SP Consideration", color: "bg-blue-500", light: "bg-blue-50 border-blue-200", badge: "bg-blue-100 text-blue-700" },
   { key: "bishop", label: "Bishop Approval", color: "bg-purple-500", light: "bg-purple-50 border-purple-200", badge: "bg-purple-100 text-purple-700" },
   { key: "hc", label: "HC Sustained", color: "bg-indigo-500", light: "bg-indigo-50 border-indigo-200", badge: "bg-indigo-100 text-indigo-700" },
-  { key: "ward", label: "Ward Sustained", color: "bg-teal-500", light: "bg-teal-50 border-teal-200", badge: "bg-teal-100 text-teal-700" },
+  { key: "ward", label: "Ward / Stake Sustained", color: "bg-teal-500", light: "bg-teal-50 border-teal-200", badge: "bg-teal-100 text-teal-700" },
   { key: "setapart", label: "Set Apart", color: "bg-amber-500", light: "bg-amber-50 border-amber-200", badge: "bg-amber-100 text-amber-700" },
   { key: "done", label: "Completed", color: "bg-green-500", light: "bg-green-50 border-green-200", badge: "bg-green-100 text-green-700" },
 ]
@@ -116,12 +116,14 @@ export default function LeadershipPage() {
     ][s]
 
     // Release-before-calling guard: when this calling replaces someone, their
-    // release must be recorded before the new person is sustained or set
-    // apart, so two people never hold the same calling (or permission seat).
-    if ((s === 3 || s === 4) && c.replaces_person_name && !c.previous_release_verified) {
+    // release must be recorded before leaving HC Sustained (before Ward / Stake
+    // Sustained), so two people never hold the same calling or permission seat.
+    if (s >= 2 && s <= 4 && c.replaces_person_name && !c.previous_release_verified) {
+      const nextStep =
+        s === 2 ? "ward / stake sustained" : s === 3 ? "set apart" : "completed"
       const ok = confirm(
         `${c.replaces_person_name} has not been recorded as released yet.\n\n` +
-          `The release should happen before ${c.person_name} is ${s === 3 ? "sustained" : "set apart"}, ` +
+          `The release should happen before ${c.person_name} is ${nextStep}, ` +
           `so two people never hold the same calling or seat.\n\n` +
           `OK — the release has happened; record it and continue.\n` +
           `Cancel — hold this calling until the release is completed.`

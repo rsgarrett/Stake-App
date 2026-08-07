@@ -53,7 +53,7 @@ const WORKFLOW_STEPS = [
   { key: "sp_consideration", label: "SP Considered", icon: Users },
   { key: "bishop_approval", label: "Bishop Approved", icon: ShieldCheck },
   { key: "hc_sustained", label: "HC Sustained", icon: Vote },
-  { key: "ward_sustained", label: "Ward Sustained", icon: Hand },
+  { key: "ward_sustained", label: "Ward / Stake Sustained", icon: Hand },
   { key: "set_apart", label: "Set Apart", icon: Sparkles },
 ]
 
@@ -92,7 +92,7 @@ export default function CallingWorkflowPage() {
     const step = getStepIndex(calling)
 
     if (step === 4 && !calling.previous_release_verified) {
-      alert("Cannot advance to Ward Sustained — the previous release has not been verified.\n\nCheck \"Release Verified\" in the calling details first.")
+      alert("Cannot advance to Ward / Stake Sustained — the previous release has not been verified.\n\nCheck \"Release Verified\" in the calling details first.")
       return
     }
 
@@ -344,7 +344,7 @@ export default function CallingWorkflowPage() {
                         )}
                         {calling.sustained_date && (
                           <div className="bg-white rounded p-2 border">
-                            <span className="text-gray-500">Ward Sustained:</span>{" "}
+                            <span className="text-gray-500">Ward / Stake Sustained:</span>{" "}
                             <span className="font-medium">{new Date(calling.sustained_date).toLocaleDateString()}</span>
                           </div>
                         )}
