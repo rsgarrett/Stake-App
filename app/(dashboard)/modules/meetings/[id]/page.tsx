@@ -317,8 +317,12 @@ export default function MeetingDetailPage() {
   const visitDirtyRef = useRef(false)
   const minutesContentRef = useRef("")
   const minutesRef = useRef<Minutes | null>(null)
+  const editingItemsRef = useRef(editingItems)
+  editingItemsRef.current = editingItems
+  const [editRevision, setEditRevision] = useState(0)
   const [liveStatus, setLiveStatus] = useState<"connecting" | "live" | "off">("connecting")
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null)
+  const hasAgendaPending = Object.keys(editingItems).length > 0
 
   const supabase = createClient()
   const supabaseRef = useRef(supabase)
@@ -365,6 +369,10 @@ export default function MeetingDetailPage() {
    * pending field edits so typing is not wiped mid-keystroke.
    */
   const refreshAgendaFromServer = useCallback(async () => {
+    // Don't pull remote rows over in-flight local edits — that raced autosave
+    // and left other seats stuck on "Saving…" / missing updates.
+    if (Object.keys(editingItemsRef.current).length > 0) return
+
     const sb = supabaseRef.current
     const { data } = await sb
       .from("meeting_agendas")
@@ -373,14 +381,6 @@ export default function MeetingDetailPage() {
       .order("item_order", { ascending: true })
     const items = (data || []) as AgendaItem[]
     setAgendaItems(items)
-    const ids = new Set(items.map((i) => i.id))
-    setEditingItems((prev) => {
-      const next: Record<string, Partial<AgendaItem>> = {}
-      for (const [id, edits] of Object.entries(prev)) {
-        if (ids.has(id)) next[id] = edits
-      }
-      return next
-    })
     setLastSyncedAt(new Date())
   }, [meetingId])
 
@@ -444,7 +444,10 @@ export default function MeetingDetailPage() {
     const pollAll = () => {
       if (cancelled) return
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return
-      void refreshAgendaFromServer()
+      // Skip agenda poll while this browser has unsaved edits.
+      if (Object.keys(editingItemsRef.current).length === 0) {
+        void refreshAgendaFromServer()
+      }
       void refreshMeetingFromServer()
       void refreshMinutesFromServer()
     }
@@ -1090,6 +1093,7 @@ export default function MeetingDetailPage() {
       ...prev,
       [itemId]: { ...prev[itemId], [field]: value },
     }))
+    setEditRevision((n) => n + 1)
   }
 
   /**
@@ -1097,14 +1101,16 @@ export default function MeetingDetailPage() {
    * `useAutosave` hook below and also called on unload by that same hook.
    */
   const persistAgendaEdits = useCallback(async () => {
-    const snapshot = editingItems
+    const snapshot = editingItemsRef.current
     const ids = Object.keys(snapshot)
     if (ids.length === 0) return
+
+    const sb = supabaseRef.current
 
     const saveBatch = async (includeNotes: boolean) => {
       const saved: Record<string, Partial<AgendaItem>> = {}
       const results = await Promise.all(
-        ids.map((id) => {
+        ids.map(async (id) => {
           const edits = snapshot[id]
           if (!edits || Object.keys(edits).length === 0) return null
           const payload: Record<string, unknown> = {}
@@ -1116,7 +1122,22 @@ export default function MeetingDetailPage() {
           }
           if (Object.keys(payload).length === 0) return null
           saved[id] = savedEdits
-          return supabase.from("meeting_agendas").update(payload).eq("id", id)
+          // `.select()` so RLS-blocked updates (0 rows) are detected — otherwise
+          // the badge looks stuck/saving while nothing reaches other seats.
+          const result = await sb
+            .from("meeting_agendas")
+            .update(payload)
+            .eq("id", id)
+            .select("id")
+          if (!result.error && (!result.data || result.data.length === 0)) {
+            return {
+              error: {
+                message:
+                  "Save blocked — your login may not have meeting edit permission, or your stake profile is incomplete. Ask the stake president to confirm your seat in Settings.",
+              },
+            }
+          }
+          return result
         })
       )
       return { saved, results }
@@ -1135,27 +1156,51 @@ export default function MeetingDetailPage() {
       notesColumnAvailableRef.current = true
     }
 
+    // Notes-only edits when the notes column is unavailable would otherwise
+    // stay pending forever ("Saving…" forever).
+    if (notesColumnAvailableRef.current === false) {
+      const notesOnlyIds = ids.filter((id) => {
+        const edits = snapshot[id]
+        if (!edits) return false
+        const keys = Object.keys(edits)
+        return keys.length > 0 && keys.every((k) => k === "notes")
+      })
+      if (notesOnlyIds.length > 0 && Object.keys(saved).length === 0) {
+        setEditingItems((prev) => {
+          const next = { ...prev }
+          for (const id of notesOnlyIds) delete next[id]
+          return next
+        })
+        throw new Error(
+          "Meeting notes could not be saved — the notes column is missing. Run the agenda notes migration in Supabase, then refresh."
+        )
+      }
+    }
+
     if (firstError) throw firstError
 
-    // Merge the values we just saved into local state so the rendered inputs
-    // (which fall back to item[field]) stay current without a server reload.
     setAgendaItems((prev) =>
       prev.map((it) => (saved[it.id] ? { ...it, ...saved[it.id] } : it))
     )
 
-    // Clear only the fields we persisted that haven't changed since the
-    // snapshot. Anything typed during the in-flight save is preserved so the
-    // next debounce can save it (never reload/clear it out from under typing).
     setEditingItems((prev) => {
       const next: Record<string, Partial<AgendaItem>> = {}
       for (const [id, edits] of Object.entries(prev)) {
         const savedEdits = saved[id]
         if (!savedEdits) {
+          // Drop unsaved notes when the column is known missing so we don't spin forever.
+          if (notesColumnAvailableRef.current === false && edits.notes !== undefined) {
+            const rest = { ...edits }
+            delete rest.notes
+            if (Object.keys(rest).length > 0) next[id] = rest
+            continue
+          }
           next[id] = edits
           continue
         }
         const remaining: Record<string, unknown> = {}
         for (const [field, val] of Object.entries(edits)) {
+          if (notesColumnAvailableRef.current === false && field === "notes") continue
           if (!(field in savedEdits) || (savedEdits as Record<string, unknown>)[field] !== val) {
             remaining[field] = val
           }
@@ -1164,11 +1209,12 @@ export default function MeetingDetailPage() {
       }
       return next
     })
-  }, [editingItems, supabase])
+  }, [])
 
   const agendaAutosave = useAutosave({
-    hasPending: Object.keys(editingItems).length > 0,
+    hasPending: hasAgendaPending,
     save: persistAgendaEdits,
+    debounceKey: editRevision,
     debounceMs: 600,
   })
 
@@ -1305,11 +1351,15 @@ export default function MeetingDetailPage() {
     } = await supabase.auth.getUser()
     if (!user) throw new Error("Not authenticated")
     if (minutes) {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("meeting_minutes")
         .update({ content: minutesContent })
         .eq("id", minutes.id)
+        .select("id")
       if (error) throw error
+      if (!data?.length) {
+        throw new Error("Minutes save blocked — confirm your seat has meeting edit permission.")
+      }
     } else if (minutesContent.trim().length > 0) {
       const { error } = await supabase
         .from("meeting_minutes")
@@ -1332,6 +1382,7 @@ export default function MeetingDetailPage() {
   const minutesAutosave = useAutosave({
     hasPending: minutesContent !== (minutes?.content ?? ""),
     save: persistMinutes,
+    debounceKey: minutesContent,
     debounceMs: 800,
   })
 
@@ -1453,8 +1504,17 @@ export default function MeetingDetailPage() {
       presiding: presiding.trim() || null,
       conducting: conducting.trim() || null,
     }
-    const { error } = await supabase.from("meetings").update(payload).eq("id", meetingId)
+    const { data, error } = await supabase
+      .from("meetings")
+      .update(payload)
+      .eq("id", meetingId)
+      .select("id")
     if (error) throw error
+    if (!data?.length) {
+      throw new Error(
+        "Save blocked — your login may not have meeting edit permission. Confirm your seat in Settings."
+      )
+    }
     setMeeting((prev) => (prev ? { ...prev, ...payload } : prev))
     meetingPcRef.current = {
       presiding: payload.presiding ?? "",
@@ -1462,18 +1522,22 @@ export default function MeetingDetailPage() {
     }
   }, [presiding, conducting, meetingId, supabase])
 
+  const pcPending =
+    Boolean(meeting) &&
+    ((presiding ?? "") !== (meeting?.presiding ?? "") ||
+      (conducting ?? "") !== (meeting?.conducting ?? ""))
+
   const presidingConductingAutosave = useAutosave({
-    hasPending:
-      Boolean(meeting) &&
-      ((presiding ?? "") !== (meeting?.presiding ?? "") ||
-        (conducting ?? "") !== (meeting?.conducting ?? "")),
+    hasPending: pcPending,
     save: persistPresidingConducting,
+    debounceKey: `${presiding}||${conducting}`,
     debounceMs: 600,
   })
 
   const visitsAutosave = useAutosave({
     hasPending: visitDirty,
     save: persistVisitNames,
+    debounceKey: visitNames.join("\n"),
     debounceMs: 600,
   })
 

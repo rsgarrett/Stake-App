@@ -16,8 +16,16 @@ interface UseAutosaveOptions {
    * Async persistence callback. Should throw on failure so the hook can
    * surface an "error" state in the badge. The hook does not pass any
    * arguments — closures over the current state are the easiest pattern.
+   *
+   * Read via a ref so parent re-renders (polling) do not reset the debounce.
    */
   save: () => Promise<void>
+  /**
+   * Changes whenever the user edits local state. Resets the debounce timer
+   * without depending on the `save` callback identity (which often changes
+   * every render and used to starve flushes / clobber errors).
+   */
+  debounceKey?: string | number
   /** Debounce in milliseconds before save fires (default 700ms). */
   debounceMs?: number
   /**
@@ -38,15 +46,11 @@ interface UseAutosaveResult {
 
 /**
  * Generic debounced autosave hook.
- *
- * The hook is intentionally state-machine-only: callers own the data and
- * decide when something is "pending" (typically by comparing local state
- * to the most recent server snapshot). When a save fails the badge will
- * show the error state until the next change re-triggers a save.
  */
 export function useAutosave({
   hasPending,
   save,
+  debounceKey = 0,
   debounceMs = 700,
   flushOnUnload = true,
 }: UseAutosaveOptions): UseAutosaveResult {
@@ -56,6 +60,7 @@ export function useAutosave({
   const inFlight = useRef(false)
   const pendingRef = useRef(hasPending)
   const saveRef = useRef(save)
+  const needsFollowUp = useRef(false)
 
   useEffect(() => {
     pendingRef.current = hasPending
@@ -70,16 +75,27 @@ export function useAutosave({
       clearTimeout(timer.current)
       timer.current = null
     }
-    if (!pendingRef.current) return true
-    if (inFlight.current) return true
+    if (!pendingRef.current) {
+      setState((prev) => (prev === "saving" ? "saved" : prev))
+      return true
+    }
+    if (inFlight.current) {
+      needsFollowUp.current = true
+      return true
+    }
     inFlight.current = true
     setState("saving")
     try {
       await saveRef.current()
-      // If new edits came in while we were saving, we'll already be flagged
-      // pending again and the next render will re-schedule a save.
-      setState("saved")
-      setErrorMessage(null)
+      if (pendingRef.current) {
+        setState("saving")
+        timer.current = setTimeout(() => {
+          void flush()
+        }, debounceMs)
+      } else {
+        setState("saved")
+        setErrorMessage(null)
+      }
       return true
     } catch (err) {
       console.error("[useAutosave] save failed", err)
@@ -92,24 +108,39 @@ export function useAutosave({
       return false
     } finally {
       inFlight.current = false
+      if (needsFollowUp.current && pendingRef.current) {
+        needsFollowUp.current = false
+        timer.current = setTimeout(() => {
+          void flush()
+        }, debounceMs)
+      } else {
+        needsFollowUp.current = false
+      }
     }
-  }, [])
+  }, [debounceMs])
 
   useEffect(() => {
-    if (!hasPending) return
+    if (!hasPending) {
+      if (timer.current) {
+        clearTimeout(timer.current)
+        timer.current = null
+      }
+      if (!inFlight.current) {
+        setState((prev) => (prev === "saving" ? "saved" : prev))
+      }
+      return
+    }
+
     setState("saving")
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => {
       void flush()
     }, debounceMs)
+
     return () => {
       if (timer.current) clearTimeout(timer.current)
     }
-    // `save` is intentionally a dependency: callers pass a callback that closes
-    // over their latest state, so its identity changes on every keystroke. That
-    // lets us reset (debounce) the timer on each change instead of firing a save
-    // mid-typing, which previously dropped characters.
-  }, [hasPending, debounceMs, flush, save])
+  }, [hasPending, debounceKey, debounceMs, flush])
 
   useEffect(() => {
     if (!flushOnUnload) return
@@ -130,11 +161,6 @@ export function useAutosave({
     }
   }, [flushOnUnload, flush])
 
-  // Final flush on component unmount. This is critical for Next.js client-side
-  // navigation (clicking a <Link>) — that does NOT trigger beforeunload, so
-  // without this, any keystrokes within the debounce window before navigating
-  // away would be dropped on the floor. The fetch keeps running in the
-  // background after unmount and completes successfully.
   useEffect(() => {
     return () => {
       if (timer.current) clearTimeout(timer.current)
