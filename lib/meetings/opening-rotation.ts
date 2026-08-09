@@ -1,7 +1,7 @@
 /**
  * Fair rotation for the opening assignments of stake meetings (prayers and
- * handbook training), so participation spreads across everyone in the room
- * instead of falling to the same few people.
+ * handbook training), so participation spreads across everyone who actually
+ * attends that meeting type.
  *
  * Fairness rule: whoever has gone the longest without ANY rotating assignment
  * (prayer or training, in this meeting series) is up next. People who have
@@ -23,21 +23,54 @@ function slugNorm(meetingType: string): string {
   return (meetingType ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_")
 }
 
+function isStakePresidencyMeeting(slug: string): boolean {
+  return slug.startsWith("stake_presidency")
+}
+
+function isHighCouncilMeeting(slug: string): boolean {
+  return slug.includes("high_council")
+}
+
+function isStakeCouncilMeeting(slug: string): boolean {
+  return slug.includes("stake_council")
+}
+
 /**
- * Who is actually in the room and can take an opening assignment.
- * Stake presidency meetings: presidency, clerks, and executive secretaries.
- * Council meetings (HC / stake council / etc.): everyone except bishops.
+ * Who is in the room and can take an opening assignment for this meeting type.
+ *
+ * - Stake presidency: presidency + clerks + executive secretaries
+ * - High council: presidency + high councilors only (no clerks / secretaries)
+ * - Stake council: presidency + high councilors + stake RS / YW / Primary
+ *   presidents (from calling holders). No clerks / secretaries.
+ * - Other meetings: everyone except bishops (legacy default)
  */
 export function rotationPoolForMeeting(meetingType: string, people: AgendaPerson[]): string[] {
   const slug = slugNorm(meetingType)
-  const presidencyOnly = slug.startsWith("stake_presidency")
-  return people
-    .filter((p) => {
-      if (p.role === "Bishop") return false
-      if (presidencyOnly && /high council/i.test(p.role)) return false
-      return true
-    })
-    .map((p) => p.name)
+
+  if (isStakePresidencyMeeting(slug)) {
+    return people
+      .filter((p) => p.group === "presidency" || p.group === "clerk_secretary")
+      .map((p) => p.name)
+  }
+
+  if (isHighCouncilMeeting(slug)) {
+    return people
+      .filter((p) => p.group === "presidency" || p.group === "high_council")
+      .map((p) => p.name)
+  }
+
+  if (isStakeCouncilMeeting(slug)) {
+    return people
+      .filter(
+        (p) =>
+          p.group === "presidency" ||
+          p.group === "high_council" ||
+          p.group === "stake_auxiliary"
+      )
+      .map((p) => p.name)
+  }
+
+  return people.filter((p) => p.group !== "bishop").map((p) => p.name)
 }
 
 function normName(name: string): string {

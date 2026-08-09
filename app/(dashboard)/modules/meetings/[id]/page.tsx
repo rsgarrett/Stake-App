@@ -12,7 +12,7 @@ import {
   ArrowLeft, Plus, Trash2, Clock, FileText, ListOrdered,
   User, MapPin, ChevronDown, ChevronUp, Music,
   BookOpen, CheckCircle2, Users, MessageSquare, CalendarDays, ClipboardList,
-  RefreshCw, ExternalLink, Radio,
+  RefreshCw, Radio,
 } from "lucide-react"
 import {
   getFieldTypeForTitle, getSubItemPlaceholder, getTemplateForMeetingType,
@@ -30,11 +30,12 @@ import {
 import {
   findCurriculumSegment,
   nextCurriculumSegment,
-  segmentHandbookUrl,
   segmentTopicText,
   usesHandbookCurriculum,
 } from "@/lib/meetings/handbook-training-curriculum"
 import { setAgendaReturn } from "@/lib/navigation/agenda-return"
+import { CollaborativeTextarea } from "@/components/collab/collaborative-textarea"
+import { meetingCollabRoom, useSupabaseYDoc } from "@/lib/collab/use-supabase-y-doc"
 
 interface Meeting {
   id: string
@@ -213,10 +214,6 @@ function isNotesColumnError(err: unknown): boolean {
   return /notes['"]?\s+column|column\s+['"]?notes/i.test(msg)
 }
 
-/** Live link to the General Handbook on churchofjesuschrist.org. */
-const GENERAL_HANDBOOK_URL =
-  "https://www.churchofjesuschrist.org/study/manual/general-handbook?lang=eng"
-
 function fieldIcon(ft: AgendaFieldType) {
   const Icon = FIELD_ICONS[ft]
   return Icon ? <Icon className="h-3.5 w-3.5 text-gray-400 shrink-0" /> : null
@@ -291,6 +288,8 @@ export default function MeetingDetailPage() {
 
   const [userMeetingRole, setUserMeetingRole] = useState<string | null>(null)
   const meetingWriteAllowed = canManageStakeMeetings(userMeetingRole)
+  const [viewer, setViewer] = useState<{ id: string; name: string } | null>(null)
+  const [livePeers, setLivePeers] = useState<{ id: string; name: string }[]>([])
   const { people: agendaPeople } = useAgendaPeople()
   const [seededTemplateForMeetingId, setSeededTemplateForMeetingId] = useState<string | null>(null)
   const [carryNotice, setCarryNotice] = useState<string | null>(null)
@@ -320,16 +319,44 @@ export default function MeetingDetailPage() {
         data: { user },
       } = await supabase.auth.getUser()
       if (!user) {
-        if (!cancelled) setUserMeetingRole(null)
+        if (!cancelled) {
+          setUserMeetingRole(null)
+          setViewer(null)
+        }
         return
       }
-      const { data } = await supabase.from("users").select("role").eq("id", user.id).maybeSingle()
-      if (!cancelled) setUserMeetingRole(data?.role ?? null)
+      const { data } = await supabase
+        .from("users")
+        .select("role, full_name")
+        .eq("id", user.id)
+        .maybeSingle()
+      if (cancelled) return
+      setUserMeetingRole(data?.role ?? null)
+      const name =
+        (typeof data?.full_name === "string" && data.full_name.trim()) ||
+        user.email?.split("@")[0] ||
+        "Someone"
+      setViewer({ id: user.id, name })
     })()
     return () => {
       cancelled = true
     }
   }, [supabase])
+
+  // Free Docs-level text collab (Yjs + Supabase Realtime, no paid add-on).
+  const minutesCollab = useSupabaseYDoc({
+    room: meetingId ? meetingCollabRoom(meetingId, "minutes") : null,
+    supabase,
+    userName: viewer?.name,
+    enabled: Boolean(meetingId) && !loading,
+  })
+  const agendaCollab = useSupabaseYDoc({
+    room: meetingId ? meetingCollabRoom(meetingId, "agenda") : null,
+    supabase,
+    userName: viewer?.name,
+    enabled: Boolean(meetingId) && !loading,
+  })
+  const minutesYText = minutesCollab.doc?.getText("content") ?? null
 
   useEffect(() => { loadAll() }, [meetingId]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -350,14 +377,11 @@ export default function MeetingDetailPage() {
   }
 
   /**
-   * Soft agenda refresh for realtime: pull latest rows but keep any local
-   * pending field edits so typing is not wiped mid-keystroke.
+   * Soft agenda refresh for realtime: adopt remote rows/order while keeping
+   * local pending field overlays (getEditValue) so others’ edits stream in
+   * while you type elsewhere — closer to Docs than freezing the whole agenda.
    */
   const refreshAgendaFromServer = useCallback(async () => {
-    // Don't pull remote rows over in-flight local edits — that raced autosave
-    // and left other seats stuck on "Saving…" / missing updates.
-    if (Object.keys(editingItemsRef.current).length > 0) return
-
     const sb = supabaseRef.current
     const { data } = await sb
       .from("meeting_agendas")
@@ -367,6 +391,39 @@ export default function MeetingDetailPage() {
     const items = (data || []) as AgendaItem[]
     setAgendaItems(items)
     setLastSyncedAt(new Date())
+
+    // Drop overlays for deleted rows; clear fields that already match remote
+    // (our save echoed back, or we typed the same value someone else saved).
+    setEditingItems((prev) => {
+      const remoteById = new Map(items.map((it) => [it.id, it]))
+      let changed = false
+      const next: Record<string, Partial<AgendaItem>> = {}
+      for (const [id, edits] of Object.entries(prev)) {
+        const remote = remoteById.get(id)
+        if (!remote) {
+          changed = true
+          continue
+        }
+        const remaining: Record<string, unknown> = {}
+        for (const [field, val] of Object.entries(edits)) {
+          const remoteVal = (remote as unknown as Record<string, unknown>)[field]
+          const normalizedLocal = val === "" ? null : val
+          const normalizedRemote = remoteVal === "" ? null : remoteVal
+          if (normalizedLocal === normalizedRemote) {
+            changed = true
+            continue
+          }
+          remaining[field] = val
+        }
+        if (Object.keys(remaining).length > 0) {
+          if (Object.keys(remaining).length !== Object.keys(edits).length) changed = true
+          next[id] = remaining as Partial<AgendaItem>
+        } else {
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
   }, [meetingId])
 
   const refreshMeetingFromServer = useCallback(async () => {
@@ -396,7 +453,7 @@ export default function MeetingDetailPage() {
     }
   }, [meetingId])
 
-  // Live sync while meeting together: Realtime (with auth) + polling fallback.
+  // Live sync while meeting together: Realtime (with auth) + presence + poll fallback.
   useEffect(() => {
     if (!meetingId) return
     const sb = supabaseRef.current
@@ -411,30 +468,48 @@ export default function MeetingDetailPage() {
       if (agendaTimer) clearTimeout(agendaTimer)
       agendaTimer = setTimeout(() => {
         if (!cancelled) void refreshAgendaFromServer()
-      }, 100)
+      }, 80)
     }
     const scheduleMeeting = () => {
       if (meetingTimer) clearTimeout(meetingTimer)
       meetingTimer = setTimeout(() => {
         if (!cancelled) void refreshMeetingFromServer()
-      }, 100)
+      }, 80)
     }
     const scheduleMinutes = () => {
       if (minutesTimer) clearTimeout(minutesTimer)
       minutesTimer = setTimeout(() => {
         if (!cancelled) void refreshMinutesFromServer()
-      }, 100)
+      }, 80)
     }
 
     const pollAll = () => {
       if (cancelled) return
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return
-      // Skip agenda poll while this browser has unsaved edits.
-      if (Object.keys(editingItemsRef.current).length === 0) {
-        void refreshAgendaFromServer()
-      }
+      // Soft-merge keeps local dirty fields; always poll so others’ rows stream in.
+      void refreshAgendaFromServer()
       void refreshMeetingFromServer()
       void refreshMinutesFromServer()
+    }
+
+    const syncPresence = () => {
+      if (!channel || cancelled) return
+      const state = channel.presenceState<{ user_id?: string; name?: string }>()
+      const byId = new Map<string, string>()
+      for (const metas of Object.values(state)) {
+        for (const meta of metas) {
+          const id = typeof meta.user_id === "string" ? meta.user_id : ""
+          if (!id) continue
+          const name =
+            typeof meta.name === "string" && meta.name.trim() ? meta.name.trim() : "Someone"
+          byId.set(id, name)
+        }
+      }
+      const peers = [...byId.entries()]
+        .filter(([id]) => id !== viewer?.id)
+        .map(([id, name]) => ({ id, name }))
+        .sort((a, b) => a.name.localeCompare(b.name))
+      setLivePeers(peers)
     }
 
     ;(async () => {
@@ -448,8 +523,12 @@ export default function MeetingDetailPage() {
       }
       if (cancelled) return
 
+      const presenceKey = viewer?.id || sessionData.session?.user?.id || `anon-${meetingId}`
+
       channel = sb
-        .channel(`meeting-live-${meetingId}`)
+        .channel(`meeting-live-${meetingId}`, {
+          config: { presence: { key: presenceKey } },
+        })
         .on(
           "postgres_changes",
           {
@@ -480,14 +559,29 @@ export default function MeetingDetailPage() {
           },
           () => scheduleMinutes()
         )
-        .subscribe((status) => {
+        .on("presence", { event: "sync" }, syncPresence)
+        .on("presence", { event: "join" }, syncPresence)
+        .on("presence", { event: "leave" }, syncPresence)
+        .subscribe(async (status) => {
           if (cancelled) return
-          if (status === "SUBSCRIBED") setLiveStatus("live")
-          else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") setLiveStatus("off")
+          if (status === "SUBSCRIBED") {
+            setLiveStatus("live")
+            try {
+              await channel?.track({
+                user_id: viewer?.id || presenceKey,
+                name: viewer?.name || "Someone",
+                online_at: new Date().toISOString(),
+              })
+            } catch {
+              // Presence is best-effort; agenda sync still works without it.
+            }
+          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            setLiveStatus("off")
+          }
         })
 
-      // Polling fallback so collaboration still works if Realtime auth/replication glitches.
-      pollTimer = setInterval(pollAll, 2500)
+      // Faster fallback so collaboration stays snappy if Realtime glitches.
+      pollTimer = setInterval(pollAll, 1500)
     })()
 
     const onAuth = (event: string) => {
@@ -501,6 +595,7 @@ export default function MeetingDetailPage() {
 
     return () => {
       cancelled = true
+      setLivePeers([])
       if (agendaTimer) clearTimeout(agendaTimer)
       if (meetingTimer) clearTimeout(meetingTimer)
       if (minutesTimer) clearTimeout(minutesTimer)
@@ -508,7 +603,14 @@ export default function MeetingDetailPage() {
       authSub.subscription.unsubscribe()
       if (channel) void sb.removeChannel(channel)
     }
-  }, [meetingId, refreshAgendaFromServer, refreshMeetingFromServer, refreshMinutesFromServer])
+  }, [
+    meetingId,
+    viewer?.id,
+    viewer?.name,
+    refreshAgendaFromServer,
+    refreshMeetingFromServer,
+    refreshMinutesFromServer,
+  ])
 
   /** Older seeded agendas put calendar fourth; handbook order expects it first. */
   const ensureCalendarReviewFirst = useCallback(
@@ -1162,7 +1264,7 @@ export default function MeetingDetailPage() {
     hasPending: hasAgendaPending,
     save: persistAgendaEdits,
     debounceKey: editRevision,
-    debounceMs: 600,
+    debounceMs: 400,
   })
 
   // --- Sub-item helpers (stored as newline-separated text in description) ---
@@ -1720,36 +1822,22 @@ export default function MeetingDetailPage() {
       case "trainer": {
         const onCurriculum = usesHandbookCurriculum(meeting?.meeting_type)
         const topicValue = getEditValue(item, "description") as string
-        const topicSegment = onCurriculum ? findCurriculumSegment(topicValue) : null
         return (
-          <div className="space-y-1.5">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <input
-                type="text"
-                placeholder="Trainer name"
-                value={getEditValue(item, "assigned_to") as string}
-                onChange={(e) => setEditField(item.id, "assigned_to", e.target.value)}
-                className={`${inputClass} text-sm py-1.5`}
-              />
-              <input
-                type="text"
-                placeholder={onCurriculum ? "Handbook section / topic" : "Section / topic (e.g. 1.3)"}
-                value={topicValue}
-                onChange={(e) => setEditField(item.id, "description", e.target.value)}
-                className={`${inputClass} text-sm py-1.5`}
-              />
-            </div>
-            <a
-              href={topicSegment ? segmentHandbookUrl(topicSegment) : GENERAL_HANDBOOK_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800"
-            >
-              {topicSegment
-                ? `Open Handbook chapter ${topicSegment.chapter}: ${topicSegment.chapterTitle}`
-                : "Open the General Handbook"}{" "}
-              <ExternalLink className="h-3 w-3" />
-            </a>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <input
+              type="text"
+              placeholder="Trainer name"
+              value={getEditValue(item, "assigned_to") as string}
+              onChange={(e) => setEditField(item.id, "assigned_to", e.target.value)}
+              className={`${inputClass} text-sm py-1.5`}
+            />
+            <input
+              type="text"
+              placeholder={onCurriculum ? "Handbook section / topic" : "Section / topic (e.g. 1.3)"}
+              value={topicValue}
+              onChange={(e) => setEditField(item.id, "description", e.target.value)}
+              className={`${inputClass} text-sm py-1.5`}
+            />
           </div>
         )
       }
@@ -2132,30 +2220,52 @@ export default function MeetingDetailPage() {
             </button>
           ))}
         </div>
-        <span
-          className={`shrink-0 mb-px inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
-            liveStatus === "live"
-              ? "bg-emerald-50 text-emerald-700"
-              : liveStatus === "connecting"
-                ? "bg-amber-50 text-amber-700"
-                : "bg-sky-50 text-sky-700"
-          }`}
-          title={
-            liveStatus === "live"
-              ? "Live sync on — others’ agenda saves appear here within a couple seconds"
-              : liveStatus === "connecting"
-                ? "Connecting live updates…"
-                : "Using backup sync (every few seconds). Hard refresh both browsers after deploy if needed."
-          }
-        >
-          <Radio className="h-3 w-3" aria-hidden />
-          {liveStatus === "live" ? "Live" : liveStatus === "connecting" ? "Connecting" : "Syncing"}
-          {lastSyncedAt ? (
-            <span className="font-normal opacity-80">
-              · {lastSyncedAt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" })}
+        <div className="shrink-0 mb-px flex items-center gap-2">
+          {livePeers.length > 0 ? (
+            <span
+              className="inline-flex items-center gap-1 max-w-[12rem] sm:max-w-xs truncate text-[11px] text-gray-600"
+              title={livePeers.map((p) => p.name).join(", ")}
+            >
+              <Users className="h-3 w-3 shrink-0 text-emerald-600" aria-hidden />
+              <span className="truncate">
+                {livePeers.length === 1
+                  ? `${livePeers[0].name} here`
+                  : `${livePeers.length} others here`}
+              </span>
             </span>
           ) : null}
-        </span>
+          <span
+            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+              liveStatus === "live"
+                ? "bg-emerald-50 text-emerald-700"
+                : liveStatus === "connecting"
+                  ? "bg-amber-50 text-amber-700"
+                  : "bg-sky-50 text-sky-700"
+            }`}
+            title={
+              liveStatus === "live"
+                ? livePeers.length > 0
+                  ? `Live with ${livePeers.map((p) => p.name).join(", ")} — agenda fields sync as each person saves`
+                  : "Live sync on — others’ agenda saves appear here within about a second"
+                : liveStatus === "connecting"
+                  ? "Connecting live updates…"
+                  : "Using backup sync (every 1.5s). Hard refresh both browsers after deploy if needed."
+            }
+          >
+            <Radio className="h-3 w-3" aria-hidden />
+            {liveStatus === "live" ? "Live" : liveStatus === "connecting" ? "Connecting" : "Syncing"}
+            {lastSyncedAt ? (
+              <span className="font-normal opacity-80">
+                ·{" "}
+                {lastSyncedAt.toLocaleTimeString(undefined, {
+                  hour: "numeric",
+                  minute: "2-digit",
+                  second: "2-digit",
+                })}
+              </span>
+            ) : null}
+          </span>
+        </div>
       </div>
 
       {/* Details Tab */}
@@ -2514,7 +2624,22 @@ export default function MeetingDetailPage() {
                             </>
                           )}
                           {shouldShowItemNotes(item.title, meeting?.meeting_type) && (
-                            meetingWriteAllowed ? (
+                            agendaCollab.doc ? (
+                              <CollaborativeTextarea
+                                yText={agendaCollab.doc.getText(`notes:${item.id}`)}
+                                seedText={item.notes || ""}
+                                ready={agendaCollab.ready}
+                                readOnly={!meetingWriteAllowed}
+                                rows={2}
+                                placeholder="Notes / minutes from the meeting…"
+                                className={`${inputClass} text-sm py-1.5 bg-amber-50/40 border-amber-100 focus:bg-white${!meetingWriteAllowed ? " text-gray-700" : ""}`}
+                                onPlainText={(text) => {
+                                  if (!meetingWriteAllowed) return
+                                  if ((getEditValue(item, "notes") as string) === text) return
+                                  setEditField(item.id, "notes", text)
+                                }}
+                              />
+                            ) : meetingWriteAllowed ? (
                               <textarea
                                 rows={2}
                                 placeholder="Notes / minutes from the meeting…"
@@ -2522,13 +2647,11 @@ export default function MeetingDetailPage() {
                                 onChange={(e) => setEditField(item.id, "notes", e.target.value)}
                                 className={`${inputClass} text-sm py-1.5 bg-amber-50/40 border-amber-100 focus:bg-white`}
                               />
-                            ) : (
-                              (getEditValue(item, "notes") as string) ? (
-                                <p className="text-sm text-gray-700 whitespace-pre-wrap rounded-md bg-amber-50/40 border border-amber-100 px-3 py-2">
-                                  {getEditValue(item, "notes") as string}
-                                </p>
-                              ) : null
-                            )
+                            ) : (getEditValue(item, "notes") as string) ? (
+                              <p className="text-sm text-gray-700 whitespace-pre-wrap rounded-md bg-amber-50/40 border border-amber-100 px-3 py-2">
+                                {getEditValue(item, "notes") as string}
+                              </p>
+                            ) : null
                           )}
                         </div>
                       </div>
@@ -2567,29 +2690,60 @@ export default function MeetingDetailPage() {
       {activeTab === "minutes" && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center justify-between">
+            <CardTitle className="flex items-center justify-between gap-3">
               <span>Meeting Minutes</span>
-              {meetingWriteAllowed && (
-                <AutosaveBadge
-                  state={minutesAutosave.state}
-                  errorMessage={minutesAutosave.errorMessage}
-                  onRetry={() => void minutesAutosave.flush()}
-                />
-              )}
+              <div className="flex items-center gap-2">
+                {minutesCollab.peers.length > 0 ? (
+                  <span
+                    className="text-[11px] font-normal text-emerald-700 truncate max-w-[10rem]"
+                    title={minutesCollab.peers.map((p) => p.name).join(", ")}
+                  >
+                    {minutesCollab.peers.length === 1
+                      ? `${minutesCollab.peers[0].name} typing live`
+                      : `${minutesCollab.peers.length} others live`}
+                  </span>
+                ) : null}
+                {meetingWriteAllowed && (
+                  <AutosaveBadge
+                    state={minutesAutosave.state}
+                    errorMessage={minutesAutosave.errorMessage}
+                    onRetry={() => void minutesAutosave.flush()}
+                  />
+                )}
+              </div>
             </CardTitle>
             <CardDescription>
-              {minutes ? `Last updated ${new Date(minutes.updated_at).toLocaleString()}` : "Type below — your notes are saved automatically as you go."}
+              Live collaborative minutes (Docs-style).{" "}
+              {minutes
+                ? `Archive copy last saved ${new Date(minutes.updated_at).toLocaleString()}.`
+                : "Changes merge as people type; a backup copy saves automatically."}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <textarea
-              rows={16}
-              value={minutesContent}
-              readOnly={!meetingWriteAllowed}
-              onChange={(e) => meetingWriteAllowed && setMinutesContent(e.target.value)}
-              className={`${inputClass}${!meetingWriteAllowed ? " bg-gray-50 text-gray-700" : ""}`}
-              placeholder={"Record meeting minutes here...\n\nDiscussion Items:\n- ...\n\nAction Items:\n- [ ] ...\n\nDecisions Made:\n- ..."}
-            />
+            {minutesYText ? (
+              <CollaborativeTextarea
+                yText={minutesYText}
+                seedText={minutes?.content || ""}
+                ready={minutesCollab.ready}
+                readOnly={!meetingWriteAllowed}
+                rows={16}
+                className={`${inputClass}${!meetingWriteAllowed ? " bg-gray-50 text-gray-700" : ""}`}
+                placeholder={"Record meeting minutes here...\n\nDiscussion Items:\n- ...\n\nAction Items:\n- [ ] ...\n\nDecisions Made:\n- ..."}
+                onPlainText={(text) => {
+                  setMinutesContent(text)
+                  minutesContentRef.current = text
+                }}
+              />
+            ) : (
+              <textarea
+                rows={16}
+                value={minutesContent}
+                readOnly={!meetingWriteAllowed}
+                onChange={(e) => meetingWriteAllowed && setMinutesContent(e.target.value)}
+                className={`${inputClass}${!meetingWriteAllowed ? " bg-gray-50 text-gray-700" : ""}`}
+                placeholder={"Record meeting minutes here...\n\nDiscussion Items:\n- ...\n\nAction Items:\n- [ ] ...\n\nDecisions Made:\n- ..."}
+              />
+            )}
           </CardContent>
         </Card>
       )}
