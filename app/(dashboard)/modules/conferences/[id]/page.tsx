@@ -31,6 +31,7 @@ import {
 import { PROGRAM_ITEM_LABELS } from "@/lib/conferences/program-item-labels"
 import { STAKE_VISION_TEXT } from "@/lib/conferences/conducting-sheet-header-quotes"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
+import { ChurchWebLink } from "@/components/church-web-link"
 import {
   anyStandardOpeningTypeInProgram,
   hasStandardOpeningPrefix,
@@ -692,9 +693,9 @@ export default function ConferenceDetailPage() {
             <Trash2 className="h-4 w-4 mr-1.5" />
             Delete event
           </Button>
-          <a href={HANDBOOK_URL} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-500 hover:text-indigo-600 flex items-center gap-1">
+          <ChurchWebLink href={HANDBOOK_URL} className="text-xs text-gray-500 hover:text-indigo-600 flex items-center gap-1">
             <BookOpen className="h-3.5 w-3.5" /> General Handbook Ch. 29 — Meetings
-          </a>
+          </ChurchWebLink>
         </div>
       </div>
 

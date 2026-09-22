@@ -1,9 +1,10 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import * as Y from "yjs"
 import { SupabaseProvider } from "@supabase-labs/y-supabase"
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { decodeYUpdate, encodeYUpdate } from "@/lib/collab/y-update-codec"
 
 export type CollabStatus = "connecting" | "synced" | "live" | "error"
 
@@ -33,10 +34,28 @@ export function useSupabaseYDoc(options: {
   /** True after DB restore finishes (or fails) — safe to seed legacy plain text. */
   const [ready, setReady] = useState(false)
 
+  const supabaseRef = useRef(supabase)
+  supabaseRef.current = supabase
+  const userNameRef = useRef(userName)
+  userNameRef.current = userName
+  const providerRef = useRef<SupabaseProvider | null>(null)
+
+  // Keep awareness name fresh without tearing down the Y.Doc mid-meeting.
+  useEffect(() => {
+    const awareness = providerRef.current?.getAwareness()
+    if (!awareness) return
+    const prev = awareness.getLocalState()?.user as { name?: string; color?: string } | undefined
+    awareness.setLocalStateField("user", {
+      name: userName?.trim() || prev?.name || "Someone",
+      color: prev?.color || colorForClient(0),
+    })
+  }, [userName])
+
   useEffect(() => {
     if (!enabled || !room) {
       setDoc(null)
       setProvider(null)
+      providerRef.current = null
       setPeers([])
       setStatus("connecting")
       setReady(false)
@@ -47,30 +66,45 @@ export function useSupabaseYDoc(options: {
     const ydoc = new Y.Doc()
     let providerInstance: SupabaseProvider | null = null
     let readyFallback: ReturnType<typeof setTimeout> | null = null
+    let persistChannel: ReturnType<SupabaseClient["channel"]> | null = null
 
     const markReady = () => {
       if (!cancelled) setReady(true)
     }
 
+    const applyPersistedState = (encoded: string | null | undefined) => {
+      if (!encoded || cancelled) return
+      try {
+        const current = encodeYUpdate(Y.encodeStateAsUpdate(ydoc))
+        if (current === encoded) return
+        Y.applyUpdate(ydoc, decodeYUpdate(encoded), "remote")
+      } catch {
+        // Corrupt or empty snapshot — ignore; live broadcast may still work.
+      }
+    }
+
     ;(async () => {
-      const { data } = await supabase.auth.getSession()
+      const sb = supabaseRef.current
+      const { data } = await sb.auth.getSession()
       const token = data.session?.access_token
-      if (token) await supabase.realtime.setAuth(token)
+      if (token) await sb.realtime.setAuth(token)
       if (cancelled) {
         ydoc.destroy()
         return
       }
 
-      providerInstance = new SupabaseProvider(room, ydoc, supabase, {
+      providerInstance = new SupabaseProvider(room, ydoc, sb, {
         awareness: true,
-        persistence: true,
-        broadcastThrottleMs: 50,
+        persistence: { storeTimeout: 400 },
+        broadcastThrottleMs: 33,
+        autoReconnect: true,
       })
+      providerRef.current = providerInstance
 
       const awareness = providerInstance.getAwareness()
       if (awareness) {
         awareness.setLocalStateField("user", {
-          name: userName?.trim() || "Someone",
+          name: userNameRef.current?.trim() || "Someone",
           color: colorForClient(ydoc.clientID),
         })
       }
@@ -102,6 +136,9 @@ export function useSupabaseYDoc(options: {
       providerInstance.on("connect", () => {
         if (!cancelled) setStatus("live")
       })
+      providerInstance.on("disconnect", () => {
+        if (!cancelled) setStatus("connecting")
+      })
       providerInstance.on("error", () => {
         if (!cancelled) setStatus("error")
       })
@@ -118,7 +155,23 @@ export function useSupabaseYDoc(options: {
       })
 
       // If persistence never emits (older package edge cases), don't block forever.
-      readyFallback = setTimeout(markReady, 2500)
+      readyFallback = setTimeout(markReady, 1800)
+
+      // Fallback when Broadcast frames are dropped: applying the persisted
+      // snapshot still updates every other open agenda within ~400ms.
+      persistChannel = sb
+        .channel(`yjs-persist-${room}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "yjs_documents" },
+          (payload) => {
+            const row = payload.new as { room?: string; state?: string } | null
+            if (!row || row.room !== room) return
+            applyPersistedState(row.state)
+            if (!cancelled) setStatus("live")
+          }
+        )
+        .subscribe()
 
       setDoc(ydoc)
       setProvider(providerInstance)
@@ -128,14 +181,17 @@ export function useSupabaseYDoc(options: {
     return () => {
       cancelled = true
       if (readyFallback) clearTimeout(readyFallback)
+      if (persistChannel) void supabaseRef.current.removeChannel(persistChannel)
       providerInstance?.destroy()
+      providerRef.current = null
       ydoc.destroy()
       setDoc(null)
       setProvider(null)
       setPeers([])
       setReady(false)
     }
-  }, [enabled, room, supabase, userName])
+    // Intentionally omit supabase/userName — use refs so typing/name load doesn't reset the doc.
+  }, [enabled, room])
 
   return useMemo(
     () => ({ doc, provider, status, peers, ready }),

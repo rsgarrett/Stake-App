@@ -5,39 +5,37 @@ import { useBoundYText } from "@/lib/collab/use-bound-y-text"
 
 type Props = {
   yText: Y.Text | null
-  /** Seed Y.Text once when the shared doc is empty (legacy plain-text row). */
   seedText?: string
-  /** Wait for Yjs persistence restore before seeding legacy text. */
   ready?: boolean
   readOnly?: boolean
   className?: string
   placeholder?: string
-  rows?: number
-  /** Plain-text mirror for legacy columns / autosave badges. */
+  list?: string
+  type?: string
   onPlainText?: (value: string) => void
 }
 
-/**
- * Plain textarea bound to a Y.Text — concurrent typing merges like Docs.
- */
-export function CollaborativeTextarea({
+/** Single-line input bound to a Y.Text — concurrent typing merges like Docs. */
+export function CollaborativeInput({
   yText,
   seedText = "",
   ready = true,
   readOnly = false,
   className,
   placeholder,
-  rows = 8,
+  list,
+  type = "text",
   onPlainText,
 }: Props) {
   const { value, commit, inputRef } = useBoundYText(yText, seedText, ready, onPlainText)
 
   return (
-    <textarea
+    <input
       ref={(el) => {
         inputRef.current = el
       }}
-      rows={rows}
+      type={type}
+      list={list}
       value={value}
       readOnly={readOnly}
       placeholder={placeholder}

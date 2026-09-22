@@ -1,7 +1,10 @@
 /**
  * Fetches the stake Google Sheet (Sunday, Thursday, Ward Conference tabs),
- * applies high-council + Wednesday stake-presidency prep rules, and writes
+ * applies high-council Sunday rules, and writes
  * supabase/migrations/054_calendar_sunday_ward_times.sql
+ *
+ * Stake presidency meetings are weekly Thursday 8:00 PM (sp_schedule) — do not
+ * synthesize Wednesday "council prep" rows.
  *
  * Run from repo root: node scripts/generate-2026-calendar-migration.mjs
  */
@@ -9,6 +12,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { parseThursdayCsv, THURSDAY_GID } from "./parse-thursday-schedule.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
@@ -309,8 +313,8 @@ async function main() {
   const sundayCsv = await fetchText(
     `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv&gid=${SUNDAY_GID}`
   );
-  const thursdayJson = await fetchText(
-    `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent("2026 Thursday Schedule")}`
+  const thursdayCsv = await fetchText(
+    `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv&gid=${THURSDAY_GID}`
   );
   const wardJson = await fetchText(
     `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent("Ward Conference Schedule")}`
@@ -477,73 +481,7 @@ async function main() {
     );
   });
 
-  const thursdayTable = loadGvizTable(thursdayJson);
-  /** @type {Array<{visit_date: string, ward: string, meeting_type: string, start_time: string|null, end_time: string|null, slot: number|null, pg: string|null, pc: string|null, pw: string|null, notes: string|null}>} */
-  const thursdayRows = [];
-
-  function pushThursday(visitDate, ward, meetingType, startV, endV, slot, pg, pc, pw, notes) {
-    function fmtTime(v, w) {
-      if (v == null) return null;
-      if (typeof v === "string") {
-        const serial = gvizSerialTimeTo12h(v, w);
-        if (serial) return serial;
-        const t = v.trim();
-        if (/^\d{1,2}:\d{2}\s*(AM|PM)\b/i.test(t)) return t;
-        return null;
-      }
-      const d = parseGvizDate(v);
-      if (!d) return null;
-      let h = d.getHours();
-      const mi = d.getMinutes();
-      const wstr = (w || "").toLowerCase();
-      if (wstr.includes("blitz") && h >= 1 && h < 12) h += 12;
-      const ampm = h >= 12 ? "PM" : "AM";
-      h = h % 12;
-      if (h === 0) h = 12;
-      return `${h}:${String(mi).padStart(2, "0")} ${ampm}`;
-    }
-    const st = fmtTime(startV, ward);
-    const et = fmtTime(endV, ward);
-    thursdayRows.push({
-      visit_date: visitDate,
-      ward,
-      meeting_type: meetingType,
-      start_time: st,
-      end_time: et,
-      slot,
-      pg,
-      pc,
-      pw,
-      notes,
-    });
-  }
-
-  for (const row of thursdayTable.rows) {
-    const cells = row.c || [];
-    const dateRaw = cells[0]?.v;
-    const visitD = typeof dateRaw === "string" ? parseGvizDate(dateRaw) : null;
-    if (!visitD) continue;
-    const visit_date = formatISODate(visitD);
-    const ward = cellVal(cells[1]);
-    const meetingType = cellVal(cells[2]);
-    if (!ward || !meetingType) continue;
-    const slot = cellVal(cells[5]);
-    const pg = cellVal(cells[7]);
-    const pc = cellVal(cells[8]);
-    const pw = cellVal(cells[9]);
-    const notes = cellVal(cells[10]);
-    pushThursday(visit_date, String(ward), String(meetingType), cells[3]?.v, cells[4]?.v, typeof slot === "number" ? slot : null, pg, pc, pw, notes);
-  }
-
-  const councilWards = new Set(["Coordinating Council", "Bishops Council", "Elders Quorum Council", "Relief Society Council"]);
-  /** @type {Set<string>} */
-  const wedPrepDates = new Set();
-  for (const tr of thursdayRows) {
-    if (!councilWards.has(tr.ward)) continue;
-    const d = new Date(tr.visit_date + "T12:00:00Z");
-    d.setUTCDate(d.getUTCDate() - 1);
-    wedPrepDates.add(formatISODate(d));
-  }
+  const thursdayRows = parseThursdayCsv(thursdayCsv);
 
   const lines = [];
   lines.push(`-- Sync 2026 stake calendar: ward sacrament/teaching times; teaching-only Sundays get synthetic ward visits`);
@@ -706,29 +644,9 @@ async function main() {
   lines.push(`END $$;`);
   lines.push(``);
 
-  const prepDates = [...wedPrepDates].sort();
-  if (prepDates.length > 0) {
-    lines.push(`INSERT INTO meetings (stake_id, title, meeting_type, scheduled_date, description, color, source_type, viewable_by_roles)`);
-    lines.push(`SELECT`);
-    lines.push(`  s.id,`);
-    lines.push(`  'Stake Presidency Meeting',`);
-    lines.push(`  'stake_presidency',`);
-    lines.push(`  (d.prep_date::timestamp + interval '19 hours 30 minutes') AT TIME ZONE 'America/Denver',`);
-    lines.push(`  'Preparation for Thursday coordinating / bishops / elders quorum / relief society council (7:30 PM).',`);
-    lines.push(`  '#3b82f6',`);
-    lines.push(`  'council_prep',`);
-    lines.push(`  ARRAY['stake_presidency']::text[]`);
-    lines.push(`FROM (SELECT id FROM stakes LIMIT 1) AS s`);
-    lines.push(`CROSS JOIN (`);
-    lines.push(`  VALUES`);
-    lines.push(prepDates.map((pd) => `    (${sqlStr(pd)}::date)`).join(",\n"));
-    lines.push(`) AS d(prep_date);`);
-    lines.push(``);
-  }
-
   fs.writeFileSync(OUT, lines.join("\n"), "utf8");
   console.log("Wrote", OUT);
-  console.log("Presidency rows", presidencyRows.length, "Thursday", thursdayRows.length, "Wed prep", prepDates.length);
+  console.log("Presidency rows", presidencyRows.length, "Thursday", thursdayRows.length);
 }
 
 main().catch((e) => {

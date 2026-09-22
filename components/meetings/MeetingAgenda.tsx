@@ -1,16 +1,27 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import {
-  ArrowLeft, ChevronLeft, ChevronRight, Save, Plus, Trash2,
-  Calendar, Clock, BookOpen, Users, ClipboardList, CheckCircle,
+  ArrowLeft, Plus, Trash2,
+  Calendar, BookOpen, Users, ClipboardList,
   Copy, MessageSquare,
 } from "lucide-react"
+import { AgendaPager, pagerDateLabel } from "@/components/meetings/agenda-pager"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
+import { CollaborativeInput } from "@/components/collab/collaborative-input"
+import { CollaborativeTextarea } from "@/components/collab/collaborative-textarea"
+import { AutosaveBadge } from "@/components/ui/autosave-badge"
+import {
+  agendaCollabRoom,
+  useAgendaAutosave,
+  useLiveAgenda,
+} from "@/lib/collab/use-live-agenda"
+import { applyTextChange } from "@/lib/collab/apply-text-change"
+import { localDateISO, scheduledDateLocal } from "@/lib/utils/local-date"
 
 export interface CalendarItem { date: string; time: string; event: string }
 export interface ActionItem { assigned_to: string; status: string; assignment: string }
@@ -71,14 +82,27 @@ function formatShortDate(dateStr: string): string {
 }
 
 function getNextDate(): string {
-  return new Date().toISOString().split("T")[0]
+  return localDateISO()
 }
 
+/** Text fields shared through the live doc (everything except date/select scalars). */
+const TEXT_FIELDS = [
+  "meeting_time", "presiding", "conducting", "opening_hymn", "opening_prayer",
+  "closing_prayer", "stake_vision", "handbook_trainer", "handbook_topic",
+  "closing_remarks", "general_notes",
+] as const
+
+/**
+ * Live, Google-Docs-style agenda: every keystroke, row add/remove, and status
+ * change syncs to everyone viewing this meeting type + date. Postgres
+ * (`meeting_agendas`) is a debounced backup, not the live channel.
+ */
 export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; initialDate?: string }) {
   const supabase = createClient()
-  const emptyAgenda: AgendaData = {
+
+  const emptyAgenda = useCallback((date: string): AgendaData => ({
     meeting_type: config.meetingType,
-    meeting_date: initialDate || getNextDate(),
+    meeting_date: date,
     meeting_time: config.defaultTime || "8:00 AM",
     presiding: config.defaultPresiding || "President Garrett",
     conducting: config.defaultConducting || "",
@@ -96,26 +120,52 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
     closing_remarks: "",
     general_notes: "",
     status: "upcoming",
-  }
+  }), [config])
 
-  const [agenda, setAgenda] = useState<AgendaData>(emptyAgenda)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const [date, setDate] = useState(initialDate || getNextDate())
+  const [initial, setInitial] = useState<AgendaData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [hasRow, setHasRow] = useState(false)
+  const rowIdRef = useRef<string | null>(null)
   const [allDates, setAllDates] = useState<string[]>([])
+  const [scheduledDates, setScheduledDates] = useState<string[]>([])
+  const [viewerName, setViewerName] = useState<string | null>(null)
 
-  const loadAgenda = useCallback(async (date: string) => {
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user || cancelled) return
+      const { data } = await supabase.from("users").select("full_name").eq("id", user.id).maybeSingle()
+      if (cancelled) return
+      const name =
+        (typeof data?.full_name === "string" && data.full_name.trim()) ||
+        user.email?.split("@")[0] ||
+        "Someone"
+      setViewerName(name)
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Set after the autosave hook below; lets loadAgenda flush pending saves
+  // while the current live doc still holds the edits.
+  const autosaveFlushRef = useRef<(() => Promise<void>) | null>(null)
+
+  const loadAgenda = useCallback(async (nextDate: string) => {
+    await autosaveFlushRef.current?.()
     setLoading(true)
-    setSaved(false)
     const { data } = await supabase
-      .from("meeting_agendas")
+      .from("standing_meeting_agendas")
       .select("*")
       .eq("meeting_type", config.meetingType)
-      .eq("meeting_date", date)
+      .eq("meeting_date", nextDate)
       .maybeSingle()
 
+    rowIdRef.current = data?.id ?? null
+    setHasRow(Boolean(data?.id))
     if (data) {
-      setAgenda({
+      setInitial({
         id: data.id,
         meeting_type: data.meeting_type,
         meeting_date: data.meeting_date,
@@ -138,16 +188,15 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
         status: data.status || "upcoming",
       })
     } else {
-      setAgenda({ ...emptyAgenda, meeting_date: date })
+      setInitial(emptyAgenda(nextDate))
     }
+    setDate(nextDate)
     setLoading(false)
-  }, [supabase, config.meetingType])
-
-  const [scheduledDates, setScheduledDates] = useState<string[]>([])
+  }, [supabase, config, emptyAgenda])
 
   const loadAllDates = useCallback(async () => {
     const { data } = await supabase
-      .from("meeting_agendas")
+      .from("standing_meeting_agendas")
       .select("meeting_date")
       .eq("meeting_type", config.meetingType)
       .order("meeting_date", { ascending: false })
@@ -157,10 +206,11 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
 
   const loadScheduledDates = useCallback(async () => {
     const keywords = config.calendarKeywords || [config.meetingType]
-    let query = supabase.from("meetings").select("scheduled_date, title, meeting_type")
     const orClauses = keywords.map((kw) => `title.ilike.%${kw}%,meeting_type.ilike.%${kw}%`).join(",")
-    const { data } = await query.or(orClauses).order("scheduled_date", { ascending: true })
-    const dates = (data || []).map((m: any) => new Date(m.scheduled_date).toISOString().split("T")[0])
+    const { data } = await supabase
+      .from("meetings").select("scheduled_date, title, meeting_type")
+      .or(orClauses).order("scheduled_date", { ascending: true })
+    const dates = (data || []).map((m: any) => scheduledDateLocal(m.scheduled_date))
     setScheduledDates(Array.from(new Set(dates)).sort())
   }, [supabase, config.meetingType, config.calendarKeywords])
 
@@ -170,80 +220,177 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
     loadScheduledDates()
   }, [loadAgenda, loadAllDates, loadScheduledDates, initialDate])
 
+  // ---- Live shared doc (one room per meeting type + date) ----
+  const live = useLiveAgenda({
+    room: agendaCollabRoom(config.meetingType, date),
+    supabase,
+    userName: viewerName,
+    enabled: !loading,
+  })
+
+  // One-time structural seed from the Postgres backup (deterministic ids).
+  const seedRowsIfEmpty = live.seedRowsIfEmpty
+  useEffect(() => {
+    if (!live.ready || !initial || loading) return
+    seedRowsIfEmpty((api) => {
+      initial.calendar_items.forEach((item, i) => {
+        const id = `seed-cal-${i}`
+        api.addRow("calendar", { date: item.date || "" }, id)
+        api.setRowText("calendar", id, "time", item.time || "")
+        api.setRowText("calendar", id, "event", item.event || "")
+      })
+      initial.attendees.forEach((name, i) => {
+        const id = `seed-att-${i}`
+        api.addRow("attendees", {}, id)
+        api.setRowText("attendees", id, "name", name || "")
+      })
+      initial.action_items.forEach((item, i) => {
+        const id = `seed-act-${i}`
+        api.addRow("actions", { status: item.status || "Assigned" }, id)
+        api.setRowText("actions", id, "assigned_to", item.assigned_to || "")
+        api.setRowText("actions", id, "assignment", item.assignment || "")
+      })
+      initial.training.forEach((item, i) => {
+        const id = `seed-trn-${i}`
+        api.addRow("training", {}, id)
+        api.setRowText("training", id, "conducted_by", item.conducted_by || "")
+        api.setRowText("training", id, "topic", item.topic || "")
+      })
+      initial.discussion_items.forEach((item, i) => {
+        const id = `seed-dis-${i}`
+        api.addRow("discussion", {}, id)
+        api.setRowText("discussion", id, "topic", item.topic || "")
+        api.setRowText("discussion", id, "notes", item.notes || "")
+      })
+      api.setMeta("status", initial.status || "upcoming")
+    })
+  }, [live.ready, initial, loading, seedRowsIfEmpty])
+
+  // ---- Debounced Postgres backup of the whole doc ----
+  const buildPayload = useCallback(() => {
+    const fields = Object.fromEntries(TEXT_FIELDS.map((f) => [f, live.fieldValue(f)]))
+    return {
+      meeting_type: config.meetingType,
+      meeting_date: date,
+      ...fields,
+      calendar_items: live.rows("calendar").map((r) => ({
+        date: String(r.data.date ?? ""),
+        time: live.rowTextValue("calendar", r.id, "time"),
+        event: live.rowTextValue("calendar", r.id, "event"),
+      })),
+      attendees: live.rows("attendees").map((r) => live.rowTextValue("attendees", r.id, "name")),
+      action_items: live.rows("actions").map((r) => ({
+        assigned_to: live.rowTextValue("actions", r.id, "assigned_to"),
+        status: String(r.data.status ?? "Assigned"),
+        assignment: live.rowTextValue("actions", r.id, "assignment"),
+      })),
+      training: live.rows("training").map((r) => ({
+        conducted_by: live.rowTextValue("training", r.id, "conducted_by"),
+        topic: live.rowTextValue("training", r.id, "topic"),
+      })),
+      discussion_items: live.rows("discussion").map((r) => ({
+        topic: live.rowTextValue("discussion", r.id, "topic"),
+        notes: live.rowTextValue("discussion", r.id, "notes"),
+      })),
+      status: (live.getMeta("status") as string) || "upcoming",
+    }
+  }, [live, config.meetingType, date])
+
+  const autosave = useAgendaAutosave({
+    enabled: !loading && live.ready,
+    localTick: live.localTick,
+    save: async () => {
+      // Doc torn down mid-debounce (date switch/unmount) — a save now would
+      // read empty fields and blank the backup row.
+      if (!live.doc || !live.ready) return
+      const payload = buildPayload()
+      const hadRow = Boolean(rowIdRef.current)
+      const { data, error } = await supabase
+        .from("standing_meeting_agendas")
+        .upsert(payload, { onConflict: "meeting_type,meeting_date" })
+        .select("id")
+        .single()
+      if (error) throw error
+      rowIdRef.current = data.id
+      setHasRow(true)
+      if (!hadRow) void loadAllDates()
+    },
+  })
+  autosaveFlushRef.current = autosave.flush
+
   const allKnownDates = Array.from(new Set([...allDates, ...scheduledDates])).sort()
 
-  const navigateToMeeting = (direction: number) => {
-    const current = agenda.meeting_date
-    if (direction > 0) {
-      const next = allKnownDates.find((d) => d > current)
-      if (next) { loadAgenda(next); return }
-    } else {
-      const prev = [...allKnownDates].reverse().find((d) => d < current)
-      if (prev) { loadAgenda(prev); return }
-    }
-    const fallback = new Date(current + "T12:00:00")
-    fallback.setDate(fallback.getDate() + direction * 7)
-    loadAgenda(fallback.toISOString().split("T")[0])
+  const shiftDays = (from: string, days: number) => {
+    const d = new Date(from + "T12:00:00")
+    d.setDate(d.getDate() + days)
+    return localDateISO(d)
   }
-
-  const saveAgenda = async () => {
-    setSaving(true)
-    try {
-      const payload = { ...agenda }
-      delete (payload as any).id
-
-      if (agenda.id) {
-        const { error } = await supabase.from("meeting_agendas").update(payload).eq("id", agenda.id)
-        if (error) throw error
-      } else {
-        const { data, error } = await supabase.from("meeting_agendas").insert(payload).select().single()
-        if (error) throw error
-        setAgenda((prev) => ({ ...prev, id: data.id }))
-      }
-      setSaved(true)
-      await loadAllDates()
-      setTimeout(() => setSaved(false), 2000)
-    } catch (err: any) {
-      alert("Error saving: " + (err.message || err))
-    } finally {
-      setSaving(false)
-    }
+  // Nearest saved/scheduled agenda in each direction; fall back a week if none.
+  const prevAgendaDate = [...allKnownDates].reverse().find((d) => d < date) ?? shiftDays(date, -7)
+  const nextAgendaDate = allKnownDates.find((d) => d > date) ?? shiftDays(date, 7)
+  const pagerPrevious = {
+    dateLabel: pagerDateLabel(prevAgendaDate),
+    onClick: () => void loadAgenda(prevAgendaDate),
+  }
+  const pagerNext = {
+    dateLabel: pagerDateLabel(nextAgendaDate),
+    onClick: () => void loadAgenda(nextAgendaDate),
   }
 
   const copyFromPrevious = async () => {
     const sorted = [...allDates].sort().reverse()
-    const prevDate = sorted.find((d) => d < agenda.meeting_date)
+    const prevDate = sorted.find((d) => d < date)
     if (!prevDate) { alert("No previous agenda found."); return }
 
     const { data } = await supabase
-      .from("meeting_agendas")
-      .select("*")
-      .eq("meeting_type", config.meetingType)
-      .eq("meeting_date", prevDate)
+      .from("standing_meeting_agendas").select("*")
+      .eq("meeting_type", config.meetingType).eq("meeting_date", prevDate)
       .maybeSingle()
-    if (!data) { alert("No previous agenda found."); return }
+    if (!data || !live.doc) { alert("No previous agenda found."); return }
 
-    const carryItems = (data.action_items as ActionItem[] || [])
-      .filter((i) => i.status !== "Completed")
-    setAgenda((prev) => ({
-      ...prev,
-      meeting_time: data.meeting_time || prev.meeting_time,
-      presiding: data.presiding || prev.presiding,
-      conducting: data.conducting || prev.conducting,
-      stake_vision: data.stake_vision || prev.stake_vision,
-      attendees: (data.attendees as string[]) || prev.attendees,
-      action_items: carryItems,
-    }))
+    const doc = live.doc
+    const setField = (name: string, value: unknown) => {
+      if (typeof value === "string" && value) applyTextChange(doc.getText(`field/${name}`), value)
+    }
+    setField("meeting_time", data.meeting_time)
+    setField("presiding", data.presiding)
+    setField("conducting", data.conducting)
+    setField("stake_vision", data.stake_vision)
+
+    if (live.rows("attendees").length === 0) {
+      ;((data.attendees as string[]) || []).forEach((name) => {
+        const id = live.addRow("attendees", {})
+        if (id) live.setRowText("attendees", id, "name", name)
+      })
+    }
+    // Only carry action items into an empty list — repeat clicks must not stack duplicates.
+    if (live.rows("actions").length === 0) {
+      ;((data.action_items as ActionItem[]) || [])
+        .filter((i) => i.status !== "Completed")
+        .forEach((item) => {
+          const id = live.addRow("actions", { status: item.status || "Assigned" })
+          if (id) {
+            live.setRowText("actions", id, "assigned_to", item.assigned_to || "")
+            live.setRowText("actions", id, "assignment", item.assignment || "")
+          }
+        })
+    }
   }
 
-  const update = (field: keyof AgendaData, value: any) => {
-    setAgenda((prev) => ({ ...prev, [field]: value }))
-    setSaved(false)
-  }
-
-  if (loading) return <div className="p-6"><div className="text-center py-12 text-gray-500">Loading agenda...</div></div>
+  if (loading || !initial) return <div className="p-6"><div className="text-center py-12 text-gray-500">Loading agenda...</div></div>
 
   const has = (s: AgendaSection) => config.sections.includes(s)
+  const statusValue = (live.getMeta("status") as string) || initial.status || "upcoming"
+
+  const field = (name: (typeof TEXT_FIELDS)[number], placeholder?: string) => (
+    <CollaborativeInput
+      yText={live.fieldText(name)}
+      seedText={(initial[name as keyof AgendaData] as string) || ""}
+      ready={live.ready}
+      className={inputClass}
+      placeholder={placeholder}
+    />
+  )
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -252,32 +399,49 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
         <Link href="/modules/meetings" className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center mb-3">
           <ArrowLeft className="h-4 w-4 mr-1" /> Back to Meetings
         </Link>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">{config.title}</h1>
-            <p className="text-gray-600 mt-1">{formatDate(agenda.meeting_date)}</p>
+            <p className="text-gray-600 mt-1">{formatDate(date)}</p>
           </div>
-          <div className="flex items-center gap-2">
-            {!agenda.id && (
+          <div className="flex items-center gap-3">
+            {live.peers.length > 0 && (
+              <span
+                className="text-xs font-medium text-emerald-700 truncate max-w-[12rem]"
+                title={live.peers.map((p) => p.name).join(", ")}
+              >
+                {live.peers.length === 1
+                  ? `${live.peers[0].name} editing live`
+                  : `${live.peers.length} others editing live`}
+              </span>
+            )}
+            <span
+              className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border ${
+                live.status === "live"
+                  ? "text-emerald-700 border-emerald-200 bg-emerald-50"
+                  : live.status === "error"
+                    ? "text-red-600 border-red-200 bg-red-50"
+                    : "text-gray-500 border-gray-200 bg-gray-50"
+              }`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${live.status === "live" ? "bg-emerald-500" : live.status === "error" ? "bg-red-500" : "bg-gray-400"}`} />
+              {live.status === "live" ? "Live" : live.status === "error" ? "Offline" : "Connecting…"}
+            </span>
+            {!hasRow && (
               <Button variant="outline" size="sm" onClick={copyFromPrevious}>
                 <Copy className="h-4 w-4 mr-2" /> Copy from Previous
               </Button>
             )}
-            <Button onClick={saveAgenda} disabled={saving}>
-              {saving ? "Saving..." : saved ? <><CheckCircle className="h-4 w-4 mr-2" /> Saved</> : <><Save className="h-4 w-4 mr-2" /> Save Agenda</>}
-            </Button>
+            <AutosaveBadge state={autosave.state} errorMessage={autosave.errorMessage} onRetry={autosave.retry} />
           </div>
         </div>
-        <div className="flex items-center gap-3 mt-4">
-          <Button variant="outline" size="sm" onClick={() => navigateToMeeting(-1)}><ChevronLeft className="h-4 w-4" /></Button>
-          <span className="text-sm font-medium text-gray-700">{formatShortDate(agenda.meeting_date)}</span>
-          <Button variant="outline" size="sm" onClick={() => navigateToMeeting(1)}><ChevronRight className="h-4 w-4" /></Button>
-          <Button variant="outline" size="sm" onClick={() => loadAgenda(getNextDate())} className="ml-2">Today</Button>
+        <AgendaPager previous={pagerPrevious} next={pagerNext} className="mt-4">
+          <Button variant="outline" size="sm" onClick={() => void loadAgenda(getNextDate())}>Today</Button>
           {allKnownDates.length > 0 && (
-            <select className="text-sm border rounded-md px-2 py-1 text-gray-700" value={agenda.meeting_date} onChange={(e) => loadAgenda(e.target.value)}>
-              {!allKnownDates.includes(agenda.meeting_date) && (
-                <option value={agenda.meeting_date}>
-                  {formatShortDate(agenda.meeting_date)} {englishMenuTitleCase("(new)")}
+            <select className="text-sm border rounded-md px-2 py-1 text-gray-700 max-w-[10rem]" value={date} onChange={(e) => void loadAgenda(e.target.value)}>
+              {!allKnownDates.includes(date) && (
+                <option value={date}>
+                  {formatShortDate(date)} {englishMenuTitleCase("(new)")}
                 </option>
               )}
               {[...allKnownDates].reverse().map((d) => (
@@ -288,7 +452,7 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
               ))}
             </select>
           )}
-        </div>
+        </AgendaPager>
       </div>
 
       <div className="space-y-6">
@@ -302,15 +466,20 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {agenda.calendar_items.map((item, idx) => (
-                  <div key={idx} className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-center">
-                    <input type="date" value={item.date} onChange={(e) => { const items = [...agenda.calendar_items]; items[idx] = { ...items[idx], date: e.target.value }; update("calendar_items", items) }} className={`${inputClass} col-span-1 sm:col-span-3`} />
-                    <input type="text" value={item.time} onChange={(e) => { const items = [...agenda.calendar_items]; items[idx] = { ...items[idx], time: e.target.value }; update("calendar_items", items) }} placeholder="Time" className={`${inputClass} col-span-1 sm:col-span-2`} />
-                    <input type="text" value={item.event} onChange={(e) => { const items = [...agenda.calendar_items]; items[idx] = { ...items[idx], event: e.target.value }; update("calendar_items", items) }} placeholder="Event" className={`${inputClass} col-span-2 sm:col-span-6`} />
-                    <button onClick={() => update("calendar_items", agenda.calendar_items.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 col-span-2 sm:col-span-1 flex justify-end sm:justify-center p-1.5"><Trash2 className="h-4 w-4" /></button>
+                {live.rows("calendar").map((row) => (
+                  <div key={row.id} className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-center">
+                    <input
+                      type="date"
+                      value={String(row.data.date ?? "")}
+                      onChange={(e) => live.updateRow("calendar", row.id, { date: e.target.value })}
+                      className={`${inputClass} col-span-1 sm:col-span-3`}
+                    />
+                    <CollaborativeInput yText={live.rowText("calendar", row.id, "time")} ready={live.ready} placeholder="Time" className={`${inputClass} col-span-1 sm:col-span-2`} />
+                    <CollaborativeInput yText={live.rowText("calendar", row.id, "event")} ready={live.ready} placeholder="Event" className={`${inputClass} col-span-2 sm:col-span-6`} />
+                    <button onClick={() => live.removeRow("calendar", row.id)} className="text-red-400 hover:text-red-600 col-span-2 sm:col-span-1 flex justify-end sm:justify-center p-1.5"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 ))}
-                <Button variant="outline" size="sm" onClick={() => update("calendar_items", [...agenda.calendar_items, { date: "", time: "", event: "" }])}>
+                <Button variant="outline" size="sm" onClick={() => live.addRow("calendar", { date: "" })}>
                   <Plus className="h-4 w-4 mr-1" /> Add Event
                 </Button>
               </div>
@@ -330,39 +499,39 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Presiding</label>
-                  <input type="text" value={agenda.presiding} onChange={(e) => update("presiding", e.target.value)} className={inputClass} />
+                  {field("presiding")}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Conducting</label>
-                  <input type="text" value={agenda.conducting} onChange={(e) => update("conducting", e.target.value)} className={inputClass} />
+                  {field("conducting")}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Hymn</label>
-                  <input type="text" value={agenda.opening_hymn} onChange={(e) => update("opening_hymn", e.target.value)} className={inputClass} placeholder="e.g., #288" />
+                  {field("opening_hymn", "e.g., #288")}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Time</label>
-                  <input type="text" value={agenda.meeting_time} onChange={(e) => update("meeting_time", e.target.value)} className={inputClass} />
+                  {field("meeting_time")}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Opening Prayer</label>
-                  <input type="text" value={agenda.opening_prayer} onChange={(e) => update("opening_prayer", e.target.value)} className={inputClass} />
+                  {field("opening_prayer")}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Closing Prayer</label>
-                  <input type="text" value={agenda.closing_prayer} onChange={(e) => update("closing_prayer", e.target.value)} className={inputClass} />
+                  {field("closing_prayer")}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Stake Vision</label>
-                  <input type="text" value={agenda.stake_vision} onChange={(e) => update("stake_vision", e.target.value)} className={inputClass} />
+                  {field("stake_vision")}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Handbook Trainer</label>
-                  <input type="text" value={agenda.handbook_trainer} onChange={(e) => update("handbook_trainer", e.target.value)} className={inputClass} />
+                  {field("handbook_trainer")}
                 </div>
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-medium text-gray-500 mb-1">Handbook Topic</label>
-                  <input type="text" value={agenda.handbook_topic} onChange={(e) => update("handbook_topic", e.target.value)} className={inputClass} placeholder="e.g., 1.2.3. Inviting All to Receive the Gospel" />
+                  {field("handbook_topic", "e.g., 1.2.3. Inviting All to Receive the Gospel")}
                 </div>
               </div>
             </CardContent>
@@ -379,13 +548,13 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {agenda.attendees.map((name, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <input type="text" value={name} onChange={(e) => { const a = [...agenda.attendees]; a[idx] = e.target.value; update("attendees", a) }} className={`${inputClass} flex-1`} />
-                    <button onClick={() => update("attendees", agenda.attendees.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                {live.rows("attendees").map((row) => (
+                  <div key={row.id} className="flex items-center gap-2">
+                    <CollaborativeInput yText={live.rowText("attendees", row.id, "name")} ready={live.ready} className={`${inputClass} flex-1`} />
+                    <button onClick={() => live.removeRow("attendees", row.id)} className="text-red-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 ))}
-                <Button variant="outline" size="sm" onClick={() => update("attendees", [...agenda.attendees, ""])}>
+                <Button variant="outline" size="sm" onClick={() => live.addRow("attendees", {})}>
                   <Plus className="h-4 w-4 mr-1" /> Add Attendee
                 </Button>
               </div>
@@ -399,27 +568,31 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
             <CardHeader>
               <CardTitle className="text-lg flex items-center justify-between">
                 <span className="flex items-center"><ClipboardList className="h-5 w-5 mr-2 text-indigo-600" /> Action Items</span>
-                <Button variant="outline" size="sm" onClick={() => update("action_items", [...agenda.action_items, { assigned_to: "", status: "Assigned", assignment: "" }])}>
+                <Button variant="outline" size="sm" onClick={() => live.addRow("actions", { status: "Assigned" })}>
                   <Plus className="h-4 w-4 mr-1" /> Add Item
                 </Button>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {agenda.action_items.length === 0 ? (
+              {live.rows("actions").length === 0 ? (
                 <p className="text-gray-400 text-center py-4 text-sm">No action items yet.</p>
               ) : (
                 <div className="space-y-3">
-                  {agenda.action_items.map((item, idx) => (
-                    <div key={idx} className="border border-gray-200 rounded-lg p-3 space-y-2">
+                  {live.rows("actions").map((row) => (
+                    <div key={row.id} className="border border-gray-200 rounded-lg p-3 space-y-2">
                       <div className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-center">
-                        <input type="text" value={item.assigned_to} onChange={(e) => { const items = [...agenda.action_items]; items[idx] = { ...items[idx], assigned_to: e.target.value }; update("action_items", items) }} placeholder="Assigned to" className={`${inputClass} col-span-1 sm:col-span-4`} />
-                        <select value={item.status} onChange={(e) => { const items = [...agenda.action_items]; items[idx] = { ...items[idx], status: e.target.value }; update("action_items", items) }} className={`${inputClass} col-span-1 sm:col-span-3`}>
+                        <CollaborativeInput yText={live.rowText("actions", row.id, "assigned_to")} ready={live.ready} placeholder="Assigned to" className={`${inputClass} col-span-1 sm:col-span-4`} />
+                        <select
+                          value={String(row.data.status ?? "Assigned")}
+                          onChange={(e) => live.updateRow("actions", row.id, { status: e.target.value })}
+                          className={`${inputClass} col-span-1 sm:col-span-3`}
+                        >
                           <option value="Assigned">{englishMenuTitleCase("Assigned")}</option>
                           <option value="In Progress">{englishMenuTitleCase("In Progress")}</option>
                           <option value="Completed">{englishMenuTitleCase("Completed")}</option>
                         </select>
-                        <input type="text" value={item.assignment} onChange={(e) => { const items = [...agenda.action_items]; items[idx] = { ...items[idx], assignment: e.target.value }; update("action_items", items) }} placeholder="Assignment description" className={`${inputClass} col-span-2 sm:col-span-4`} />
-                        <button onClick={() => update("action_items", agenda.action_items.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 col-span-2 sm:col-span-1 flex justify-end sm:justify-center p-1.5"><Trash2 className="h-4 w-4" /></button>
+                        <CollaborativeInput yText={live.rowText("actions", row.id, "assignment")} ready={live.ready} placeholder="Assignment description" className={`${inputClass} col-span-2 sm:col-span-4`} />
+                        <button onClick={() => live.removeRow("actions", row.id)} className="text-red-400 hover:text-red-600 col-span-2 sm:col-span-1 flex justify-end sm:justify-center p-1.5"><Trash2 className="h-4 w-4" /></button>
                       </div>
                     </div>
                   ))}
@@ -435,18 +608,18 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
             <CardHeader>
               <CardTitle className="text-lg flex items-center justify-between">
                 <span className="flex items-center"><BookOpen className="h-5 w-5 mr-2 text-indigo-600" /> Training / Discussion</span>
-                <Button variant="outline" size="sm" onClick={() => update("training", [...agenda.training, { conducted_by: "", topic: "" }])}>
+                <Button variant="outline" size="sm" onClick={() => live.addRow("training", {})}>
                   <Plus className="h-4 w-4 mr-1" /> Add
                 </Button>
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {agenda.training.map((item, idx) => (
-                  <div key={idx} className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-center">
-                    <input type="text" value={item.conducted_by} onChange={(e) => { const items = [...agenda.training]; items[idx] = { ...items[idx], conducted_by: e.target.value }; update("training", items) }} placeholder="Conducted by" className={`${inputClass} col-span-2 sm:col-span-4`} />
-                    <input type="text" value={item.topic} onChange={(e) => { const items = [...agenda.training]; items[idx] = { ...items[idx], topic: e.target.value }; update("training", items) }} placeholder="Topic" className={`${inputClass} col-span-2 sm:col-span-7`} />
-                    <button onClick={() => update("training", agenda.training.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 col-span-2 sm:col-span-1 flex justify-end sm:justify-center p-1.5"><Trash2 className="h-4 w-4" /></button>
+                {live.rows("training").map((row) => (
+                  <div key={row.id} className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-center">
+                    <CollaborativeInput yText={live.rowText("training", row.id, "conducted_by")} ready={live.ready} placeholder="Conducted by" className={`${inputClass} col-span-2 sm:col-span-4`} />
+                    <CollaborativeInput yText={live.rowText("training", row.id, "topic")} ready={live.ready} placeholder="Topic" className={`${inputClass} col-span-2 sm:col-span-7`} />
+                    <button onClick={() => live.removeRow("training", row.id)} className="text-red-400 hover:text-red-600 col-span-2 sm:col-span-1 flex justify-end sm:justify-center p-1.5"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 ))}
               </div>
@@ -460,23 +633,23 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
             <CardHeader>
               <CardTitle className="text-lg flex items-center justify-between">
                 <span className="flex items-center"><MessageSquare className="h-5 w-5 mr-2 text-indigo-600" /> Group Discussion</span>
-                <Button variant="outline" size="sm" onClick={() => update("discussion_items", [...agenda.discussion_items, { topic: "", notes: "" }])}>
+                <Button variant="outline" size="sm" onClick={() => live.addRow("discussion", {})}>
                   <Plus className="h-4 w-4 mr-1" /> Add Topic
                 </Button>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {agenda.discussion_items.length === 0 ? (
+              {live.rows("discussion").length === 0 ? (
                 <p className="text-gray-400 text-center py-4 text-sm">No discussion topics yet.</p>
               ) : (
                 <div className="space-y-4">
-                  {agenda.discussion_items.map((item, idx) => (
-                    <div key={idx} className="border border-gray-200 rounded-lg p-3 space-y-2">
+                  {live.rows("discussion").map((row) => (
+                    <div key={row.id} className="border border-gray-200 rounded-lg p-3 space-y-2">
                       <div className="flex items-center gap-2">
-                        <input type="text" value={item.topic} onChange={(e) => { const items = [...agenda.discussion_items]; items[idx] = { ...items[idx], topic: e.target.value }; update("discussion_items", items) }} placeholder="Topic" className={`${inputClass} flex-1`} />
-                        <button onClick={() => update("discussion_items", agenda.discussion_items.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                        <CollaborativeInput yText={live.rowText("discussion", row.id, "topic")} ready={live.ready} placeholder="Topic" className={`${inputClass} flex-1`} />
+                        <button onClick={() => live.removeRow("discussion", row.id)} className="text-red-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                       </div>
-                      <textarea rows={2} value={item.notes} onChange={(e) => { const items = [...agenda.discussion_items]; items[idx] = { ...items[idx], notes: e.target.value }; update("discussion_items", items) }} placeholder="Notes..." className={textareaClass} />
+                      <CollaborativeTextarea yText={live.rowText("discussion", row.id, "notes")} ready={live.ready} rows={2} placeholder="Notes..." className={textareaClass} />
                     </div>
                   ))}
                 </div>
@@ -492,7 +665,7 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
               <CardTitle className="text-lg">Closing Remarks</CardTitle>
             </CardHeader>
             <CardContent>
-              <textarea rows={3} value={agenda.closing_remarks} onChange={(e) => update("closing_remarks", e.target.value)} className={textareaClass} placeholder="Closing remarks and summary..." />
+              <CollaborativeTextarea yText={live.fieldText("closing_remarks")} seedText={initial.closing_remarks} ready={live.ready} rows={3} placeholder="Closing remarks and summary..." className={textareaClass} />
             </CardContent>
           </Card>
         )}
@@ -504,25 +677,26 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
               <CardTitle className="text-lg">General Notes</CardTitle>
             </CardHeader>
             <CardContent>
-              <textarea rows={4} value={agenda.general_notes} onChange={(e) => update("general_notes", e.target.value)} className={textareaClass} placeholder="Additional notes, reminders, follow-up items..." />
+              <CollaborativeTextarea yText={live.fieldText("general_notes")} seedText={initial.general_notes} ready={live.ready} rows={4} placeholder="Additional notes, reminders, follow-up items..." className={textareaClass} />
             </CardContent>
           </Card>
         )}
 
-        {/* Bottom save */}
+        {/* Status + autosave */}
         <div className="flex justify-between items-center pt-4 border-t">
           <div className="flex items-center gap-2">
             <label className="text-sm text-gray-500">Status:</label>
-            <select value={agenda.status} onChange={(e) => update("status", e.target.value)} className="text-sm border rounded-md px-2 py-1 text-gray-700">
+            <select value={statusValue} onChange={(e) => live.setMeta("status", e.target.value)} className="text-sm border rounded-md px-2 py-1 text-gray-700">
               <option value="upcoming">{englishMenuTitleCase("Upcoming")}</option>
               <option value="in_progress">{englishMenuTitleCase("In Progress")}</option>
               <option value="completed">{englishMenuTitleCase("Completed")}</option>
             </select>
           </div>
-          <Button onClick={saveAgenda} disabled={saving} size="lg">
-            {saving ? "Saving..." : saved ? <><CheckCircle className="h-4 w-4 mr-2" /> Saved</> : <><Save className="h-4 w-4 mr-2" /> Save Agenda</>}
-          </Button>
+          <AutosaveBadge state={autosave.state} errorMessage={autosave.errorMessage} onRetry={autosave.retry} />
         </div>
+
+        {/* Bottom pager — page onward without scrolling back up */}
+        <AgendaPager previous={pagerPrevious} next={pagerNext} />
       </div>
     </div>
   )

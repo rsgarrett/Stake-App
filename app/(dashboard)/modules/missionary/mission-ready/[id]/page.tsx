@@ -14,6 +14,7 @@ import {
 import type { MissionReadyMissionary, MissionReadyProgress } from "@/types"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 import { MISSION_INTERVIEW_TYPE } from "@/lib/interviews/interview-types"
+import { ensureRmChecklist, isPrepProgress, isRmProgress, rmDisplayNumber } from "@/lib/missionary/mission-ready-defaults"
 
 const inputClass = "w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
 
@@ -45,7 +46,19 @@ export default function MissionReadyDetailPage() {
         supabase.from("mission_ready_progress").select("*").eq("missionary_id", missionaryId).order("task_number"),
       ])
       if (missRes.data) setMissionary(missRes.data)
-      setProgress(progRes.data || [])
+      let rows = progRes.data || []
+      if (missRes.data?.status === "completed") {
+        const seeded = await ensureRmChecklist(supabase, missionaryId)
+        if (seeded) {
+          const again = await supabase
+            .from("mission_ready_progress")
+            .select("*")
+            .eq("missionary_id", missionaryId)
+            .order("task_number")
+          rows = again.data || rows
+        }
+      }
+      setProgress(rows)
     } catch (err) {
       console.error(err)
     } finally {
@@ -81,12 +94,21 @@ export default function MissionReadyDetailPage() {
 
   const updateMissionaryStatus = async (newStatus: string) => {
     await supabase.from("mission_ready_missionaries").update({ status: newStatus }).eq("id", missionaryId)
+    if (newStatus === "completed") {
+      await ensureRmChecklist(supabase, missionaryId)
+    }
     await loadData()
   }
 
-  const completedCount = progress.filter((p) => p.completed).length
-  const totalCount = progress.length
+  const isReturned = missionary?.status === "completed"
+  const visibleProgress = isReturned
+    ? progress.filter(isRmProgress)
+    : progress.filter(isPrepProgress)
+  const completedCount = visibleProgress.filter((p) => p.completed).length
+  const totalCount = visibleProgress.length
   const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
+  const stepLabel = (item: MissionReadyProgress) =>
+    isReturned ? rmDisplayNumber(item.task_number) : item.task_number
 
   if (loading) return <div className="p-4 sm:p-6"><div className="text-center py-12">Loading...</div></div>
   if (!missionary) return <div className="p-4 sm:p-6"><div className="text-center py-12 text-gray-500">Missionary not found</div></div>
@@ -119,7 +141,9 @@ export default function MissionReadyDetailPage() {
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="break-words text-2xl sm:text-3xl font-bold text-gray-900">{missionary.missionary_name}</h1>
-          <p className="mt-1 text-sm sm:text-base text-gray-600">Mission Ready Tracker</p>
+          <p className="mt-1 text-sm sm:text-base text-gray-600">
+            {isReturned ? "Returned missionary checklist" : "Mission Ready Tracker"}
+          </p>
         </div>
         <div className="flex items-center">
           <select
@@ -155,13 +179,17 @@ export default function MissionReadyDetailPage() {
       {/* Checklist */}
       <Card>
         <CardHeader>
-          <CardTitle>Preparation Checklist</CardTitle>
-          <CardDescription>Track each step of missionary preparation. Click the circle to mark complete.</CardDescription>
+          <CardTitle>{isReturned ? "Returned Missionary Checklist" : "Preparation Checklist"}</CardTitle>
+          <CardDescription>
+            {isReturned
+              ? "Track follow-up after they return home. Click the circle to mark complete."
+              : "Track each step of missionary preparation. Click the circle to mark complete."}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {/* Mobile card layout (phones / small tablets) */}
           <div className="space-y-3 md:hidden">
-            {progress.map((item) => {
+            {visibleProgress.map((item) => {
               const isEditingNote = editingNote === item.id
               return (
                 <div
@@ -182,7 +210,7 @@ export default function MissionReadyDetailPage() {
                     </button>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                        Step {item.task_number}
+                        Step {stepLabel(item)}
                       </div>
                       <p
                         className={`mt-0.5 break-words text-base font-semibold leading-snug ${
@@ -248,12 +276,12 @@ export default function MissionReadyDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {progress.map((item) => {
+                {visibleProgress.map((item) => {
                   const isEditingNote = editingNote === item.id
 
                   return (
                     <tr key={item.id} className={`border-b hover:bg-gray-50 ${item.completed ? "bg-green-50/50" : ""}`}>
-                      <td className="px-3 py-3 text-gray-400 font-medium">{item.task_number}</td>
+                      <td className="px-3 py-3 text-gray-400 font-medium">{stepLabel(item)}</td>
 
                       <td className="px-3 py-3">
                         <button onClick={() => toggleCompleted(item)} className="focus:outline-none">

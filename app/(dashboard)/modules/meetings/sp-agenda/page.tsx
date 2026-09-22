@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useState, useEffect, useCallback } from "react"
+import { Suspense, useState, useEffect, useCallback, useRef } from "react"
 import { useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,20 +8,26 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import {
   ArrowLeft,
-  ChevronLeft,
-  ChevronRight,
-  Save,
   Plus,
   Trash2,
   Calendar,
-  Clock,
   BookOpen,
   Users,
   ClipboardList,
-  CheckCircle,
   Copy,
 } from "lucide-react"
+import { AgendaPager, pagerDateLabel } from "@/components/meetings/agenda-pager"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
+import { CollaborativeInput } from "@/components/collab/collaborative-input"
+import { CollaborativeTextarea } from "@/components/collab/collaborative-textarea"
+import { AutosaveBadge } from "@/components/ui/autosave-badge"
+import {
+  agendaCollabRoom,
+  useAgendaAutosave,
+  useLiveAgenda,
+} from "@/lib/collab/use-live-agenda"
+import { applyTextChange } from "@/lib/collab/apply-text-change"
+import { localDateISO } from "@/lib/utils/local-date"
 
 interface CalendarItem {
   date: string
@@ -82,10 +88,16 @@ const CORE_AREAS = [
   "Assign",
 ]
 
+/** Free-text fields shared through the live doc. */
+const TEXT_FIELDS = [
+  "meeting_time", "conducting", "opening_prayer", "closing_prayer", "stake_goal",
+  "handbook_trainer", "handbook_topic", "agenda_planning_notes", "callings_notes",
+  "stake_business_notes", "general_notes",
+] as const
+
 const inputClass =
   "w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-const textareaClass =
-  "w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+const textareaClass = inputClass
 
 function getThursday(offset: number = 0): string {
   const now = new Date()
@@ -96,7 +108,7 @@ function getThursday(offset: number = 0): string {
   if (offset === 0 && day > 4) {
     thursday.setDate(thursday.getDate() + 7)
   }
-  return thursday.toISOString().split("T")[0]
+  return localDateISO(thursday)
 }
 
 function formatDate(dateStr: string): string {
@@ -130,28 +142,59 @@ export default function SPMeetingAgendaPage() {
   )
 }
 
+/**
+ * Live, Google-Docs-style Stake Presidency agenda: keystrokes, row changes,
+ * and selects sync to everyone on this date. `sp_meeting_agendas` is a
+ * debounced backup, not the live channel.
+ */
 function SPMeetingAgendaContent() {
   const supabase = createClient()
   const searchParams = useSearchParams()
   const dateParam = searchParams.get("date")
-  const [agenda, setAgenda] = useState<AgendaData>({ ...EMPTY_AGENDA, meeting_date: dateParam || getThursday() })
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+
+  const [date, setDate] = useState(dateParam || getThursday())
+  const [initial, setInitial] = useState<AgendaData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [hasRow, setHasRow] = useState(false)
+  const rowIdRef = useRef<string | null>(null)
   const [allDates, setAllDates] = useState<string[]>([])
+  const [viewerName, setViewerName] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user || cancelled) return
+      const { data } = await supabase.from("users").select("full_name").eq("id", user.id).maybeSingle()
+      if (cancelled) return
+      setViewerName(
+        (typeof data?.full_name === "string" && data.full_name.trim()) ||
+          user.email?.split("@")[0] ||
+          "Someone"
+      )
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Set after the autosave hook below; lets loadAgenda flush pending saves
+  // while the current live doc still holds the edits.
+  const autosaveFlushRef = useRef<(() => Promise<void>) | null>(null)
 
   const loadAgenda = useCallback(
-    async (date: string) => {
+    async (nextDate: string) => {
+      await autosaveFlushRef.current?.()
       setLoading(true)
-      setSaved(false)
       const { data } = await supabase
         .from("sp_meeting_agendas")
         .select("*")
-        .eq("meeting_date", date)
+        .eq("meeting_date", nextDate)
         .maybeSingle()
 
+      rowIdRef.current = data?.id ?? null
+      setHasRow(Boolean(data?.id))
       if (data) {
-        setAgenda({
+        setInitial({
           id: data.id,
           meeting_date: data.meeting_date,
           meeting_time: data.meeting_time || "8:00 PM",
@@ -170,8 +213,9 @@ function SPMeetingAgendaContent() {
           status: data.status || "upcoming",
         })
       } else {
-        setAgenda({ ...EMPTY_AGENDA, meeting_date: date })
+        setInitial({ ...EMPTY_AGENDA, meeting_date: nextDate })
       }
+      setDate(nextDate)
       setLoading(false)
     },
     [supabase]
@@ -187,141 +231,170 @@ function SPMeetingAgendaContent() {
   }, [supabase])
 
   useEffect(() => {
-    const date = dateParam || getThursday()
-    loadAgenda(date)
+    loadAgenda(dateParam || getThursday())
     loadAllDates()
   }, [loadAgenda, loadAllDates, dateParam])
 
-  const navigateWeek = (direction: number) => {
-    const current = new Date(agenda.meeting_date + "T12:00:00")
-    current.setDate(current.getDate() + direction * 7)
-    const newDate = current.toISOString().split("T")[0]
-    loadAgenda(newDate)
-  }
+  // ---- Live shared doc (one room per Thursday) ----
+  const live = useLiveAgenda({
+    room: agendaCollabRoom("sp", date),
+    supabase,
+    userName: viewerName,
+    enabled: !loading,
+  })
 
-  const saveAgenda = async () => {
-    setSaving(true)
-    try {
-      const payload = {
-        meeting_date: agenda.meeting_date,
-        meeting_time: agenda.meeting_time,
-        conducting: agenda.conducting,
-        opening_prayer: agenda.opening_prayer,
-        closing_prayer: agenda.closing_prayer,
-        stake_goal: agenda.stake_goal,
-        handbook_trainer: agenda.handbook_trainer,
-        handbook_topic: agenda.handbook_topic,
-        calendar_items: agenda.calendar_items,
-        agenda_planning_notes: agenda.agenda_planning_notes,
-        callings_notes: agenda.callings_notes,
-        stake_business_notes: agenda.stake_business_notes,
-        gods_work_items: agenda.gods_work_items,
-        general_notes: agenda.general_notes,
-        status: agenda.status,
-      }
+  // One-time structural seed from the Postgres backup (deterministic ids).
+  const seedRowsIfEmpty = live.seedRowsIfEmpty
+  useEffect(() => {
+    if (!live.ready || !initial || loading) return
+    seedRowsIfEmpty((api) => {
+      initial.calendar_items.forEach((item, i) => {
+        const id = `seed-cal-${i}`
+        api.addRow("calendar", { date: item.date || "" }, id)
+        api.setRowText("calendar", id, "time", item.time || "")
+        api.setRowText("calendar", id, "event", item.event || "")
+      })
+      initial.gods_work_items.forEach((item, i) => {
+        const id = `seed-gw-${i}`
+        api.addRow("gods_work", {
+          core_area: item.core_area || "Assign",
+          status: item.status || "TBD",
+        }, id)
+        api.setRowText("gods_work", id, "item", item.item || "")
+        api.setRowText("gods_work", id, "notes", item.notes || "")
+      })
+      api.setMeta("status", initial.status || "upcoming")
+    })
+  }, [live.ready, initial, loading, seedRowsIfEmpty])
 
-      if (agenda.id) {
-        const { error } = await supabase
-          .from("sp_meeting_agendas")
-          .update(payload)
-          .eq("id", agenda.id)
-        if (error) throw error
-      } else {
-        const { data, error } = await supabase
-          .from("sp_meeting_agendas")
-          .insert(payload)
-          .select()
-          .single()
-        if (error) throw error
-        setAgenda((prev) => ({ ...prev, id: data.id }))
-      }
-      setSaved(true)
-      await loadAllDates()
-      setTimeout(() => setSaved(false), 2000)
-    } catch (err: any) {
-      alert("Error saving: " + (err.message || err))
-    } finally {
-      setSaving(false)
+  // ---- Debounced Postgres backup of the whole doc ----
+  const buildPayload = useCallback(() => {
+    const fields = Object.fromEntries(TEXT_FIELDS.map((f) => [f, live.fieldValue(f)]))
+    return {
+      meeting_date: date,
+      ...fields,
+      calendar_items: live.rows("calendar").map((r) => ({
+        date: String(r.data.date ?? ""),
+        time: live.rowTextValue("calendar", r.id, "time"),
+        event: live.rowTextValue("calendar", r.id, "event"),
+      })),
+      gods_work_items: live.rows("gods_work").map((r) => ({
+        core_area: String(r.data.core_area ?? "Assign"),
+        status: String(r.data.status ?? "TBD"),
+        item: live.rowTextValue("gods_work", r.id, "item"),
+        notes: live.rowTextValue("gods_work", r.id, "notes"),
+      })),
+      status: (live.getMeta("status") as string) || "upcoming",
     }
+  }, [live, date])
+
+  const autosave = useAgendaAutosave({
+    enabled: !loading && live.ready,
+    localTick: live.localTick,
+    save: async () => {
+      // Doc torn down mid-debounce (date switch/unmount) — a save now would
+      // read empty fields and blank the backup row.
+      if (!live.doc || !live.ready) return
+      const payload = buildPayload()
+      const hadRow = Boolean(rowIdRef.current)
+      const { data, error } = await supabase
+        .from("sp_meeting_agendas")
+        .upsert(payload, { onConflict: "meeting_date" })
+        .select("id")
+        .single()
+      if (error) throw error
+      rowIdRef.current = data.id
+      setHasRow(true)
+      if (!hadRow) void loadAllDates()
+    },
+  })
+  autosaveFlushRef.current = autosave.flush
+
+  const shiftDays = (from: string, days: number) => {
+    const d = new Date(from + "T12:00:00")
+    d.setDate(d.getDate() + days)
+    return localDateISO(d)
+  }
+  // Nearest saved agenda in each direction; otherwise the adjacent Thursday.
+  const sortedDates = [...allDates].sort()
+  const prevAgendaDate = [...sortedDates].reverse().find((d) => d < date) ?? shiftDays(date, -7)
+  const nextAgendaDate = sortedDates.find((d) => d > date) ?? shiftDays(date, 7)
+  const pagerPrevious = {
+    dateLabel: pagerDateLabel(prevAgendaDate),
+    onClick: () => void loadAgenda(prevAgendaDate),
+  }
+  const pagerNext = {
+    dateLabel: pagerDateLabel(nextAgendaDate),
+    onClick: () => void loadAgenda(nextAgendaDate),
   }
 
   const copyFromPrevious = async () => {
-    const prevDate = new Date(agenda.meeting_date + "T12:00:00")
+    const prevDate = new Date(date + "T12:00:00")
     prevDate.setDate(prevDate.getDate() - 7)
-    const prevDateStr = prevDate.toISOString().split("T")[0]
+    const prevDateStr = localDateISO(prevDate)
     const { data } = await supabase
       .from("sp_meeting_agendas")
       .select("*")
       .eq("meeting_date", prevDateStr)
       .maybeSingle()
 
-    if (!data) {
+    if (!data || !live.doc) {
       alert("No previous week agenda found.")
       return
     }
 
-    const carryForward = (data.gods_work_items as GodsWorkItem[] || [])
-      .filter((i) => i.status !== "Completed")
-      .map((i) => ({ ...i, notes: "" }))
+    const doc = live.doc
+    const setField = (name: string, value: unknown) => {
+      if (typeof value === "string" && value) applyTextChange(doc.getText(`field/${name}`), value)
+    }
+    setField("meeting_time", data.meeting_time)
+    setField("conducting", data.conducting)
+    setField("stake_goal", data.stake_goal)
 
-    setAgenda((prev) => ({
-      ...prev,
-      meeting_time: data.meeting_time || prev.meeting_time,
-      conducting: data.conducting || prev.conducting,
-      stake_goal: data.stake_goal || prev.stake_goal,
-      gods_work_items: carryForward,
-    }))
+    // Only carry items into an empty list — repeat clicks must not stack duplicates.
+    if (live.rows("gods_work").length === 0) {
+      ;((data.gods_work_items as GodsWorkItem[]) || [])
+        .filter((i) => i.status !== "Completed")
+        .forEach((item) => {
+          const id = live.addRow("gods_work", {
+            core_area: item.core_area || "Assign",
+            status: item.status || "TBD",
+          })
+          if (id) live.setRowText("gods_work", id, "item", item.item || "")
+        })
+    }
   }
 
-  const update = (field: keyof AgendaData, value: any) => {
-    setAgenda((prev) => ({ ...prev, [field]: value }))
-    setSaved(false)
-  }
-
-  const addCalendarItem = () => {
-    update("calendar_items", [...agenda.calendar_items, { date: "", time: "", event: "" }])
-  }
-
-  const updateCalendarItem = (idx: number, field: keyof CalendarItem, value: string) => {
-    const items = [...agenda.calendar_items]
-    items[idx] = { ...items[idx], [field]: value }
-    update("calendar_items", items)
-  }
-
-  const removeCalendarItem = (idx: number) => {
-    update(
-      "calendar_items",
-      agenda.calendar_items.filter((_, i) => i !== idx)
-    )
-  }
-
-  const addGodsWorkItem = () => {
-    update("gods_work_items", [
-      ...agenda.gods_work_items,
-      { core_area: "Assign", item: "", notes: "", status: "TBD" },
-    ])
-  }
-
-  const updateGodsWorkItem = (idx: number, field: keyof GodsWorkItem, value: string) => {
-    const items = [...agenda.gods_work_items]
-    items[idx] = { ...items[idx], [field]: value }
-    update("gods_work_items", items)
-  }
-
-  const removeGodsWorkItem = (idx: number) => {
-    update(
-      "gods_work_items",
-      agenda.gods_work_items.filter((_, i) => i !== idx)
-    )
-  }
-
-  if (loading) {
+  if (loading || !initial) {
     return (
       <div className="p-4 sm:p-6">
         <div className="text-center py-12 text-gray-500">Loading agenda...</div>
       </div>
     )
   }
+
+  const statusValue = (live.getMeta("status") as string) || initial.status || "upcoming"
+
+  const field = (name: (typeof TEXT_FIELDS)[number], placeholder?: string) => (
+    <CollaborativeInput
+      yText={live.fieldText(name)}
+      seedText={(initial[name as keyof AgendaData] as string) || ""}
+      ready={live.ready}
+      className={inputClass}
+      placeholder={placeholder}
+    />
+  )
+
+  const noteArea = (name: (typeof TEXT_FIELDS)[number], rows: number, placeholder: string) => (
+    <CollaborativeTextarea
+      yText={live.fieldText(name)}
+      seedText={(initial[name as keyof AgendaData] as string) || ""}
+      ready={live.ready}
+      rows={rows}
+      placeholder={placeholder}
+      className={textareaClass}
+    />
+  )
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -333,61 +406,61 @@ function SPMeetingAgendaContent() {
         >
           <ArrowLeft className="h-4 w-4 mr-1" /> Back to Meetings
         </Link>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Stake Presidency Meeting</h1>
-            <p className="text-gray-600 mt-1">{formatDate(agenda.meeting_date)}</p>
+            <p className="text-gray-600 mt-1">{formatDate(date)}</p>
           </div>
-          <div className="flex items-center gap-2">
-            {!agenda.id && (
+          <div className="flex items-center gap-3">
+            {live.peers.length > 0 && (
+              <span
+                className="text-xs font-medium text-emerald-700 truncate max-w-[12rem]"
+                title={live.peers.map((p) => p.name).join(", ")}
+              >
+                {live.peers.length === 1
+                  ? `${live.peers[0].name} editing live`
+                  : `${live.peers.length} others editing live`}
+              </span>
+            )}
+            <span
+              className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border ${
+                live.status === "live"
+                  ? "text-emerald-700 border-emerald-200 bg-emerald-50"
+                  : live.status === "error"
+                    ? "text-red-600 border-red-200 bg-red-50"
+                    : "text-gray-500 border-gray-200 bg-gray-50"
+              }`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${live.status === "live" ? "bg-emerald-500" : live.status === "error" ? "bg-red-500" : "bg-gray-400"}`} />
+              {live.status === "live" ? "Live" : live.status === "error" ? "Offline" : "Connecting…"}
+            </span>
+            {!hasRow && (
               <Button variant="outline" size="sm" onClick={copyFromPrevious}>
                 <Copy className="h-4 w-4 mr-2" /> Copy from Previous
               </Button>
             )}
-            <Button onClick={saveAgenda} disabled={saving}>
-              {saving ? (
-                "Saving..."
-              ) : saved ? (
-                <>
-                  <CheckCircle className="h-4 w-4 mr-2" /> Saved
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4 mr-2" /> Save Agenda
-                </>
-              )}
-            </Button>
+            <AutosaveBadge state={autosave.state} errorMessage={autosave.errorMessage} onRetry={autosave.retry} />
           </div>
         </div>
 
         {/* Week Navigation */}
-        <div className="flex items-center gap-3 mt-4">
-          <Button variant="outline" size="sm" onClick={() => navigateWeek(-1)}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="text-sm font-medium text-gray-700">
-            {formatShortDate(agenda.meeting_date)}
-          </span>
-          <Button variant="outline" size="sm" onClick={() => navigateWeek(1)}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+        <AgendaPager previous={pagerPrevious} next={pagerNext} className="mt-4">
           <Button
             variant="outline"
             size="sm"
-            onClick={() => loadAgenda(getThursday())}
-            className="ml-2"
+            onClick={() => void loadAgenda(getThursday())}
           >
             This Week
           </Button>
           {allDates.length > 0 && (
             <select
-              className="text-sm border rounded-md px-2 py-1 text-gray-700"
-              value={agenda.meeting_date}
-              onChange={(e) => loadAgenda(e.target.value)}
+              className="text-sm border rounded-md px-2 py-1 text-gray-700 max-w-[10rem]"
+              value={date}
+              onChange={(e) => void loadAgenda(e.target.value)}
             >
-              {!allDates.includes(agenda.meeting_date) && (
-                <option value={agenda.meeting_date}>
-                  {formatShortDate(agenda.meeting_date)} {englishMenuTitleCase("(new)")}
+              {!allDates.includes(date) && (
+                <option value={date}>
+                  {formatShortDate(date)} {englishMenuTitleCase("(new)")}
                 </option>
               )}
               {allDates.map((d) => (
@@ -397,7 +470,7 @@ function SPMeetingAgendaContent() {
               ))}
             </select>
           )}
-        </div>
+        </AgendaPager>
       </div>
 
       <div className="space-y-6">
@@ -411,37 +484,35 @@ function SPMeetingAgendaContent() {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {agenda.calendar_items.map((item, idx) => (
-                <div key={idx} className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-center">
+              {live.rows("calendar").map((row) => (
+                <div key={row.id} className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-center">
                   <input
                     type="date"
-                    value={item.date}
-                    onChange={(e) => updateCalendarItem(idx, "date", e.target.value)}
+                    value={String(row.data.date ?? "")}
+                    onChange={(e) => live.updateRow("calendar", row.id, { date: e.target.value })}
                     className={`${inputClass} col-span-1 sm:col-span-3`}
                   />
-                  <input
-                    type="text"
-                    value={item.time}
-                    onChange={(e) => updateCalendarItem(idx, "time", e.target.value)}
+                  <CollaborativeInput
+                    yText={live.rowText("calendar", row.id, "time")}
+                    ready={live.ready}
                     placeholder="Time"
                     className={`${inputClass} col-span-1 sm:col-span-2`}
                   />
-                  <input
-                    type="text"
-                    value={item.event}
-                    onChange={(e) => updateCalendarItem(idx, "event", e.target.value)}
+                  <CollaborativeInput
+                    yText={live.rowText("calendar", row.id, "event")}
+                    ready={live.ready}
                     placeholder="Event description"
                     className={`${inputClass} col-span-2 sm:col-span-6`}
                   />
                   <button
-                    onClick={() => removeCalendarItem(idx)}
+                    onClick={() => live.removeRow("calendar", row.id)}
                     className="text-red-400 hover:text-red-600 col-span-2 sm:col-span-1 flex justify-end sm:justify-center p-1.5"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
               ))}
-              <Button variant="outline" size="sm" onClick={addCalendarItem}>
+              <Button variant="outline" size="sm" onClick={() => live.addRow("calendar", { date: "" })}>
                 <Plus className="h-4 w-4 mr-1" /> Add Event
               </Button>
             </div>
@@ -461,71 +532,31 @@ function SPMeetingAgendaContent() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Time</label>
-                <input
-                  type="text"
-                  value={agenda.meeting_time}
-                  onChange={(e) => update("meeting_time", e.target.value)}
-                  className={inputClass}
-                />
+                {field("meeting_time")}
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Conducting</label>
-                <input
-                  type="text"
-                  value={agenda.conducting}
-                  onChange={(e) => update("conducting", e.target.value)}
-                  className={inputClass}
-                />
+                {field("conducting")}
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Opening Prayer</label>
-                <input
-                  type="text"
-                  value={agenda.opening_prayer}
-                  onChange={(e) => update("opening_prayer", e.target.value)}
-                  className={inputClass}
-                />
+                {field("opening_prayer")}
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Closing Prayer</label>
-                <input
-                  type="text"
-                  value={agenda.closing_prayer}
-                  onChange={(e) => update("closing_prayer", e.target.value)}
-                  className={inputClass}
-                />
+                {field("closing_prayer")}
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Goal</label>
-                <input
-                  type="text"
-                  value={agenda.stake_goal}
-                  onChange={(e) => update("stake_goal", e.target.value)}
-                  className={inputClass}
-                />
+                {field("stake_goal")}
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
-                  Handbook Trainer
-                </label>
-                <input
-                  type="text"
-                  value={agenda.handbook_trainer}
-                  onChange={(e) => update("handbook_trainer", e.target.value)}
-                  className={inputClass}
-                />
+                <label className="block text-xs font-medium text-gray-500 mb-1">Handbook Trainer</label>
+                {field("handbook_trainer")}
               </div>
               <div className="sm:col-span-2">
-                <label className="block text-xs font-medium text-gray-500 mb-1">
-                  Handbook Topic
-                </label>
-                <input
-                  type="text"
-                  value={agenda.handbook_topic}
-                  onChange={(e) => update("handbook_topic", e.target.value)}
-                  className={inputClass}
-                  placeholder="e.g., 1.3.2. Covenants and Ordinances"
-                />
+                <label className="block text-xs font-medium text-gray-500 mb-1">Handbook Topic</label>
+                {field("handbook_topic", "e.g., 1.3.2. Covenants and Ordinances")}
               </div>
             </div>
           </CardContent>
@@ -541,13 +572,7 @@ function SPMeetingAgendaContent() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <textarea
-              rows={4}
-              value={agenda.agenda_planning_notes}
-              onChange={(e) => update("agenda_planning_notes", e.target.value)}
-              className={textareaClass}
-              placeholder="Agenda planning notes, references to planning calendar, HC survey responses, TR interview schedule, etc."
-            />
+            {noteArea("agenda_planning_notes", 4, "Agenda planning notes, references to planning calendar, HC survey responses, TR interview schedule, etc.")}
           </CardContent>
         </Card>
 
@@ -566,25 +591,13 @@ function SPMeetingAgendaContent() {
                 <label className="block text-xs font-medium text-gray-500 mb-1">
                   Calling Tracker / New Submissions Notes
                 </label>
-                <textarea
-                  rows={3}
-                  value={agenda.callings_notes}
-                  onChange={(e) => update("callings_notes", e.target.value)}
-                  className={textareaClass}
-                  placeholder="Notes on callings, new submissions, set aparts, ordinations..."
-                />
+                {noteArea("callings_notes", 3, "Notes on callings, new submissions, set aparts, ordinations...")}
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">
                   Stake Business Notes
                 </label>
-                <textarea
-                  rows={3}
-                  value={agenda.stake_business_notes}
-                  onChange={(e) => update("stake_business_notes", e.target.value)}
-                  className={textareaClass}
-                  placeholder="Review stake business items..."
-                />
+                {noteArea("stake_business_notes", 3, "Review stake business items...")}
               </div>
             </div>
           </CardContent>
@@ -599,20 +612,20 @@ function SPMeetingAgendaContent() {
                 God&apos;s Work of Salvation and Exaltation
                 <span className="ml-2 text-sm font-normal text-gray-500">45 mins</span>
               </span>
-              <Button variant="outline" size="sm" onClick={addGodsWorkItem}>
+              <Button variant="outline" size="sm" onClick={() => live.addRow("gods_work", { core_area: "Assign", status: "TBD" })}>
                 <Plus className="h-4 w-4 mr-1" /> Add Item
               </Button>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {agenda.gods_work_items.length === 0 ? (
+            {live.rows("gods_work").length === 0 ? (
               <p className="text-gray-400 text-center py-4 text-sm">
                 No items yet. Click &quot;Add Item&quot; to add discussion topics.
               </p>
             ) : (
               <div className="space-y-4">
-                {agenda.gods_work_items.map((item, idx) => (
-                  <div key={idx} className="border border-gray-200 rounded-lg p-4 space-y-3">
+                {live.rows("gods_work").map((row) => (
+                  <div key={row.id} className="border border-gray-200 rounded-lg p-4 space-y-3">
                     <div className="flex items-start justify-between">
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1 mr-2">
                         <div>
@@ -620,10 +633,8 @@ function SPMeetingAgendaContent() {
                             Core Area
                           </label>
                           <select
-                            value={item.core_area}
-                            onChange={(e) =>
-                              updateGodsWorkItem(idx, "core_area", e.target.value)
-                            }
+                            value={String(row.data.core_area ?? "Assign")}
+                            onChange={(e) => live.updateRow("gods_work", row.id, { core_area: e.target.value })}
                             className={inputClass}
                           >
                             {CORE_AREAS.map((area) => (
@@ -638,10 +649,8 @@ function SPMeetingAgendaContent() {
                             Status
                           </label>
                           <select
-                            value={item.status}
-                            onChange={(e) =>
-                              updateGodsWorkItem(idx, "status", e.target.value)
-                            }
+                            value={String(row.data.status ?? "TBD")}
+                            onChange={(e) => live.updateRow("gods_work", row.id, { status: e.target.value })}
                             className={inputClass}
                           >
                             <option value="TBD">{englishMenuTitleCase("TBD")}</option>
@@ -653,7 +662,7 @@ function SPMeetingAgendaContent() {
                         </div>
                         <div className="flex items-end">
                           <button
-                            onClick={() => removeGodsWorkItem(idx)}
+                            onClick={() => live.removeRow("gods_work", row.id)}
                             className="text-red-400 hover:text-red-600 p-2"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -662,27 +671,22 @@ function SPMeetingAgendaContent() {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">
-                        Item
-                      </label>
-                      <input
-                        type="text"
-                        value={item.item}
-                        onChange={(e) => updateGodsWorkItem(idx, "item", e.target.value)}
-                        className={inputClass}
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Item</label>
+                      <CollaborativeInput
+                        yText={live.rowText("gods_work", row.id, "item")}
+                        ready={live.ready}
                         placeholder="Discussion item description"
+                        className={inputClass}
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">
-                        Notes
-                      </label>
-                      <textarea
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Notes</label>
+                      <CollaborativeTextarea
+                        yText={live.rowText("gods_work", row.id, "notes")}
+                        ready={live.ready}
                         rows={3}
-                        value={item.notes}
-                        onChange={(e) => updateGodsWorkItem(idx, "notes", e.target.value)}
-                        className={textareaClass}
                         placeholder="Discussion notes, decisions, action items..."
+                        className={textareaClass}
                       />
                     </div>
                   </div>
@@ -698,23 +702,17 @@ function SPMeetingAgendaContent() {
             <CardTitle className="text-lg">General Notes</CardTitle>
           </CardHeader>
           <CardContent>
-            <textarea
-              rows={6}
-              value={agenda.general_notes}
-              onChange={(e) => update("general_notes", e.target.value)}
-              className={textareaClass}
-              placeholder="Additional notes, reminders, follow-up items..."
-            />
+            {noteArea("general_notes", 6, "Additional notes, reminders, follow-up items...")}
           </CardContent>
         </Card>
 
-        {/* Bottom save */}
+        {/* Status + autosave */}
         <div className="flex justify-between items-center pt-4 border-t">
           <div className="flex items-center gap-2">
             <label className="text-sm text-gray-500">Status:</label>
             <select
-              value={agenda.status}
-              onChange={(e) => update("status", e.target.value)}
+              value={statusValue}
+              onChange={(e) => live.setMeta("status", e.target.value)}
               className="text-sm border rounded-md px-2 py-1 text-gray-700"
             >
               <option value="upcoming">{englishMenuTitleCase("Upcoming")}</option>
@@ -722,20 +720,11 @@ function SPMeetingAgendaContent() {
               <option value="completed">{englishMenuTitleCase("Completed")}</option>
             </select>
           </div>
-          <Button onClick={saveAgenda} disabled={saving} size="lg">
-            {saving ? (
-              "Saving..."
-            ) : saved ? (
-              <>
-                <CheckCircle className="h-4 w-4 mr-2" /> Saved
-              </>
-            ) : (
-              <>
-                <Save className="h-4 w-4 mr-2" /> Save Agenda
-              </>
-            )}
-          </Button>
+          <AutosaveBadge state={autosave.state} errorMessage={autosave.errorMessage} onRetry={autosave.retry} />
         </div>
+
+        {/* Bottom pager — page onward without scrolling back up */}
+        <AgendaPager previous={pagerPrevious} next={pagerNext} />
       </div>
     </div>
   )
