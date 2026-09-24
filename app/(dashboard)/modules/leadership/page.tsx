@@ -33,7 +33,7 @@ interface Calling {
 
 const STAGES = [
   { key: "sp", label: "SP Consideration", color: "bg-blue-500", light: "bg-blue-50 border-blue-200", badge: "bg-blue-100 text-blue-700" },
-  { key: "bishop", label: "Bishop Approval", color: "bg-purple-500", light: "bg-purple-50 border-purple-200", badge: "bg-purple-100 text-purple-700" },
+  { key: "bishop", label: "Bishop/Stake Presidency Approval", color: "bg-purple-500", light: "bg-purple-50 border-purple-200", badge: "bg-purple-100 text-purple-700" },
   { key: "hc", label: "HC Sustained", color: "bg-indigo-500", light: "bg-indigo-50 border-indigo-200", badge: "bg-indigo-100 text-indigo-700" },
   { key: "ward", label: "Ward / Stake Sustained", color: "bg-teal-500", light: "bg-teal-50 border-teal-200", badge: "bg-teal-100 text-teal-700" },
   { key: "setapart", label: "Set Apart", color: "bg-amber-500", light: "bg-amber-50 border-amber-200", badge: "bg-amber-100 text-amber-700" },
