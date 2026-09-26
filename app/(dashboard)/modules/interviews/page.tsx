@@ -8,6 +8,7 @@ import { formatInterviewType, MISSION_INTERVIEW_TYPE } from "@/lib/interviews/in
 import { navigateInterviewSelection } from "@/lib/interviews/navigate-mission-interview"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 import { DEFAULT_MISSION_READY_TASKS, checklistProgress, ensureRmChecklist, isPrepProgress } from "@/lib/missionary/mission-ready-defaults"
+import { useLiveRows } from "@/lib/live/use-live-rows"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button, buttonVariants } from "@/components/ui/button"
 import Link from "next/link"
@@ -47,6 +48,7 @@ interface MissionReadyMissionary {
 }
 
 interface MissionReadyProgress {
+  id: string
   missionary_id: string
   completed: boolean
   task_number: number
@@ -84,6 +86,24 @@ export default function InterviewsPage() {
   const [newReadyName, setNewReadyName] = useState("")
   const [addingReady, setAddingReady] = useState(false)
   const [missionLoading, setMissionLoading] = useState(true)
+
+  useLiveRows<Interview>({
+    table: "interviews",
+    enabled: !loading,
+    setRows: setInterviews,
+    order: { column: "scheduled_date", ascending: true },
+  })
+  useLiveRows<MissionReadyMissionary>({
+    table: "mission_ready_missionaries",
+    enabled: !missionLoading,
+    setRows: setReadyMissionaries,
+    order: { column: "created_at", ascending: false },
+  })
+  useLiveRows<MissionReadyProgress>({
+    table: "mission_ready_progress",
+    enabled: !missionLoading,
+    setRows: setReadyProgress,
+  })
 
   useEffect(() => {
     loadInterviews()
@@ -169,7 +189,7 @@ export default function InterviewsPage() {
     try {
       const [readyResult, progResult] = await Promise.all([
         safeQuery(supabase.from("mission_ready_missionaries").select("*").order("created_at", { ascending: false })),
-        safeQuery(supabase.from("mission_ready_progress").select("missionary_id, completed, task_number")),
+        safeQuery(supabase.from("mission_ready_progress").select("id, missionary_id, completed, task_number")),
       ])
       const missionaries: MissionReadyMissionary[] = readyResult.data || []
       const progress: MissionReadyProgress[] = progResult.data || []
@@ -193,7 +213,7 @@ export default function InterviewsPage() {
       let nextProgress = progress
       if (seeded) {
         const again = await safeQuery(
-          supabase.from("mission_ready_progress").select("missionary_id, completed, task_number")
+          supabase.from("mission_ready_progress").select("id, missionary_id, completed, task_number")
         )
         nextProgress = again.data || progress
       }

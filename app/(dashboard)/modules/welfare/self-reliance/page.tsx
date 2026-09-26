@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ArrowLeft, Plus, CheckCircle2, Clock, XCircle } from "lucide-react"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
+import { useLiveRows } from "@/lib/live/use-live-rows"
 
 interface Participant {
   id: string
@@ -35,6 +36,13 @@ export default function SelfReliancePage() {
   const [formData, setFormData] = useState({ participant_name: "", course_name: COURSES[0], start_date: "" })
   const [courseFilter, setCourseFilter] = useState("all")
   const supabase = createClient()
+
+  useLiveRows<Participant>({
+    table: "self_reliance_participants",
+    enabled: !loading,
+    setRows: setParticipants,
+    order: { column: "created_at", ascending: false },
+  })
 
   useEffect(() => { loadData() }, [])
 

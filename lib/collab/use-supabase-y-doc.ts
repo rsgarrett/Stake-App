@@ -25,8 +25,10 @@ export function useSupabaseYDoc(options: {
   supabase: SupabaseClient
   userName?: string | null
   enabled?: boolean
+  /** Persist the doc in `yjs_documents`. Turn off for rooms that must not be stored. */
+  persist?: boolean
 }) {
-  const { room, supabase, userName, enabled = true } = options
+  const { room, supabase, userName, enabled = true, persist = true } = options
   const [status, setStatus] = useState<CollabStatus>("connecting")
   const [peers, setPeers] = useState<Peer[]>([])
   const [doc, setDoc] = useState<Y.Doc | null>(null)
@@ -66,6 +68,7 @@ export function useSupabaseYDoc(options: {
     const ydoc = new Y.Doc()
     let providerInstance: SupabaseProvider | null = null
     let readyFallback: ReturnType<typeof setTimeout> | null = null
+    let snapshotPoll: ReturnType<typeof setInterval> | null = null
     let persistChannel: ReturnType<SupabaseClient["channel"]> | null = null
 
     const markReady = () => {
@@ -95,7 +98,7 @@ export function useSupabaseYDoc(options: {
 
       providerInstance = new SupabaseProvider(room, ydoc, sb, {
         awareness: true,
-        persistence: { storeTimeout: 400 },
+        persistence: persist ? { storeTimeout: 400 } : undefined,
         broadcastThrottleMs: 33,
         autoReconnect: true,
       })
@@ -155,7 +158,33 @@ export function useSupabaseYDoc(options: {
       })
 
       // If persistence never emits (older package edge cases), don't block forever.
-      readyFallback = setTimeout(markReady, 1800)
+      readyFallback = setTimeout(markReady, persist ? 1800 : 50)
+
+      // Realtime broadcast and postgres_changes both drop frames in practice.
+      // Pulling the stored Yjs snapshot and applying it merges concurrent edits
+      // (it does not replace the local document), so other people see typing
+      // even when the live channel is quiet.
+      const pullSnapshot = async () => {
+        if (cancelled || !persist) return
+        const { data } = await supabaseRef.current
+          .from("yjs_documents")
+          .select("state")
+          .eq("room", room)
+          .maybeSingle()
+        applyPersistedState(data?.state)
+      }
+      void pullSnapshot()
+      snapshotPoll = setInterval(() => {
+        void pullSnapshot()
+      }, 600)
+      if (cancelled) {
+        clearInterval(snapshotPoll)
+        snapshotPoll = null
+        providerInstance.destroy()
+        providerRef.current = null
+        ydoc.destroy()
+        return
+      }
 
       // Fallback when Broadcast frames are dropped: applying the persisted
       // snapshot still updates every other open agenda within ~400ms.
@@ -180,6 +209,7 @@ export function useSupabaseYDoc(options: {
 
     return () => {
       cancelled = true
+      if (snapshotPoll) clearInterval(snapshotPoll)
       if (readyFallback) clearTimeout(readyFallback)
       if (persistChannel) void supabaseRef.current.removeChannel(persistChannel)
       providerInstance?.destroy()
@@ -191,7 +221,7 @@ export function useSupabaseYDoc(options: {
       setReady(false)
     }
     // Intentionally omit supabase/userName — use refs so typing/name load doesn't reset the doc.
-  }, [enabled, room])
+  }, [enabled, room, persist])
 
   return useMemo(
     () => ({ doc, provider, status, peers, ready }),

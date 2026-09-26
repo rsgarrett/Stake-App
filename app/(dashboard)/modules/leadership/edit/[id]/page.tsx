@@ -9,6 +9,7 @@ import Link from "next/link"
 import { ArrowLeft, CheckCircle2, UserPlus, Users, ShieldCheck, Vote, Hand, Sparkles } from "lucide-react"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 import { clearAgendaReturn, getAgendaReturn } from "@/lib/navigation/agenda-return"
+import { useLiveForm } from "@/lib/live/use-live-form"
 
 const ORGANIZATIONS = [
   "Stake Presidency", "High Council", "Bishopric", "Relief Society", "Elders Quorum",
@@ -115,6 +116,25 @@ export default function EditCallingPage() {
     protecting_children_training_complete: false,
     stake_training_complete: false,
     notes: "",
+  })
+
+  useLiveForm({
+    table: "callings",
+    id,
+    enabled: !loading && Boolean(id),
+    values: formData,
+    setValues: setFormData,
+    textFields: [
+      "person_name",
+      "calling_name",
+      "ward",
+      "organization",
+      "extend_authority",
+      "assigned_to_extend",
+      "set_apart_authority",
+      "set_apart_by",
+      "notes",
+    ],
   })
 
   useEffect(() => { loadCalling() }, [id])

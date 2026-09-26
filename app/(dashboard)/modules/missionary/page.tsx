@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Plus, Globe, ChevronRight, Award } from "lucide-react"
 import { DEFAULT_MISSION_READY_TASKS, checklistProgress, ensureRmChecklist, isPrepProgress } from "@/lib/missionary/mission-ready-defaults"
+import { useLiveRows } from "@/lib/live/use-live-rows"
 
 interface MissionReadyMissionary {
   id: string
@@ -18,6 +19,7 @@ interface MissionReadyMissionary {
 }
 
 interface MissionReadyProgress {
+  id: string
   missionary_id: string
   completed: boolean
   task_number: number
@@ -44,13 +46,25 @@ export default function MissionaryPage() {
   const [addingReady, setAddingReady] = useState(false)
   const supabase = createClient()
 
+  useLiveRows<MissionReadyMissionary>({
+    table: "mission_ready_missionaries",
+    enabled: !loading,
+    setRows: setReadyMissionaries,
+    order: { column: "created_at", ascending: false },
+  })
+  useLiveRows<MissionReadyProgress>({
+    table: "mission_ready_progress",
+    enabled: !loading,
+    setRows: setReadyProgress,
+  })
+
   useEffect(() => { loadData() }, [])
 
   const loadData = async () => {
     try {
       const [readyResult, progResult] = await Promise.all([
         safeQuery(supabase.from("mission_ready_missionaries").select("*").order("created_at", { ascending: false })),
-        safeQuery(supabase.from("mission_ready_progress").select("missionary_id, completed, task_number")),
+        safeQuery(supabase.from("mission_ready_progress").select("id, missionary_id, completed, task_number")),
       ])
       const missionaries: MissionReadyMissionary[] = readyResult.data || []
       const progress: MissionReadyProgress[] = progResult.data || []
@@ -75,7 +89,7 @@ export default function MissionaryPage() {
       let nextProgress = progress
       if (seeded) {
         const again = await safeQuery(
-          supabase.from("mission_ready_progress").select("missionary_id, completed, task_number")
+          supabase.from("mission_ready_progress").select("id, missionary_id, completed, task_number")
         )
         nextProgress = again.data || progress
       }

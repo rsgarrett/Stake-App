@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button, buttonVariants } from "@/components/ui/button"
 import Link from "next/link"
 import { Plus, ShieldCheck, AlertTriangle, Users, Clock } from "lucide-react"
+import { useLiveRows } from "@/lib/live/use-live-rows"
 
 interface WelfareCase {
   id: string
@@ -33,6 +34,18 @@ export default function WelfarePage() {
   const [userRole, setUserRole] = useState<string | null>(null)
   const [tabView, setTabView] = useState<"cases" | "self-reliance">("cases")
   const supabase = createClient()
+
+  useLiveRows<WelfareCase>({
+    table: "welfare_cases",
+    enabled: !loading,
+    setRows: setCases,
+    order: { column: "created_at", ascending: false },
+  })
+  useLiveRows<SelfRelianceParticipant>({
+    table: "self_reliance_participants",
+    enabled: !loading,
+    setRows: setParticipants,
+  })
 
   useEffect(() => { loadData() }, [])
 
