@@ -6,8 +6,9 @@ import { safeQuery } from "@/lib/utils/safe-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { Plus, Globe, CheckCircle2, ClipboardCheck, ChevronRight, Award } from "lucide-react"
-import { DEFAULT_MISSION_READY_TASKS } from "@/lib/missionary/mission-ready-defaults"
+import { Plus, Globe, ChevronRight, Award } from "lucide-react"
+import { DEFAULT_MISSION_READY_TASKS, checklistProgress, ensureRmChecklist, isPrepProgress } from "@/lib/missionary/mission-ready-defaults"
+import { useLiveRows } from "@/lib/live/use-live-rows"
 
 interface MissionReadyMissionary {
   id: string
@@ -18,8 +19,10 @@ interface MissionReadyMissionary {
 }
 
 interface MissionReadyProgress {
+  id: string
   missionary_id: string
   completed: boolean
+  task_number: number
 }
 
 type TabView = "mission_ready" | "serving" | "returned"
@@ -43,13 +46,25 @@ export default function MissionaryPage() {
   const [addingReady, setAddingReady] = useState(false)
   const supabase = createClient()
 
+  useLiveRows<MissionReadyMissionary>({
+    table: "mission_ready_missionaries",
+    enabled: !loading,
+    setRows: setReadyMissionaries,
+    order: { column: "created_at", ascending: false },
+  })
+  useLiveRows<MissionReadyProgress>({
+    table: "mission_ready_progress",
+    enabled: !loading,
+    setRows: setReadyProgress,
+  })
+
   useEffect(() => { loadData() }, [])
 
   const loadData = async () => {
     try {
       const [readyResult, progResult] = await Promise.all([
         safeQuery(supabase.from("mission_ready_missionaries").select("*").order("created_at", { ascending: false })),
-        safeQuery(supabase.from("mission_ready_progress").select("missionary_id, completed")),
+        safeQuery(supabase.from("mission_ready_progress").select("id, missionary_id, completed, task_number")),
       ])
       const missionaries: MissionReadyMissionary[] = readyResult.data || []
       const progress: MissionReadyProgress[] = progResult.data || []
@@ -58,7 +73,7 @@ export default function MissionaryPage() {
       const preparingStatuses = ["preparing", "papers_submitted", "call_received", "set_apart"]
       for (const m of missionaries) {
         if (preparingStatuses.includes(m.status)) {
-          const items = progress.filter((p) => p.missionary_id === m.id)
+          const items = progress.filter((p) => p.missionary_id === m.id && isPrepProgress(p))
           if (items.length > 0 && items.every((p) => p.completed)) {
             await supabase.from("mission_ready_missionaries").update({ status: "serving" }).eq("id", m.id)
             m.status = "serving"
@@ -66,8 +81,21 @@ export default function MissionaryPage() {
         }
       }
 
+      const returned = missionaries.filter((m) => m.status === "completed")
+      let seeded = false
+      for (const m of returned) {
+        if (await ensureRmChecklist(supabase, m.id)) seeded = true
+      }
+      let nextProgress = progress
+      if (seeded) {
+        const again = await safeQuery(
+          supabase.from("mission_ready_progress").select("id, missionary_id, completed, task_number")
+        )
+        nextProgress = again.data || progress
+      }
+
       setReadyMissionaries(missionaries)
-      setReadyProgress(progress)
+      setReadyProgress(nextProgress)
     } catch (err) { console.error(err) }
     finally { setLoading(false) }
   }
@@ -118,14 +146,12 @@ export default function MissionaryPage() {
 
   const markMissionComplete = async (id: string) => {
     await supabase.from("mission_ready_missionaries").update({ status: "completed" }).eq("id", id)
+    await ensureRmChecklist(supabase, id)
     await loadData()
   }
 
-  const getProgressForMissionary = (missionaryId: string) => {
-    const items = readyProgress.filter((p) => p.missionary_id === missionaryId)
-    const completed = items.filter((p) => p.completed).length
-    const total = items.length || 20
-    return { completed, total, percent: Math.round((completed / total) * 100) }
+  const getProgressForMissionary = (missionaryId: string, kind: "prep" | "rm" = "prep") => {
+    return checklistProgress(readyProgress, missionaryId, kind)
   }
 
   const preparingMissionaries = readyMissionaries.filter((m) => !["serving", "completed"].includes(m.status))
@@ -143,26 +169,23 @@ export default function MissionaryPage() {
         <p className="mt-2 text-sm sm:text-base text-gray-600">Mission readiness tracking, currently serving, and returned missionaries</p>
       </div>
 
-      {/* Stats */}
+      {/* Stats — also switch which list is shown */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-gray-500">Mission Ready</CardTitle></CardHeader>
-          <CardContent><div className="text-3xl font-bold text-indigo-600">{preparingMissionaries.length}</div></CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-gray-500">Currently Serving</CardTitle></CardHeader>
-          <CardContent><div className="text-3xl font-bold text-green-600">{servingMissionaries.length}</div></CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-gray-500">Returned</CardTitle></CardHeader>
-          <CardContent><div className="text-3xl font-bold text-gray-700">{returnedMissionaries.length}</div></CardContent></Card>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex space-x-1 border-b mb-4 overflow-x-auto">
         {([
-          { key: "mission_ready" as const, label: `Mission Ready (${preparingMissionaries.length})`, icon: ClipboardCheck },
-          { key: "serving" as const, label: `Currently Serving (${servingMissionaries.length})`, icon: Globe },
-          { key: "returned" as const, label: `Returned (${returnedMissionaries.length})`, icon: Award },
-        ]).map(({ key, label, icon: Icon }) => (
-          <button key={key} onClick={() => setTabView(key)}
-            className={`flex items-center px-4 py-2 text-sm font-medium border-b-2 -mb-px whitespace-nowrap ${tabView === key ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
-            <Icon className="h-4 w-4 mr-2" />{label}
+          { key: "mission_ready" as const, title: "Mission Ready", count: preparingMissionaries.length, countClass: "text-indigo-600" },
+          { key: "serving" as const, title: "Currently Serving", count: servingMissionaries.length, countClass: "text-green-600" },
+          { key: "returned" as const, title: "Returned", count: returnedMissionaries.length, countClass: "text-gray-700" },
+        ]).map(({ key, title, count, countClass }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setTabView(key)}
+            className="text-left rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2"
+          >
+            <Card className={`h-full transition-shadow ${tabView === key ? "ring-2 ring-indigo-600 border-indigo-600 shadow-md" : "hover:border-gray-300 hover:shadow-sm"}`}>
+              <CardHeader className="pb-2"><CardTitle className="text-sm text-gray-500">{title}</CardTitle></CardHeader>
+              <CardContent><div className={`text-3xl font-bold ${countClass}`}>{count}</div></CardContent>
+            </Card>
           </button>
         ))}
       </div>
@@ -301,25 +324,45 @@ export default function MissionaryPage() {
         <Card>
           <CardHeader>
             <CardTitle>Returned Missionaries</CardTitle>
-            <CardDescription>Missionaries who have completed their service</CardDescription>
+            <CardDescription>
+              Follow-up checklist after they return home. Open a name to track the 10 RM items.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {returnedMissionaries.length === 0 ? (
               <p className="text-center text-gray-500 py-8">No returned missionaries yet.</p>
             ) : (
               <div className="space-y-2">
-                {returnedMissionaries.map((m) => (
-                  <div key={m.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <Award className="h-5 w-5 text-amber-500" />
-                      <div>
-                        <div className="font-medium text-gray-900">{m.missionary_name}</div>
-                        <span className="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-600">Returned</span>
+                {returnedMissionaries.map((m) => {
+                  const prog = getProgressForMissionary(m.id, "rm")
+                  return (
+                    <Link
+                      key={m.id}
+                      href={`/modules/missionary/mission-ready/${m.id}`}
+                      className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:shadow-sm hover:bg-gray-50 transition-shadow"
+                    >
+                      <div className="flex items-center space-x-3 min-w-0 flex-1">
+                        <Award className="h-5 w-5 text-amber-500 shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <div className="font-medium text-gray-900 truncate">{m.missionary_name}</div>
+                          <div className="flex items-center gap-3 mt-1">
+                            <span className="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-600">Returned</span>
+                            <span className="text-xs text-gray-500">
+                              {prog.completed}/{prog.total} RM items complete
+                            </span>
+                          </div>
+                          <div className="mt-2 w-full max-w-xs bg-gray-200 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full transition-all duration-300 ${prog.percent === 100 ? "bg-green-500" : "bg-amber-500"}`}
+                              style={{ width: `${prog.percent}%` }}
+                            />
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                    <CheckCircle2 className="h-5 w-5 text-green-500" />
-                  </div>
-                ))}
+                      <ChevronRight className="h-5 w-5 text-gray-400 shrink-0 ml-3" />
+                    </Link>
+                  )
+                })}
               </div>
             )}
           </CardContent>

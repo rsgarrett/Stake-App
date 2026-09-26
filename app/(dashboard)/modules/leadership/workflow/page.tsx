@@ -22,6 +22,7 @@ import {
   Edit,
 } from "lucide-react"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
+import { useLiveRows } from "@/lib/live/use-live-rows"
 
 interface Calling {
   id: string
@@ -74,6 +75,12 @@ function getStepLabel(index: number): string {
 export default function CallingWorkflowPage() {
   const [callings, setCallings] = useState<Calling[]>([])
   const [loading, setLoading] = useState(true)
+  const liveCallings = useLiveRows<Calling>({
+    table: "callings",
+    enabled: !loading,
+    setRows: setCallings,
+    order: { column: "created_at", ascending: false },
+  })
   const [filter, setFilter] = useState<string>("all")
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const supabase = createClient()
@@ -109,8 +116,7 @@ export default function CallingWorkflowPage() {
     }
 
     try {
-      const { error: updateError } = await supabase.from("callings").update(updates).eq("id", calling.id)
-      if (updateError) throw updateError
+      await liveCallings.patch(calling.id, updates)
 
       await supabase.from("calling_workflow_log").insert({
         calling_id: calling.id,
@@ -120,7 +126,6 @@ export default function CallingWorkflowPage() {
         if (logErr) console.warn("Log error (non-critical):", logErr)
       })
 
-      await loadData()
     } catch (err: any) {
       console.error("Advance error:", err)
       alert("Failed to advance: " + (err.message || "Unknown error"))
@@ -141,9 +146,7 @@ export default function CallingWorkflowPage() {
     }
 
     try {
-      const { error: updateError } = await supabase.from("callings").update(updates).eq("id", calling.id)
-      if (updateError) throw updateError
-      await loadData()
+      await liveCallings.patch(calling.id, updates)
     } catch (err: any) {
       alert("Failed to revert: " + (err.message || "Unknown error"))
     }

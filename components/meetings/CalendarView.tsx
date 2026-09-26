@@ -119,7 +119,11 @@ export function CalendarView({
   const pendingWeekScrollIndex = useRef<number | null>(null)
   const [browseMode, setBrowseMode] = useState<BrowseMode>("weeks")
   const [yearViewYear, setYearViewYear] = useState(() => new Date().getFullYear())
-  const [headerLabel, setHeaderLabel] = useState(() => (weeks[0] ? headerLabelForWeek(weeks[0]) : ""))
+  const [headerLabel, setHeaderLabel] = useState(() => {
+    const t = new Date()
+    const todayWeek = weeks.find((w) => w.some((d) => isSameDay(d, t)))
+    return todayWeek ? headerLabelForWeek(todayWeek) : weeks[0] ? headerLabelForWeek(weeks[0]) : ""
+  })
 
   const eventsByDate = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>()

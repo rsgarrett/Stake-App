@@ -23,6 +23,7 @@ import {
 } from "lucide-react"
 import { format, addDays, subDays } from "date-fns"
 import { formatInterviewType } from "@/lib/interviews/interview-types"
+import { useLiveRows } from "@/lib/live/use-live-rows"
 
 interface Meeting {
   id: string
@@ -91,6 +92,19 @@ export default function DayViewPage() {
   const [navigating, setNavigating] = useState(false)
   const [showAddParticipant, setShowAddParticipant] = useState<string | null>(null)
   const [newParticipant, setNewParticipant] = useState("")
+
+  useLiveRows<Meeting>({
+    table: "meetings",
+    enabled: !loading,
+    setRows: setMeetings,
+    matches: (row) => String(row.scheduled_date || "").startsWith(dateStr),
+  })
+  useLiveRows<Interview>({
+    table: "interviews",
+    enabled: !loading,
+    setRows: setInterviews,
+    matches: (row) => String(row.scheduled_date || "").startsWith(dateStr),
+  })
 
   const dateObj = new Date(dateStr + "T12:00:00")
   const displayDate = format(dateObj, "EEEE, MMMM d, yyyy")

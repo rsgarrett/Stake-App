@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
 import { Plus, Edit, CheckCircle2, ChevronRight, ChevronLeft, Search, Trash2, ArrowLeft } from "lucide-react"
 import { BishopRecommendShareCard } from "@/components/leadership/bishop-recommend-share-card"
+import { useLiveRows } from "@/lib/live/use-live-rows"
 
 interface Calling {
   id: string
@@ -57,6 +58,12 @@ export default function LeadershipPage() {
   const returnQuery = returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""
   const [callings, setCallings] = useState<Calling[]>([])
   const [loading, setLoading] = useState(true)
+  const liveCallings = useLiveRows<Calling>({
+    table: "callings",
+    enabled: !loading,
+    setRows: setCallings,
+    order: { column: "created_at", ascending: false },
+  })
   const [searchTerm, setSearchTerm] = useState("")
   const supabase = createClient()
 
@@ -79,21 +86,13 @@ export default function LeadershipPage() {
   }, [returnFromQuery])
 
   const updateCalling = async (id: string, updates: Record<string, unknown>) => {
-    const { data, error } = await supabase
-      .from("callings")
-      .update(updates)
-      .eq("id", id)
-      .select()
-    if (error) {
-      alert("Error: " + error.message)
+    try {
+      await liveCallings.patch(id, updates)
+      return true
+    } catch (err) {
+      alert("Error: " + (err instanceof Error ? err.message : String(err)))
       return false
     }
-    if (!data || data.length === 0) {
-      alert("Update blocked — you may not have permission, or the calling's stake doesn't match your account. Try signing out and back in.")
-      return false
-    }
-    await load()
-    return true
   }
 
   /** Record that the person being replaced has been released from the calling. */
@@ -181,16 +180,11 @@ export default function LeadershipPage() {
 
   const deleteCalling = async (c: Calling) => {
     if (!confirm(`Remove ${c.person_name} — ${c.calling_name}?`)) return
-    const { data, error } = await supabase.from("callings").delete().eq("id", c.id).select()
-    if (error) {
-      alert("Error: " + error.message)
-      return
+    try {
+      await liveCallings.remove(c.id)
+    } catch (err) {
+      alert("Error: " + (err instanceof Error ? err.message : String(err)))
     }
-    if (!data || data.length === 0) {
-      alert("Delete blocked — you may not have permission.")
-      return
-    }
-    await load()
   }
 
   const active = callings.filter((c) => {

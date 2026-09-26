@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, Fragment } from "react"
+import { useState, useEffect, useCallback, Fragment, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -31,6 +31,10 @@ import {
 import { PROGRAM_ITEM_LABELS } from "@/lib/conferences/program-item-labels"
 import { STAKE_VISION_TEXT } from "@/lib/conferences/conducting-sheet-header-quotes"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
+import { ChurchWebLink } from "@/components/church-web-link"
+import { useLiveRows } from "@/lib/live/use-live-rows"
+import { useSupabaseYDoc } from "@/lib/collab/use-supabase-y-doc"
+import { applyTextChange } from "@/lib/collab/apply-text-change"
 import {
   anyStandardOpeningTypeInProgram,
   hasStandardOpeningPrefix,
@@ -131,6 +135,86 @@ export default function ConferenceDetailPage() {
   const [notes, setNotes] = useState<ConferenceNote[]>([])
   const [suggestions, setSuggestions] = useState<ConferenceNameSuggestion[]>([])
   const [loading, setLoading] = useState(true)
+  const editingItemRef = useRef<string | null>(null)
+
+  useLiveRows<SpecialEvent>({
+    table: "special_events",
+    eq: { id: eventId },
+    enabled: !loading && Boolean(eventId),
+    setRows: (updater) => {
+      setEvent((prev) => {
+        if (!prev) return prev
+        const next = typeof updater === "function" ? updater([prev]) : updater
+        return next[0] ?? prev
+      })
+    },
+  })
+  useLiveRows<ConferenceSession>({
+    table: "conference_sessions",
+    eq: { event_id: eventId },
+    enabled: !loading,
+    order: { column: "display_order", ascending: true },
+    setRows: (updater) => {
+      setSessions((prev) => {
+        const next = typeof updater === "function" ? updater(prev) : updater
+        const itemsBySession = new Map(prev.map((session) => [session.id, session.program_items]))
+        return next.map((session) => ({
+          ...session,
+          program_items: itemsBySession.get(session.id) || session.program_items || [],
+        }))
+      })
+    },
+  })
+  useLiveRows<ConferenceProgramItem>({
+    table: "conference_program_items",
+    enabled: !loading,
+    order: { column: "display_order", ascending: true },
+    matches: (row) => sessions.some((session) => session.id === row.session_id),
+    setRows: (updater) => {
+      setSessions((prev) => {
+        const current = prev.flatMap((session) => session.program_items || [])
+        const next = typeof updater === "function" ? updater(current) : updater
+        const bySession = new Map<string, ConferenceProgramItem[]>()
+        for (const item of next) {
+          const list = bySession.get(item.session_id) || []
+          list.push(item)
+          bySession.set(item.session_id, list)
+        }
+        return prev.map((session) => ({
+          ...session,
+          program_items: bySession.get(session.id) || [],
+        }))
+      })
+    },
+  })
+  useLiveRows<ConferenceMinisteringVisit>({
+    table: "conference_ministering_visits",
+    eq: { event_id: eventId },
+    enabled: !loading,
+    order: { column: "display_order", ascending: true },
+    setRows: setVisits,
+  })
+  useLiveRows<ConferenceNote>({
+    table: "conference_notes",
+    eq: { event_id: eventId },
+    enabled: !loading,
+    order: { column: "created_at", ascending: false },
+    setRows: setNotes,
+  })
+  useLiveRows<ConferenceNameSuggestion>({
+    table: "conference_name_suggestions",
+    eq: { event_id: eventId },
+    enabled: !loading,
+    setRows: setSuggestions,
+  })
+
+  const programCollab = useSupabaseYDoc({
+    room: eventId ? `agenda:sheet:conference:${eventId}` : null,
+    supabase,
+    enabled: !loading && Boolean(eventId),
+  })
+  const programDocRef = useRef(programCollab.doc)
+  programDocRef.current = programCollab.doc
   const [tabView, setTabView] = useState<TabView>("sessions")
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState(false)
@@ -150,6 +234,54 @@ export default function ConferenceDetailPage() {
   const [suggestionForm, setSuggestionForm] = useState({ suggested_name: "", suggested_role: "", notes: "" })
 
   const [editingItem, setEditingItem] = useState<string | null>(null)
+  editingItemRef.current = editingItem
+
+  useEffect(() => {
+    const doc = programCollab.doc
+    if (!doc || !programCollab.ready || !editingItem) return
+    const item = sessions.flatMap((session) => session.program_items || []).find((row) => row.id === editingItem)
+    if (!item) return
+    doc.transact(() => {
+      for (const field of ["topic", "notes"] as const) {
+        const yText = doc.getText(`${item.id}:${field}`)
+        const seed = item[field]
+        if (yText.length === 0 && seed) yText.insert(0, String(seed))
+      }
+    }, "seed")
+  }, [editingItem, programCollab.doc, programCollab.ready]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const doc = programCollab.doc
+    if (!doc) return
+    const apply = (_update: unknown, origin: unknown) => {
+      if (origin === "local" || origin === "seed") return
+      const openId = editingItemRef.current
+      if (openId) {
+        const topic = doc.getText(`${openId}:topic`).toString()
+        const noteText = doc.getText(`${openId}:notes`).toString()
+        setEditForm((prev) => (prev.topic === topic && prev.notes === noteText ? prev : { ...prev, topic, notes: noteText }))
+      }
+      setSessions((prev) =>
+        prev.map((session) => ({
+          ...session,
+          program_items: (session.program_items || []).map((item) => {
+            const topic = doc.getText(`${item.id}:topic`)
+            const noteText = doc.getText(`${item.id}:notes`)
+            if (topic.length === 0 && noteText.length === 0) return item
+            return {
+              ...item,
+              topic: topic.length > 0 ? topic.toString() : item.topic,
+              notes: noteText.length > 0 ? noteText.toString() : item.notes,
+            }
+          }),
+        }))
+      )
+    }
+    doc.on("update", apply)
+    return () => {
+      doc.off("update", apply)
+    }
+  }, [programCollab.doc])
   const [editForm, setEditForm] = useState<Partial<ConferenceProgramItem>>({})
   const [addingPresidencySessionId, setAddingPresidencySessionId] = useState<string | null>(null)
   const [presidencyItemForm, setPresidencyItemForm] = useState({ topic: "", notes: "" })
@@ -400,11 +532,16 @@ export default function ConferenceDetailPage() {
 
   /** Partial update; does not close the row editor (use for blur / select change auto-save). */
   const patchProgramItem = async (itemId: string, updates: Partial<ConferenceProgramItem>) => {
-    setSaving(true)
+    setSessions((prev) =>
+      prev.map((session) => ({
+        ...session,
+        program_items: (session.program_items || []).map((item) =>
+          item.id === itemId ? { ...item, ...updates } : item
+        ),
+      }))
+    )
     const { error } = await supabase.from("conference_program_items").update(updates).eq("id", itemId)
     if (error) console.error("patchProgramItem:", error)
-    setSaving(false)
-    await loadData({ background: true })
   }
 
   const moveProgramItem = async (sessionId: string, itemId: string, direction: "up" | "down") => {
@@ -692,9 +829,9 @@ export default function ConferenceDetailPage() {
             <Trash2 className="h-4 w-4 mr-1.5" />
             Delete event
           </Button>
-          <a href={HANDBOOK_URL} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-500 hover:text-indigo-600 flex items-center gap-1">
+          <ChurchWebLink href={HANDBOOK_URL} className="text-xs text-gray-500 hover:text-indigo-600 flex items-center gap-1">
             <BookOpen className="h-3.5 w-3.5" /> General Handbook Ch. 29 — Meetings
-          </a>
+          </ChurchWebLink>
         </div>
       </div>
 
@@ -1221,12 +1358,20 @@ export default function ConferenceDetailPage() {
                                         <input
                                           type="text"
                                           value={editForm.topic ?? item.topic ?? ""}
-                                          onChange={(e) => setEditForm((f) => ({ ...f, topic: e.target.value }))}
-                                          onBlur={(e) =>
+                                          data-live-field="topic"
+                                          onChange={(e) => {
+                                            const value = e.target.value
+                                            setEditForm((f) => ({ ...f, topic: value }))
+                                            const doc = programDocRef.current
+                                            if (doc && programCollab.ready) applyTextChange(doc.getText(`${item.id}:topic`), value)
+                                          }}
+                                          onBlur={(e) => {
+                                            const doc = programDocRef.current
+                                            const live = doc?.getText(`${item.id}:topic`).toString()
                                             void patchProgramItem(item.id, {
-                                              topic: e.target.value.trim() || undefined,
+                                              topic: (live ?? e.target.value).trim() || undefined,
                                             })
-                                          }
+                                          }}
                                           placeholder="Topic"
                                           className={inputClass}
                                         />
@@ -1235,12 +1380,20 @@ export default function ConferenceDetailPage() {
                                         <input
                                           type="text"
                                           value={editForm.notes ?? item.notes ?? ""}
-                                          onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
-                                          onBlur={(e) =>
+                                          data-live-field="notes"
+                                          onChange={(e) => {
+                                            const value = e.target.value
+                                            setEditForm((f) => ({ ...f, notes: value }))
+                                            const doc = programDocRef.current
+                                            if (doc && programCollab.ready) applyTextChange(doc.getText(`${item.id}:notes`), value)
+                                          }}
+                                          onBlur={(e) => {
+                                            const doc = programDocRef.current
+                                            const live = doc?.getText(`${item.id}:notes`).toString()
                                             void patchProgramItem(item.id, {
-                                              notes: e.target.value.trim() || undefined,
+                                              notes: (live ?? e.target.value).trim() || undefined,
                                             })
-                                          }
+                                          }}
                                           placeholder="Notes"
                                           className={inputClass}
                                         />

@@ -6,8 +6,9 @@ import { safeQuery } from "@/lib/utils/safe-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button, buttonVariants } from "@/components/ui/button"
 import Link from "next/link"
-import { BookOpen, CheckCircle2, Clock, Plus, AlertTriangle, Users, GraduationCap, Church } from "lucide-react"
+import { BookOpen, CheckCircle2, Clock, Plus, AlertTriangle, Users, GraduationCap, Church, Landmark } from "lucide-react"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
+import { ALL_CURRICULA } from "@/lib/training/curricula"
 
 interface TrainingModule {
   id: string
@@ -49,13 +50,24 @@ export default function TrainingPage() {
 
   const loadData = async () => {
     try {
-      // Auth disabled — load modules and policy updates
-      const [modResult, polResult] = await Promise.all([
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      const [modResult, polResult, completionResult] = await Promise.all([
         safeQuery(supabase.from("training_modules").select("*").order("created_at", { ascending: false })),
         safeQuery(supabase.from("policy_updates").select("*").order("effective_date", { ascending: false }).limit(10)),
+        user
+          ? safeQuery(
+              supabase
+                .from("training_completions")
+                .select("id, user_id, module_id, completed_date, status")
+                .eq("user_id", user.id)
+            )
+          : Promise.resolve({ data: [] as Completion[], error: null }),
       ])
       setModules(modResult.data || [])
       setPolicyUpdates(polResult.data || [])
+      setCompletions((completionResult.data || []) as Completion[])
     } catch (err) {
       console.error("Error:", err)
     } finally {
@@ -106,24 +118,65 @@ export default function TrainingPage() {
 
   return (
     <div className="p-4 sm:p-6">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Training & Resources</h1>
-          <p className="mt-2 text-gray-600">Training modules, handbook resources, and policy updates</p>
+          <p className="mt-2 text-gray-600">
+            Role leadership academies, handbook resources, and stake training modules
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/modules/training/high-council" className={buttonVariants({ variant: "default" })}>
-            <GraduationCap className="h-4 w-4 mr-2" />
-            High Council Training
+          <Link href="/modules/training/handbook" className={buttonVariants({ variant: "outline" })}>
+            <BookOpen className="h-4 w-4 mr-2" />
+            Handbook
           </Link>
-          <Link href="/modules/training/bishop" className={buttonVariants({ variant: "outline" })}>
-            <Church className="h-4 w-4 mr-2" />
-            Bishop Training
+          <Link href="/modules/training/compliance" className={buttonVariants({ variant: "outline" })}>
+            <Users className="h-4 w-4 mr-2" />
+            Compliance Dashboard
           </Link>
-          <Link href="/modules/training/handbook" className={buttonVariants({ variant: "outline" })}><BookOpen className="h-4 w-4 mr-2" />Handbook</Link>
-          <Link href="/modules/training/compliance" className={buttonVariants({ variant: "outline" })}><Users className="h-4 w-4 mr-2" />Compliance Dashboard</Link>
-          <Button onClick={() => setAddingModule(true)}><Plus className="h-4 w-4 mr-2" />Add Module</Button>
+          <Button onClick={() => setAddingModule(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Module
+          </Button>
         </div>
+      </div>
+
+      {/* Role academies — separate curricula */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        {ALL_CURRICULA.map((c) => {
+          const href =
+            c.key === "stake_presidency"
+              ? "/modules/training/stake-presidency"
+              : c.key === "high_council"
+                ? "/modules/training/high-council"
+                : "/modules/training/bishopric"
+          const Icon =
+            c.key === "stake_presidency" ? Landmark : c.key === "high_council" ? GraduationCap : Church
+          const accent =
+            c.key === "stake_presidency"
+              ? "border-violet-200 hover:border-violet-400"
+              : c.key === "high_council"
+                ? "border-indigo-200 hover:border-indigo-400"
+                : "border-teal-200 hover:border-teal-400"
+          const iconColor =
+            c.key === "stake_presidency"
+              ? "text-violet-700"
+              : c.key === "high_council"
+                ? "text-indigo-700"
+                : "text-teal-700"
+          return (
+            <Link key={c.key} href={href} className={`block rounded-xl border bg-white p-5 shadow-sm transition-colors ${accent}`}>
+              <div className="flex items-center gap-2 mb-2">
+                <Icon className={`h-5 w-5 ${iconColor}`} />
+                <h2 className="font-semibold text-gray-900">{c.shortTitle}</h2>
+              </div>
+              <p className="text-sm text-gray-600 line-clamp-3">{c.intro}</p>
+              <p className="mt-3 text-xs text-gray-500">
+                {c.lessons.length} lessons · completion tracked · Handbook + video links
+              </p>
+            </Link>
+          )
+        })}
       </div>
 
       {/* Stats */}

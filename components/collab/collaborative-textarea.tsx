@@ -1,8 +1,7 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
 import type * as Y from "yjs"
-import { applyTextChange } from "@/lib/collab/apply-text-change"
+import { useBoundYText } from "@/lib/collab/use-bound-y-text"
 
 type Props = {
   yText: Y.Text | null
@@ -31,74 +30,21 @@ export function CollaborativeTextarea({
   rows = 8,
   onPlainText,
 }: Props) {
-  const [value, setValue] = useState("")
-  const taRef = useRef<HTMLTextAreaElement>(null)
-  const applyingRemote = useRef(false)
-  const seededRef = useRef(false)
-  const onPlainTextRef = useRef(onPlainText)
-  onPlainTextRef.current = onPlainText
-
-  useEffect(() => {
-    seededRef.current = false
-  }, [yText])
-
-  useEffect(() => {
-    if (!yText || !ready) return
-    if (seededRef.current) return
-    seededRef.current = true
-    if (yText.length === 0 && seedText) {
-      yText.insert(0, seedText)
-    }
-  }, [yText, seedText, ready])
-
-  useEffect(() => {
-    if (!yText) {
-      setValue("")
-      return
-    }
-
-    const syncFromY = () => {
-      const next = yText.toString()
-      applyingRemote.current = true
-      setValue(next)
-      onPlainTextRef.current?.(next)
-
-      const el = taRef.current
-      if (el && document.activeElement === el) {
-        const start = el.selectionStart
-        const end = el.selectionEnd
-        requestAnimationFrame(() => {
-          if (!taRef.current) return
-          const len = taRef.current.value.length
-          taRef.current.setSelectionRange(Math.min(start, len), Math.min(end, len))
-          applyingRemote.current = false
-        })
-      } else {
-        applyingRemote.current = false
-      }
-    }
-
-    syncFromY()
-    yText.observe(syncFromY)
-    return () => {
-      yText.unobserve(syncFromY)
-    }
-  }, [yText])
+  const { value, commit, inputRef } = useBoundYText(yText, seedText, ready, onPlainText)
 
   return (
     <textarea
-      ref={taRef}
+      ref={(el) => {
+        inputRef.current = el
+      }}
       rows={rows}
       value={value}
-      readOnly={readOnly || !yText}
+      readOnly={readOnly}
       placeholder={placeholder}
       className={className}
       onChange={(e) => {
-        if (readOnly || !yText || applyingRemote.current) return
-        const next = e.target.value
-        setValue(next)
-        applyTextChange(yText, next)
-        onPlainTextRef.current?.(next)
+        if (readOnly) return
+        commit(e.target.value)
       }}
     />
   )

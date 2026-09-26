@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -10,6 +10,9 @@ import { useAutosave } from "@/lib/hooks/use-autosave"
 import Link from "next/link"
 import { ArrowLeft, CheckCircle2, XCircle } from "lucide-react"
 import { formatInterviewType } from "@/lib/interviews/interview-types"
+import { useSupabaseYDoc } from "@/lib/collab/use-supabase-y-doc"
+import { useLiveRows } from "@/lib/live/use-live-rows"
+import { applyTextChange } from "@/lib/collab/apply-text-change"
 
 interface Interview {
   id: string
@@ -39,7 +42,52 @@ export default function InterviewDetailPage() {
   const [loading, setLoading] = useState(true)
   const [updatingStatus, setUpdatingStatus] = useState(false)
 
+  useLiveRows<Interview>({
+    table: "interviews",
+    eq: { id },
+    enabled: !loading && Boolean(id),
+    setRows: (updater) => {
+      setInterview((prev) => {
+        if (!prev) return prev
+        const next = typeof updater === "function" ? updater([prev]) : updater
+        return next[0] ?? prev
+      })
+    },
+  })
+
+  const notesRef = useRef(notes)
+  notesRef.current = notes
+  const notesCollab = useSupabaseYDoc({
+    room: id ? `agenda:row:interview_notes:${id}` : null,
+    supabase,
+    enabled: !loading && Boolean(id),
+  })
+
   useEffect(() => { loadData() }, [id])
+
+  useEffect(() => {
+    const doc = notesCollab.doc
+    if (!doc || !notesCollab.ready) return
+    const yText = doc.getText("note")
+    if (yText.length === 0 && notesRef.current) {
+      doc.transact(() => {
+        if (yText.length === 0 && notesRef.current) yText.insert(0, notesRef.current)
+      }, "seed")
+    }
+  }, [notesCollab.doc, notesCollab.ready])
+
+  useEffect(() => {
+    const doc = notesCollab.doc
+    if (!doc) return
+    const sync = (_update: unknown, origin: unknown) => {
+      if (origin === "local" || origin === "seed") return
+      setNotes(doc.getText("note").toString())
+    }
+    doc.on("update", sync)
+    return () => {
+      doc.off("update", sync)
+    }
+  }, [notesCollab.doc])
 
   const loadData = async () => {
     setLoading(true)
@@ -180,7 +228,12 @@ export default function InterviewDetailPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <textarea rows={12} value={notes} onChange={(e) => setNotes(e.target.value)} className={inputClass}
+            <textarea rows={12} value={notes} onChange={(e) => {
+              const value = e.target.value
+              setNotes(value)
+              const doc = notesCollab.doc
+              if (doc && notesCollab.ready) applyTextChange(doc.getText("note"), value)
+            }} className={inputClass}
               placeholder="Scheduling notes, follow-up items, logistics…&#10;&#10;Avoid confidential worthiness matters. Notes are encrypted for authorized leaders." />
           </CardContent>
         </Card>

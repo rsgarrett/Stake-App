@@ -34,8 +34,11 @@ import {
   usesHandbookCurriculum,
 } from "@/lib/meetings/handbook-training-curriculum"
 import { setAgendaReturn } from "@/lib/navigation/agenda-return"
+import { AgendaPager, pagerDateLabel } from "@/components/meetings/agenda-pager"
 import { CollaborativeTextarea } from "@/components/collab/collaborative-textarea"
+import { CollaborativeInput } from "@/components/collab/collaborative-input"
 import { meetingCollabRoom, useSupabaseYDoc } from "@/lib/collab/use-supabase-y-doc"
+import { applyTextChange } from "@/lib/collab/apply-text-change"
 
 interface Meeting {
   id: string
@@ -240,6 +243,12 @@ function shouldShowSectionHint(title: string, meetingType?: string): boolean {
 }
 
 export default function MeetingDetailPage() {
+  // Key by meeting id so pager navigation ([id] → [id]) remounts with clean state.
+  const params = useParams()
+  return <MeetingDetailPageInner key={String(params.id)} />
+}
+
+function MeetingDetailPageInner() {
   const params = useParams()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -303,6 +312,11 @@ export default function MeetingDetailPage() {
   const minutesRef = useRef<Minutes | null>(null)
   const editingItemsRef = useRef(editingItems)
   editingItemsRef.current = editingItems
+  const viewerRef = useRef(viewer)
+  viewerRef.current = viewer
+  const agendaRefreshGen = useRef(0)
+  const agendaRefreshInFlight = useRef(false)
+  const agendaRefreshQueued = useRef(false)
   const [editRevision, setEditRevision] = useState(0)
   const [liveStatus, setLiveStatus] = useState<"connecting" | "live" | "off">("connecting")
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null)
@@ -311,6 +325,47 @@ export default function MeetingDetailPage() {
   const supabase = createClient()
   const supabaseRef = useRef(supabase)
   supabaseRef.current = supabase
+
+  // Previous / next meeting of the same type, for paging through agendas
+  // without going back to the calendar.
+  const [adjacentMeetings, setAdjacentMeetings] = useState<{
+    previous: { id: string; scheduled_date: string } | null
+    next: { id: string; scheduled_date: string } | null
+  }>({ previous: null, next: null })
+
+  useEffect(() => {
+    if (!meeting?.id) return
+    let cancelled = false
+    ;(async () => {
+      const sb = supabaseRef.current
+      const [prevRes, nextRes] = await Promise.all([
+        sb
+          .from("meetings")
+          .select("id, scheduled_date")
+          .eq("meeting_type", meeting.meeting_type)
+          .lt("scheduled_date", meeting.scheduled_date)
+          .order("scheduled_date", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        sb
+          .from("meetings")
+          .select("id, scheduled_date")
+          .eq("meeting_type", meeting.meeting_type)
+          .gt("scheduled_date", meeting.scheduled_date)
+          .order("scheduled_date", { ascending: true })
+          .limit(1)
+          .maybeSingle(),
+      ])
+      if (cancelled) return
+      setAdjacentMeetings({
+        previous: (prevRes.data as { id: string; scheduled_date: string } | null) ?? null,
+        next: (nextRes.data as { id: string; scheduled_date: string } | null) ?? null,
+      })
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [meeting?.id, meeting?.meeting_type, meeting?.scheduled_date])
 
   useEffect(() => {
     let cancelled = false
@@ -344,6 +399,7 @@ export default function MeetingDetailPage() {
   }, [supabase])
 
   // Free Docs-level text collab (Yjs + Supabase Realtime, no paid add-on).
+  // Wait until initial load finishes so we don't open/close rooms twice.
   const minutesCollab = useSupabaseYDoc({
     room: meetingId ? meetingCollabRoom(meetingId, "minutes") : null,
     supabase,
@@ -357,6 +413,41 @@ export default function MeetingDetailPage() {
     enabled: Boolean(meetingId) && !loading,
   })
   const minutesYText = minutesCollab.doc?.getText("content") ?? null
+  const minutesYDocRef = useRef(minutesCollab.doc)
+  minutesYDocRef.current = minutesCollab.doc
+  const agendaYDocRef = useRef(agendaCollab.doc)
+  agendaYDocRef.current = agendaCollab.doc
+  const [agendaYTick, setAgendaYTick] = useState(0)
+
+  useEffect(() => {
+    const doc = agendaCollab.doc
+    if (!doc) return
+    const bump = () => setAgendaYTick((n) => n + 1)
+    doc.on("update", bump)
+    return () => {
+      doc.off("update", bump)
+    }
+  }, [agendaCollab.doc])
+
+  const ySeededKeysRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    const doc = agendaCollab.doc
+    if (!doc || !agendaCollab.ready) return
+    doc.transact(() => {
+      for (const item of agendaItems) {
+        for (const field of ["assigned_to", "presenter", "description"] as const) {
+          const key = `${item.id}:${field}`
+          if (ySeededKeysRef.current.has(key)) continue
+          ySeededKeysRef.current.add(key)
+          const t = doc.getText(key)
+          if (t.length > 0) continue
+          const overlay = editingItemsRef.current[item.id] as Partial<AgendaItem> | undefined
+          const seed = String(overlay?.[field] ?? item[field] ?? "")
+          if (seed) t.insert(0, seed)
+        }
+      }
+    })
+  }, [agendaCollab.doc, agendaCollab.ready, agendaItems])
 
   useEffect(() => { loadAll() }, [meetingId]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -382,48 +473,83 @@ export default function MeetingDetailPage() {
    * while you type elsewhere — closer to Docs than freezing the whole agenda.
    */
   const refreshAgendaFromServer = useCallback(async () => {
-    const sb = supabaseRef.current
-    const { data } = await sb
-      .from("meeting_agendas")
-      .select("*")
-      .eq("meeting_id", meetingId)
-      .order("item_order", { ascending: true })
-    const items = (data || []) as AgendaItem[]
-    setAgendaItems(items)
-    setLastSyncedAt(new Date())
+    if (agendaRefreshInFlight.current) {
+      agendaRefreshQueued.current = true
+      return
+    }
+    agendaRefreshInFlight.current = true
+    const gen = ++agendaRefreshGen.current
+    try {
+      const sb = supabaseRef.current
+      const { data, error } = await sb
+        .from("meeting_agendas")
+        .select("*")
+        .eq("meeting_id", meetingId)
+        .order("item_order", { ascending: true })
+      if (error) throw error
+      if (gen !== agendaRefreshGen.current) return
 
-    // Drop overlays for deleted rows; clear fields that already match remote
-    // (our save echoed back, or we typed the same value someone else saved).
-    setEditingItems((prev) => {
-      const remoteById = new Map(items.map((it) => [it.id, it]))
-      let changed = false
-      const next: Record<string, Partial<AgendaItem>> = {}
-      for (const [id, edits] of Object.entries(prev)) {
-        const remote = remoteById.get(id)
-        if (!remote) {
-          changed = true
-          continue
-        }
-        const remaining: Record<string, unknown> = {}
-        for (const [field, val] of Object.entries(edits)) {
-          const remoteVal = (remote as unknown as Record<string, unknown>)[field]
-          const normalizedLocal = val === "" ? null : val
-          const normalizedRemote = remoteVal === "" ? null : remoteVal
-          if (normalizedLocal === normalizedRemote) {
+      const items = (data || []) as AgendaItem[]
+      setAgendaItems(items)
+      setLastSyncedAt(new Date())
+
+      const ydoc = agendaYDocRef.current
+      if (ydoc) {
+        ydoc.transact(() => {
+          for (const item of items) {
+            const overlay = editingItemsRef.current[item.id] || {}
+            for (const field of ["assigned_to", "presenter", "description", "notes"] as const) {
+              if (field in overlay) continue
+              const key = field === "notes" ? `notes:${item.id}` : `${item.id}:${field}`
+              const t = ydoc.getText(key)
+              const remote = String(item[field] ?? "")
+              if (t.length === 0 && remote) t.insert(0, remote)
+            }
+          }
+        }, "remote")
+      }
+
+      // Drop overlays for deleted rows; clear fields that already match remote
+      // (our save echoed back, or we typed the same value someone else saved).
+      setEditingItems((prev) => {
+        const remoteById = new Map(items.map((it) => [it.id, it]))
+        let changed = false
+        const next: Record<string, Partial<AgendaItem>> = {}
+        for (const [id, edits] of Object.entries(prev)) {
+          const remote = remoteById.get(id)
+          if (!remote) {
             changed = true
             continue
           }
-          remaining[field] = val
+          const remaining: Record<string, unknown> = {}
+          for (const [field, val] of Object.entries(edits)) {
+            const remoteVal = (remote as unknown as Record<string, unknown>)[field]
+            const normalizedLocal = val === "" ? null : val
+            const normalizedRemote = remoteVal === "" ? null : remoteVal
+            if (normalizedLocal === normalizedRemote) {
+              changed = true
+              continue
+            }
+            remaining[field] = val
+          }
+          if (Object.keys(remaining).length > 0) {
+            if (Object.keys(remaining).length !== Object.keys(edits).length) changed = true
+            next[id] = remaining as Partial<AgendaItem>
+          } else {
+            changed = true
+          }
         }
-        if (Object.keys(remaining).length > 0) {
-          if (Object.keys(remaining).length !== Object.keys(edits).length) changed = true
-          next[id] = remaining as Partial<AgendaItem>
-        } else {
-          changed = true
-        }
+        return changed ? next : prev
+      })
+    } catch (err) {
+      console.error("[meeting-live] agenda refresh failed", err)
+    } finally {
+      agendaRefreshInFlight.current = false
+      if (agendaRefreshQueued.current) {
+        agendaRefreshQueued.current = false
+        void refreshAgendaFromServer()
       }
-      return changed ? next : prev
-    })
+    }
   }, [meetingId])
 
   const refreshMeetingFromServer = useCallback(async () => {
@@ -446,6 +572,8 @@ export default function MeetingDetailPage() {
     const localContent = minutesContentRef.current
     setMinutes(row)
     minutesRef.current = row
+    // When Yjs owns the minutes editor, don't clobber local CRDT text from REST.
+    if (minutesYDocRef.current) return
     if (localContent === prevContent) {
       const nextContent = row?.content ?? ""
       setMinutesContent(nextContent)
@@ -468,19 +596,19 @@ export default function MeetingDetailPage() {
       if (agendaTimer) clearTimeout(agendaTimer)
       agendaTimer = setTimeout(() => {
         if (!cancelled) void refreshAgendaFromServer()
-      }, 80)
+      }, 50)
     }
     const scheduleMeeting = () => {
       if (meetingTimer) clearTimeout(meetingTimer)
       meetingTimer = setTimeout(() => {
         if (!cancelled) void refreshMeetingFromServer()
-      }, 80)
+      }, 50)
     }
     const scheduleMinutes = () => {
       if (minutesTimer) clearTimeout(minutesTimer)
       minutesTimer = setTimeout(() => {
         if (!cancelled) void refreshMinutesFromServer()
-      }, 80)
+      }, 50)
     }
 
     const pollAll = () => {
@@ -505,11 +633,30 @@ export default function MeetingDetailPage() {
           byId.set(id, name)
         }
       }
+      const me = viewerRef.current?.id
       const peers = [...byId.entries()]
-        .filter(([id]) => id !== viewer?.id)
+        .filter(([id]) => id !== me)
         .map(([id, name]) => ({ id, name }))
         .sort((a, b) => a.name.localeCompare(b.name))
       setLivePeers(peers)
+    }
+
+    const trackPresence = async () => {
+      if (!channel || cancelled) return
+      const me = viewerRef.current
+      const {
+        data: { session },
+      } = await sb.auth.getSession()
+      const presenceKey = me?.id || session?.user?.id || `anon-${meetingId}`
+      try {
+        await channel.track({
+          user_id: me?.id || presenceKey,
+          name: me?.name || "Someone",
+          online_at: new Date().toISOString(),
+        })
+      } catch {
+        // Presence is best-effort; agenda sync still works without it.
+      }
     }
 
     ;(async () => {
@@ -523,7 +670,8 @@ export default function MeetingDetailPage() {
       }
       if (cancelled) return
 
-      const presenceKey = viewer?.id || sessionData.session?.user?.id || `anon-${meetingId}`
+      const presenceKey =
+        viewerRef.current?.id || sessionData.session?.user?.id || `anon-${meetingId}`
 
       channel = sb
         .channel(`meeting-live-${meetingId}`, {
@@ -537,7 +685,22 @@ export default function MeetingDetailPage() {
             table: "meeting_agendas",
             filter: `meeting_id=eq.${meetingId}`,
           },
-          () => scheduleAgenda()
+          (payload) => {
+            const row = payload.new as AgendaItem | null
+            if (payload.eventType === "DELETE" || !row?.id) {
+              scheduleAgenda()
+              return
+            }
+            setAgendaItems((prev) => {
+              const exists = prev.some((it) => it.id === row.id)
+              const next = exists
+                ? prev.map((it) => (it.id === row.id ? { ...it, ...row } : it))
+                : [...prev, row]
+              return next.slice().sort((a, b) => a.item_order - b.item_order)
+            })
+            setLastSyncedAt(new Date())
+            scheduleAgenda()
+          }
         )
         .on(
           "postgres_changes",
@@ -566,22 +729,16 @@ export default function MeetingDetailPage() {
           if (cancelled) return
           if (status === "SUBSCRIBED") {
             setLiveStatus("live")
-            try {
-              await channel?.track({
-                user_id: viewer?.id || presenceKey,
-                name: viewer?.name || "Someone",
-                online_at: new Date().toISOString(),
-              })
-            } catch {
-              // Presence is best-effort; agenda sync still works without it.
-            }
+            await trackPresence()
+            // Catch up immediately on connect (don't wait for first poll).
+            pollAll()
           } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
             setLiveStatus("off")
           }
         })
 
-      // Faster fallback so collaboration stays snappy if Realtime glitches.
-      pollTimer = setInterval(pollAll, 1500)
+      // Backup poll — Realtime is primary; this covers missed events.
+      pollTimer = setInterval(pollAll, 1200)
     })()
 
     const onAuth = (event: string) => {
@@ -593,6 +750,26 @@ export default function MeetingDetailPage() {
     }
     const { data: authSub } = sb.auth.onAuthStateChange(onAuth)
 
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void sb.auth.getSession().then(({ data }) => {
+          if (data.session?.access_token) void sb.realtime.setAuth(data.session.access_token)
+        })
+        void trackPresence()
+        pollAll()
+      }
+    }
+    const onOnline = () => {
+      void sb.auth.getSession().then(async ({ data }) => {
+        if (data.session?.access_token) await sb.realtime.setAuth(data.session.access_token)
+        pollAll()
+        void trackPresence()
+      })
+    }
+
+    document.addEventListener("visibilitychange", onVisible)
+    window.addEventListener("online", onOnline)
+
     return () => {
       cancelled = true
       setLivePeers([])
@@ -601,12 +778,12 @@ export default function MeetingDetailPage() {
       if (minutesTimer) clearTimeout(minutesTimer)
       if (pollTimer) clearInterval(pollTimer)
       authSub.subscription.unsubscribe()
+      document.removeEventListener("visibilitychange", onVisible)
+      window.removeEventListener("online", onOnline)
       if (channel) void sb.removeChannel(channel)
     }
   }, [
     meetingId,
-    viewer?.id,
-    viewer?.name,
     refreshAgendaFromServer,
     refreshMeetingFromServer,
     refreshMinutesFromServer,
@@ -1034,7 +1211,11 @@ export default function MeetingDetailPage() {
       .map((it) => (getEditValue(it, "assigned_to") as string) || it.assigned_to || "")
       .filter(Boolean) as string[]
     const pick = pickNextInRotation(pool, history, already)
-    if (pick) setConducting(pick)
+    if (pick) {
+      setConducting(pick)
+      const doc = agendaYDocRef.current
+      if (doc) applyTextChange(doc.getText("meta:conducting"), pick)
+    }
   }
 
   /**
@@ -1046,19 +1227,23 @@ export default function MeetingDetailPage() {
     const pool = rotationPoolForMeeting(meeting.meeting_type, agendaPeople)
     if (pool.length === 0) return
     const history = await loadRotationHistory()
+    // Judge emptiness from live (Yjs) values — Postgres rows may lag what
+    // people just typed, and rotation must never overwrite a live assignment.
+    const liveText = (it: AgendaItem, field: keyof AgendaItem) =>
+      String(getEditValue(it, field) ?? "").trim()
     const rotating = items
       .filter((it) => isRotatingOpeningTitle(it.title))
       .sort((a, b) => a.item_order - b.item_order)
     const currentConducting = (conducting || meeting.conducting || "").trim()
     const titlesToFill = opts.force
       ? rotating.map((it) => it.title)
-      : rotating.filter((it) => !it.assigned_to?.trim()).map((it) => it.title)
+      : rotating.filter((it) => !liveText(it, "assigned_to")).map((it) => it.title)
     const needsTopicFill =
       usesHandbookCurriculum(meeting.meeting_type) &&
       items.some(
         (it) =>
           getFieldTypeForTitle(it.title, meeting.meeting_type) === "trainer" &&
-          !(it.description ?? "").trim()
+          !liveText(it, "description")
       )
     if (titlesToFill.length === 0 && !needsTopicFill && (currentConducting || !opts.force)) return
 
@@ -1066,7 +1251,7 @@ export default function MeetingDetailPage() {
       ? []
       : [
           ...(currentConducting ? [currentConducting] : []),
-          ...rotating.map((it) => it.assigned_to?.trim() || "").filter(Boolean),
+          ...rotating.map((it) => liveText(it, "assigned_to")).filter(Boolean),
         ]
     const picks = assignOpeningRotation({
       titles: titlesToFill,
@@ -1078,6 +1263,7 @@ export default function MeetingDetailPage() {
     for (const item of rotating) {
       const name = picks[item.title]
       if (!name) continue
+      setEditField(item.id, "assigned_to", name)
       await supabase.from("meeting_agendas").update({ assigned_to: name }).eq("id", item.id)
     }
 
@@ -1088,6 +1274,8 @@ export default function MeetingDetailPage() {
       ])
       if (pick) {
         setConducting(pick)
+        const ydoc = agendaYDocRef.current
+        if (ydoc) applyTextChange(ydoc.getText("meta:conducting"), pick)
         await supabase.from("meetings").update({ conducting: pick }).eq("id", meetingId)
       }
     }
@@ -1099,10 +1287,11 @@ export default function MeetingDetailPage() {
         (it) => getFieldTypeForTitle(it.title, meeting.meeting_type) === "trainer"
       )
       for (const trainerItem of trainerItems) {
-        const currentTopic = (trainerItem.description ?? "").trim()
+        const currentTopic = liveText(trainerItem, "description")
         if (currentTopic && !opts.force) continue
         const base = currentTopic || (await loadLastHandbookTopic()) || ""
         const seg = nextCurriculumSegment(base)
+        setEditField(trainerItem.id, "description", segmentTopicText(seg))
         await supabase
           .from("meeting_agendas")
           .update({ description: segmentTopicText(seg) })
@@ -1131,18 +1320,39 @@ export default function MeetingDetailPage() {
 
   // --- Inline editing helpers ---
 
+  const agendaYField = (itemId: string, field: keyof AgendaItem) =>
+    field === "notes" ? `notes:${itemId}` : `${itemId}:${String(field)}`
+
   const getEditValue = (item: AgendaItem, field: keyof AgendaItem) => {
+    void agendaYTick
+    const doc = agendaYDocRef.current
+    if (doc && agendaCollab.ready && (field === "assigned_to" || field === "presenter" || field === "description" || field === "notes")) {
+      return doc.getText(agendaYField(item.id, field)).toString()
+    }
     const edits = editingItems[item.id]
     if (edits && field in edits) return edits[field] ?? ""
     return item[field] ?? ""
   }
 
   const setEditField = (itemId: string, field: keyof AgendaItem, value: string | number | null) => {
-    setEditingItems((prev) => ({
-      ...prev,
-      [itemId]: { ...prev[itemId], [field]: value },
-    }))
-    setEditRevision((n) => n + 1)
+    const doc = agendaYDocRef.current
+    if (
+      doc &&
+      agendaCollab.ready &&
+      typeof value !== "number" &&
+      (field === "assigned_to" || field === "presenter" || field === "description" || field === "notes")
+    ) {
+      applyTextChange(doc.getText(agendaYField(itemId, field)), value ?? "")
+    }
+    setEditingItems((prev) => {
+      if (prev[itemId]?.[field] === value) return prev
+      // Bump revision only when the overlay actually changes (avoids save thrash).
+      queueMicrotask(() => setEditRevision((n) => n + 1))
+      return {
+        ...prev,
+        [itemId]: { ...prev[itemId], [field]: value },
+      }
+    })
   }
 
   /**
@@ -1166,8 +1376,17 @@ export default function MeetingDetailPage() {
           const savedEdits: Partial<AgendaItem> = {}
           for (const [key, val] of Object.entries(edits)) {
             if (!includeNotes && key === "notes") continue
-            payload[key] = val === "" ? null : val
-            ;(savedEdits as Record<string, unknown>)[key] = val
+            const doc = agendaYDocRef.current
+            let live: unknown = val
+            if (
+              doc &&
+              (key === "assigned_to" || key === "presenter" || key === "description" || key === "notes")
+            ) {
+              const yKey = key === "notes" ? `notes:${id}` : `${id}:${key}`
+              live = doc.getText(yKey).toString()
+            }
+            payload[key] = live === "" ? null : live
+            ;(savedEdits as Record<string, unknown>)[key] = live
           }
           if (Object.keys(payload).length === 0) return null
           saved[id] = savedEdits
@@ -1264,13 +1483,13 @@ export default function MeetingDetailPage() {
     hasPending: hasAgendaPending,
     save: persistAgendaEdits,
     debounceKey: editRevision,
-    debounceMs: 400,
+    debounceMs: 350,
   })
 
   // --- Sub-item helpers (stored as newline-separated text in description) ---
 
   const getSubItems = (item: AgendaItem): string[] => {
-    const raw = (editingItems[item.id]?.description as string | undefined) ?? item.description ?? ""
+    const raw = String(getEditValue(item, "description") || "")
     if (!raw.trim()) return []
     return raw.split("\n").filter((line) => line.trim() !== "")
   }
@@ -1302,7 +1521,7 @@ export default function MeetingDetailPage() {
   // --- Calendar rows (date / time / event), stored in `description` ---
 
   const getCalendarRows = (item: AgendaItem): CalendarRow[] => {
-    const raw = (editingItems[item.id]?.description as string | undefined) ?? item.description ?? ""
+    const raw = String(getEditValue(item, "description") || "")
     return parseCalendarRows(raw)
   }
 
@@ -1330,7 +1549,7 @@ export default function MeetingDetailPage() {
   // --- Action-item rows (assignment / assigned-to / status), in `description` ---
 
   const getActionRows = (item: AgendaItem): ActionRow[] => {
-    const raw = (editingItems[item.id]?.description as string | undefined) ?? item.description ?? ""
+    const raw = String(getEditValue(item, "description") || "")
     return parseActionRows(raw)
   }
 
@@ -1358,7 +1577,7 @@ export default function MeetingDetailPage() {
   // --- Submitted agenda rows (agenda item / submitted by), in `description` ---
 
   const getSubmissionRows = (item: AgendaItem): SubmissionRow[] => {
-    const raw = (editingItems[item.id]?.description as string | undefined) ?? item.description ?? ""
+    const raw = String(getEditValue(item, "description") || "")
     return parseSubmissionRows(raw)
   }
 
@@ -1527,17 +1746,20 @@ export default function MeetingDetailPage() {
    */
   useEffect(() => {
     if (loading || !meeting || !meetingWriteAllowed) return
+    // Wait for the live doc to restore — Postgres rows may lag live edits, and
+    // judging emptiness from them would overwrite assignments people just typed.
+    if (!agendaCollab.ready) return
     if (agendaPeople.length === 0) return
     if (openingsFilledForMeetingId === meetingId) return
     const rotating = agendaItems.filter((it) => isRotatingOpeningTitle(it.title))
     if (rotating.length === 0) return
     const needsFill =
-      rotating.some((it) => !it.assigned_to?.trim()) ||
+      rotating.some((it) => !String(getEditValue(it, "assigned_to") ?? "").trim()) ||
       (usesHandbookCurriculum(meeting.meeting_type) &&
         agendaItems.some(
           (it) =>
             getFieldTypeForTitle(it.title, meeting.meeting_type) === "trainer" &&
-            !(it.description ?? "").trim()
+            !String(getEditValue(it, "description") ?? "").trim()
         ))
     if (!needsFill) {
       setOpeningsFilledForMeetingId(meetingId)
@@ -1546,12 +1768,15 @@ export default function MeetingDetailPage() {
     setOpeningsFilledForMeetingId(meetingId)
     void fillOpeningRotation(agendaItems)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, meeting?.id, meetingId, agendaItems, agendaPeople.length, meetingWriteAllowed, openingsFilledForMeetingId])
+  }, [loading, meeting?.id, meetingId, agendaItems, agendaCollab.ready, agendaPeople.length, meetingWriteAllowed, openingsFilledForMeetingId])
 
   const persistPresidingConducting = useCallback(async () => {
+    const ydoc = agendaYDocRef.current
+    const liveP = ydoc ? ydoc.getText("meta:presiding").toString() : presiding
+    const liveC = ydoc ? ydoc.getText("meta:conducting").toString() : conducting
     const payload = {
-      presiding: presiding.trim() || null,
-      conducting: conducting.trim() || null,
+      presiding: liveP.trim() || null,
+      conducting: liveC.trim() || null,
     }
     const { data, error } = await supabase
       .from("meetings")
@@ -1933,8 +2158,9 @@ export default function MeetingDetailPage() {
     if (ft === "callings_link") return null
 
     if (ft === "sub_items") {
-      if (!item.description) return null
-      const lines = item.description.split("\n").filter((l) => l.trim())
+      const raw = String(getEditValue(item, "description") || "")
+      if (!raw) return null
+      const lines = raw.split("\n").filter((l) => l.trim())
       if (lines.length === 0) return null
       return (
         <div className="text-sm text-gray-600 space-y-0.5">
@@ -1948,10 +2174,13 @@ export default function MeetingDetailPage() {
       )
     }
 
+    const assigned = getEditValue(item, "assigned_to") as string
+    const presenter = getEditValue(item, "presenter") as string
+    const description = getEditValue(item, "description") as string
     const parts: string[] = []
-    if (item.assigned_to) parts.push(item.assigned_to)
-    if (item.presenter) parts.push(item.presenter)
-    if (ft !== "hymn" && item.description) parts.push(item.description)
+    if (assigned) parts.push(assigned)
+    if (presenter) parts.push(presenter)
+    if (ft !== "hymn" && description) parts.push(description)
 
     if (parts.length === 0) return null
     return (
@@ -1991,6 +2220,27 @@ export default function MeetingDetailPage() {
             </p>
           </div>
         </div>
+        {(adjacentMeetings.previous || adjacentMeetings.next) && (
+          <AgendaPager
+            className="mt-4"
+            previous={
+              adjacentMeetings.previous
+                ? {
+                    dateLabel: pagerDateLabel(adjacentMeetings.previous.scheduled_date),
+                    href: `/modules/meetings/${adjacentMeetings.previous.id}?tab=${activeTab}`,
+                  }
+                : null
+            }
+            next={
+              adjacentMeetings.next
+                ? {
+                    dateLabel: pagerDateLabel(adjacentMeetings.next.scheduled_date),
+                    href: `/modules/meetings/${adjacentMeetings.next.id}?tab=${activeTab}`,
+                  }
+                : null
+            }
+          />
+        )}
       </div>
 
       {/* ==================== SIMPLE VIEW MODES ==================== */}
@@ -2245,11 +2495,11 @@ export default function MeetingDetailPage() {
             title={
               liveStatus === "live"
                 ? livePeers.length > 0
-                  ? `Live with ${livePeers.map((p) => p.name).join(", ")} — agenda fields sync as each person saves`
-                  : "Live sync on — others’ agenda saves appear here within about a second"
+                  ? `Live with ${livePeers.map((p) => p.name).join(", ")} — agenda typing appears as they type`
+                  : "Live sync on — others see your agenda edits as you type"
                 : liveStatus === "connecting"
                   ? "Connecting live updates…"
-                  : "Using backup sync (every 1.5s). Hard refresh both browsers after deploy if needed."
+                  : "Using backup sync (~1.2s). Hard refresh both browsers if the Live badge stays off."
             }
           >
             <Radio className="h-3 w-3" aria-hidden />
@@ -2404,14 +2654,15 @@ export default function MeetingDetailPage() {
                   {templateConfig.presiding_field && (
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Presiding</label>
-                      <input
-                        type="text"
+                      <CollaborativeInput
+                        yText={agendaCollab.doc?.getText("meta:presiding") ?? null}
+                        seedText={meeting.presiding || presiding}
+                        ready={agendaCollab.ready}
+                        readOnly={!meetingWriteAllowed}
                         list="agenda-people-list"
                         placeholder="Who is presiding?"
-                        value={presiding}
-                        readOnly={!meetingWriteAllowed}
-                        onChange={(e) => setPresiding(e.target.value)}
                         className={`${inputClass} text-sm py-1.5`}
+                        onPlainText={(text) => setPresiding(text)}
                       />
                     </div>
                   )}
@@ -2419,14 +2670,15 @@ export default function MeetingDetailPage() {
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Conducting</label>
                       <div className="flex items-center gap-2">
-                        <input
-                          type="text"
+                        <CollaborativeInput
+                          yText={agendaCollab.doc?.getText("meta:conducting") ?? null}
+                          seedText={meeting.conducting || conducting}
+                          ready={agendaCollab.ready}
+                          readOnly={!meetingWriteAllowed}
                           list="agenda-people-list"
                           placeholder="Who is conducting?"
-                          value={conducting}
-                          readOnly={!meetingWriteAllowed}
-                          onChange={(e) => setConducting(e.target.value)}
                           className={`${inputClass} text-sm py-1.5`}
+                          onPlainText={(text) => setConducting(text)}
                         />
                         {meetingWriteAllowed && hasRotationPool && (
                           <button
@@ -2749,6 +3001,29 @@ export default function MeetingDetailPage() {
       )}
 
       </>
+      )}
+
+      {/* Bottom pager — move to the neighboring agenda without scrolling back up */}
+      {(adjacentMeetings.previous || adjacentMeetings.next) && (
+        <AgendaPager
+          className="mt-6"
+          previous={
+            adjacentMeetings.previous
+              ? {
+                  dateLabel: pagerDateLabel(adjacentMeetings.previous.scheduled_date),
+                  href: `/modules/meetings/${adjacentMeetings.previous.id}?tab=${activeTab}`,
+                }
+              : null
+          }
+          next={
+            adjacentMeetings.next
+              ? {
+                  dateLabel: pagerDateLabel(adjacentMeetings.next.scheduled_date),
+                  href: `/modules/meetings/${adjacentMeetings.next.id}?tab=${activeTab}`,
+                }
+              : null
+          }
+        />
       )}
     </div>
   )

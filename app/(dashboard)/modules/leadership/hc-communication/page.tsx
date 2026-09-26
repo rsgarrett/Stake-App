@@ -24,6 +24,7 @@ import {
 import { canManageHcCommunication, isHighCouncilOnly } from "@/lib/auth/module-access"
 import { hcSeatHistoryIds, matchHcMembersForUser } from "@/lib/settings/hc-member-match"
 import { isHighCouncilSeatSlug } from "@/lib/settings/stake-office-slugs"
+import { useLiveRows } from "@/lib/live/use-live-rows"
 
 type TabView = "reports" | "roster"
 
@@ -60,6 +61,18 @@ export default function HCCommunicationPage() {
   const [members, setMembers] = useState<HighCouncilMember[]>([])
   const [reports, setReports] = useState<(HCWeeklyReport & { member?: HighCouncilMember; responses?: HCReportResponse[] })[]>([])
   const [loading, setLoading] = useState(true)
+
+  useLiveRows<HighCouncilMember>({
+    table: "high_council_members",
+    enabled: !loading,
+    setRows: setMembers,
+  })
+  useLiveRows<HCWeeklyReport & { member?: HighCouncilMember; responses?: HCReportResponse[] }>({
+    table: "hc_weekly_reports",
+    enabled: !loading,
+    setRows: setReports,
+    order: { column: "created_at", ascending: false },
+  })
   const [tabView, setTabView] = useState<TabView>("reports")
   const [selectedWeek, setSelectedWeek] = useState(getReportingWeekSunday())
   const [expandedReport, setExpandedReport] = useState<string | null>(null)

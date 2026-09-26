@@ -24,6 +24,82 @@ export const DEFAULT_MISSION_READY_TASKS = [
   { task_number: 20, task_name: "Seek Christlike Attributes (PMG chp. 6)", additional_resource: null },
 ] as const
 
+/** Stored as task_number 101–110 so they never mix with the 20 preparation steps. */
+export const RM_CHECKLIST_TASK_OFFSET = 100
+
+export const DEFAULT_RM_CHECKLIST_TASKS = [
+  { task_number: 1, task_name: 'Review "My Plan" with them' },
+  { task_number: 2, task_name: "Ward council report" },
+  { task_number: 3, task_name: "Teach a discussion to family" },
+  { task_number: 4, task_name: "Submit name to work in the temple" },
+  { task_number: 5, task_name: "Enrolled in Institute (gathering place)" },
+  { task_number: 6, task_name: "Education discussion ($500 BYU scholarship for RMs)" },
+  { task_number: 7, task_name: 'One month follow-up review of "My Plan"' },
+  { task_number: 8, task_name: "Be careful playing ward carousel" },
+  { task_number: 9, task_name: "Request ministering families" },
+  { task_number: 10, task_name: "Change your environment as a symbol you are now a different person from before you left" },
+] as const
+
+export function isPrepProgress(row: { task_number: number }) {
+  return row.task_number < RM_CHECKLIST_TASK_OFFSET
+}
+
+export function isRmProgress(row: { task_number: number }) {
+  return row.task_number >= RM_CHECKLIST_TASK_OFFSET
+}
+
+export function rmDisplayNumber(taskNumber: number) {
+  return taskNumber - RM_CHECKLIST_TASK_OFFSET
+}
+
+export function checklistProgress(
+  rows: { missionary_id: string; task_number: number; completed: boolean }[],
+  missionaryId: string,
+  kind: "prep" | "rm"
+) {
+  const items = rows.filter(
+    (p) => p.missionary_id === missionaryId && (kind === "rm" ? isRmProgress(p) : isPrepProgress(p))
+  )
+  const total = kind === "rm" ? DEFAULT_RM_CHECKLIST_TASKS.length : DEFAULT_MISSION_READY_TASKS.length
+  const completed = items.filter((p) => p.completed).length
+  return {
+    completed,
+    total,
+    percent: total ? Math.round((completed / total) * 100) : 0,
+  }
+}
+
+export function rmChecklistInsertRows(missionaryId: string) {
+  return DEFAULT_RM_CHECKLIST_TASKS.map((task) => ({
+    missionary_id: missionaryId,
+    task_number: RM_CHECKLIST_TASK_OFFSET + task.task_number,
+    task_name: task.task_name,
+    additional_resource: null as string | null,
+    completed: false,
+    display_order: RM_CHECKLIST_TASK_OFFSET + task.task_number,
+  }))
+}
+
+/** Insert missing RM checklist rows. Safe to call repeatedly. Returns true if rows were added. */
+export async function ensureRmChecklist(
+  supabase: SupabaseClient,
+  missionaryId: string
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("mission_ready_progress")
+    .select("task_number")
+    .eq("missionary_id", missionaryId)
+  if (error) throw error
+
+  const existing = new Set((data || []).map((r) => r.task_number))
+  const missing = rmChecklistInsertRows(missionaryId).filter((row) => !existing.has(row.task_number))
+  if (missing.length === 0) return false
+
+  const { error: insertError } = await supabase.from("mission_ready_progress").insert(missing)
+  if (insertError) throw insertError
+  return true
+}
+
 /**
  * Find a mission-ready row for this stake by case-insensitive name match, or create one
  * with the default 20 progress rows. Safe to call repeatedly.

@@ -11,13 +11,13 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  themeColor: "#4f46e5",
 }
 
 export const metadata: Metadata = {
   title: "Stake President App",
   description: "Comprehensive stake management application",
   manifest: "/manifest.json",
-  themeColor: "#4f46e5",
 }
 
 export default function RootLayout({
