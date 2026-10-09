@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { buttonVariants } from "@/components/ui/button"
 import Link from "next/link"
 import { Plus, MessageSquare, Bell, Trash2, Pencil, Users } from "lucide-react"
+import { useLiveRows } from "@/lib/live/use-live-rows"
 
 interface Announcement {
   id: string
@@ -35,6 +36,21 @@ export default function CommunicationPage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
+
+  useLiveRows<Announcement>({
+    table: "announcements",
+    enabled: !loading,
+    order: { column: "created_at", ascending: false },
+    limit: 20,
+    setRows: setAnnouncements,
+  })
+  useLiveRows<Message>({
+    table: "messages",
+    enabled: !loading,
+    order: { column: "created_at", ascending: false },
+    limit: 20,
+    setRows: setMessages,
+  })
 
   useEffect(() => { loadData() }, [])
 

@@ -9,6 +9,7 @@ import Link from "next/link"
 import { BookOpen, CheckCircle2, Clock, Plus, AlertTriangle, Users, GraduationCap, Church, Landmark } from "lucide-react"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 import { ALL_CURRICULA } from "@/lib/training/curricula"
+import { useLiveRows } from "@/lib/live/use-live-rows"
 
 interface TrainingModule {
   id: string
@@ -45,6 +46,20 @@ export default function TrainingPage() {
   const [addingModule, setAddingModule] = useState(false)
   const [newModule, setNewModule] = useState({ title: "", description: "", module_type: "required" })
   const supabase = createClient()
+
+  useLiveRows<TrainingModule>({
+    table: "training_modules",
+    enabled: !loading,
+    order: { column: "created_at", ascending: false },
+    setRows: setModules,
+  })
+  useLiveRows<PolicyUpdate>({
+    table: "policy_updates",
+    enabled: !loading,
+    order: { column: "effective_date", ascending: false },
+    limit: 10,
+    setRows: setPolicyUpdates,
+  })
 
   useEffect(() => { loadData() }, [])
 

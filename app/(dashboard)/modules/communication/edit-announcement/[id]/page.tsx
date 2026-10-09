@@ -9,6 +9,7 @@ import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
+import { useLiveForm } from "@/lib/live/use-live-form"
 
 const inputClass = "w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
 
@@ -32,6 +33,17 @@ export default function EditAnnouncementPage() {
     target_audience: "stake",
     priority: "normal" as "normal" | "high",
     expiration_date: "",
+  })
+
+  // Live: two leaders editing the same announcement see each other's changes as they type.
+  useLiveForm({
+    table: "announcements",
+    id,
+    enabled: !fetching && Boolean(id),
+    values: formData,
+    setValues: setFormData,
+    textFields: ["title", "content"],
+    columns: { expiration_date: "expires_at" },
   })
 
   useEffect(() => {

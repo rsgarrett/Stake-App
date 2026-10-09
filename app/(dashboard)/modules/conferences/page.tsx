@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { buttonVariants } from "@/components/ui/button"
 import Link from "next/link"
 import { Plus, Calendar, ChevronRight } from "lucide-react"
+import { useLiveRows } from "@/lib/live/use-live-rows"
 
 interface SpecialEvent {
   id: string
@@ -21,6 +22,13 @@ export default function ConferencesPage() {
   const [events, setEvents] = useState<SpecialEvent[]>([])
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
+
+  useLiveRows<SpecialEvent>({
+    table: "special_events",
+    enabled: !loading,
+    order: { column: "start_date", ascending: false },
+    setRows: setEvents,
+  })
 
   const load = useCallback(async () => {
     const { data } = await safeQuery(
