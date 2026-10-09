@@ -23,8 +23,10 @@ export function useLiveRows<T extends { id: string }>(options: {
   pollMs?: number
   /** Keep only rows this screen is showing, when the query is broader than the view. */
   matches?: (row: T) => boolean
+  /** Cap rows fetched (matches screens that show only the most recent N). */
+  limit?: number
 }) {
-  const { table, enabled = true, setRows, eq, order, pollMs = 1200 } = options
+  const { table, enabled = true, setRows, eq, order, pollMs = 1200, limit } = options
   const supabase = createClient()
   const supabaseRef = useRef(supabase)
   supabaseRef.current = supabase
@@ -71,10 +73,11 @@ export function useLiveRows<T extends { id: string }>(options: {
       query = query.eq(column, value)
     }
     if (order) query = query.order(order.column, { ascending: order.ascending !== false })
+    if (limit) query = query.limit(limit)
     const { data, error } = await query
     if (error) throw error
     return (data || []) as T[]
-  }, [table, eqKey, orderKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [table, eqKey, orderKey, limit]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!enabled) return

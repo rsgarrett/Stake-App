@@ -6,6 +6,7 @@ import { safeQuery } from "@/lib/utils/safe-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
 import { ArrowLeft, Search, Edit, Trash2, CheckCircle2 } from "lucide-react"
+import { useLiveRows } from "@/lib/live/use-live-rows"
 
 interface Calling {
   id: string
@@ -24,6 +25,14 @@ export default function CompletedCallingsPage() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const supabase = createClient()
+
+  useLiveRows<Calling>({
+    table: "callings",
+    enabled: !loading,
+    order: { column: "set_apart_date", ascending: false },
+    matches: (row) => Boolean(row.set_apart_date),
+    setRows: setCallings,
+  })
 
   const load = useCallback(async () => {
     const { data } = await safeQuery(

@@ -15,6 +15,7 @@ import type { MissionReadyMissionary, MissionReadyProgress } from "@/types"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 import { MISSION_INTERVIEW_TYPE } from "@/lib/interviews/interview-types"
 import { ensureRmChecklist, isPrepProgress, isRmProgress, rmDisplayNumber } from "@/lib/missionary/mission-ready-defaults"
+import { useLiveRows } from "@/lib/live/use-live-rows"
 
 const inputClass = "w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
 
@@ -39,6 +40,27 @@ export default function MissionReadyDetailPage() {
   const [loading, setLoading] = useState(true)
   const [editingNote, setEditingNote] = useState<string | null>(null)
   const [noteText, setNoteText] = useState("")
+
+  useLiveRows<MissionReadyProgress>({
+    table: "mission_ready_progress",
+    eq: { missionary_id: missionaryId },
+    enabled: !loading && Boolean(missionaryId),
+    order: { column: "task_number", ascending: true },
+    setRows: setProgress,
+  })
+  useLiveRows<MissionReadyMissionary>({
+    table: "mission_ready_missionaries",
+    eq: { id: missionaryId },
+    enabled: !loading && Boolean(missionaryId),
+    setRows: (updater) => {
+      setMissionary((prev) => {
+        if (!prev) return prev
+        const next = typeof updater === "function" ? updater([prev]) : updater
+        return next[0] ?? prev
+      })
+    },
+  })
+
   const loadData = useCallback(async () => {
     try {
       const [missRes, progRes] = await Promise.all([

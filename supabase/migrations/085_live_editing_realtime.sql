@@ -22,7 +22,20 @@ DECLARE
     'mission_ready_progress',
     'welfare_cases',
     'self_reliance_participants',
-    'standing_meeting_agendas'
+    'standing_meeting_agendas',
+    'meetings',
+    'events',
+    'announcements',
+    'messages',
+    'training_modules',
+    'policy_updates',
+    'temple_attendance',
+    'family_history_activities',
+    'temple_assignments',
+    'youth_programs',
+    'priesthood_advancements',
+    'youth_activities',
+    'stake_calling_holders'
   ];
   t text;
 BEGIN

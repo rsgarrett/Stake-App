@@ -17,6 +17,7 @@ import {
 import { formatInterviewType } from "@/lib/interviews/interview-types"
 import { navigateInterviewSelection } from "@/lib/interviews/navigate-mission-interview"
 import { canManageStakeMeetings } from "@/lib/meetings/meeting-permissions"
+import { useLiveRows } from "@/lib/live/use-live-rows"
 import { selectNextAppointment, type NextAppointment } from "@/lib/meetings/next-appointment"
 import { NextAppointmentBar } from "@/components/meetings/next-appointment-bar"
 import {
@@ -382,6 +383,27 @@ export default function MeetingsPage() {
   const supabase = createClient()
 
   const meetingWriteAllowed = canManageStakeMeetings(userMeetingRole)
+
+  // Live sync: calendar reflects other leaders' scheduling changes without a refresh.
+  useLiveRows<Meeting>({
+    table: "meetings",
+    enabled: !loading,
+    order: { column: "scheduled_date", ascending: true },
+    setRows: setMeetings,
+  })
+  useLiveRows<InterviewCalendarRow>({
+    table: "interviews",
+    eq: { status: "scheduled" },
+    enabled: !loading,
+    order: { column: "scheduled_date", ascending: true },
+    setRows: setInterviews,
+  })
+  useLiveRows<StakeConferenceCalendarRow>({
+    table: "special_events",
+    enabled: !loading,
+    order: { column: "start_date", ascending: true },
+    setRows: setConferences,
+  })
 
   const schedulableStandardTemplates = useMemo(() => {
     const narrowed = standardTemplates.filter((t) =>

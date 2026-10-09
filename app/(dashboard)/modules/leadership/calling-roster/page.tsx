@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, Plus, Search, Trash2 } from "lucide-react"
+import { useLiveRows } from "@/lib/live/use-live-rows"
 
 interface Holder {
   id: string
@@ -35,6 +36,14 @@ export default function CallingRosterPage() {
     ward: "",
   })
   const [saving, setSaving] = useState(false)
+
+  useLiveRows<Holder>({
+    table: "stake_calling_holders",
+    eq: { status: "active" },
+    enabled: !loading && !migrationNeeded,
+    order: { column: "organization", ascending: true },
+    setRows: setHolders,
+  })
 
   const load = useCallback(async () => {
     setLoading(true)

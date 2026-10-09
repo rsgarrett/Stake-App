@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Plus, Building, BookOpen, Users, Calendar } from "lucide-react"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
+import { useLiveRows } from "@/lib/live/use-live-rows"
 
 interface TempleAttendance {
   id: string
@@ -52,6 +53,25 @@ export default function TemplePage() {
   const [assForm, setAssForm] = useState({ assignment_type: "Temple Worker", assigned_to: "", assignment_date: "" })
 
   const supabase = createClient()
+
+  useLiveRows<TempleAttendance>({
+    table: "temple_attendance",
+    enabled: !loading,
+    order: { column: "event_date", ascending: false },
+    setRows: setAttendance,
+  })
+  useLiveRows<FamilyHistoryActivity>({
+    table: "family_history_activities",
+    enabled: !loading,
+    order: { column: "date", ascending: false },
+    setRows: setActivities,
+  })
+  useLiveRows<TempleAssignment>({
+    table: "temple_assignments",
+    enabled: !loading,
+    order: { column: "assignment_date", ascending: false },
+    setRows: setAssignments,
+  })
 
   useEffect(() => { loadData() }, [])
 

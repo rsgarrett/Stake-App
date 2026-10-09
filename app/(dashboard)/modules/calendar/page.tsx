@@ -51,6 +51,35 @@ export default function UnifiedCalendarPage() {
 
   useEffect(() => { loadAll() }, [])
 
+  // Live: refresh when any source table changes (and every few seconds as a fallback).
+  useEffect(() => {
+    if (loading) return
+    let cancelled = false
+    const sb = supabase
+    const tables = ["meetings", "interviews", "special_events", "youth_activities", "temple_attendance", "events"]
+    const refresh = () => {
+      if (!cancelled && document.visibilityState !== "hidden") void loadAll()
+    }
+    const poll = setInterval(refresh, 3000)
+    let channel: ReturnType<typeof sb.channel> | null = null
+    ;(async () => {
+      const { data } = await sb.auth.getSession()
+      if (data.session?.access_token) await sb.realtime.setAuth(data.session.access_token)
+      if (cancelled) return
+      let ch = sb.channel("live-unified-calendar")
+      for (const table of tables) {
+        ch = ch.on("postgres_changes", { event: "*", schema: "public", table }, refresh)
+      }
+      channel = ch.subscribe()
+    })()
+    return () => {
+      cancelled = true
+      clearInterval(poll)
+      if (channel) void sb.removeChannel(channel)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading])
+
   const loadAll = async () => {
     try {
       const events: UnifiedEvent[] = []

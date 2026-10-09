@@ -8,6 +8,7 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import Link from "next/link"
 import { Plus, Award, Calendar, Users, ArrowUp } from "lucide-react"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
+import { useLiveRows } from "@/lib/live/use-live-rows"
 
 interface YouthProgram {
   id: string
@@ -58,6 +59,25 @@ export default function YouthPage() {
   const [actForm, setActForm] = useState({ activity_name: "", activity_date: "", location: "" })
 
   const supabase = createClient()
+
+  useLiveRows<YouthProgram>({
+    table: "youth_programs",
+    enabled: !loading,
+    order: { column: "start_date", ascending: false },
+    setRows: setPrograms,
+  })
+  useLiveRows<Advancement>({
+    table: "priesthood_advancements",
+    enabled: !loading,
+    order: { column: "advancement_date", ascending: false },
+    setRows: setAdvancements,
+  })
+  useLiveRows<YouthActivity>({
+    table: "youth_activities",
+    enabled: !loading,
+    order: { column: "activity_date", ascending: false },
+    setRows: setActivities,
+  })
 
   useEffect(() => { loadData() }, [])
 

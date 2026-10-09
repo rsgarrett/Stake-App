@@ -23,9 +23,20 @@ export function useLiveForm<T extends Record<string, unknown>>(options: {
   setValues: Dispatch<SetStateAction<T>>
   textFields?: string[]
   userName?: string | null
+  /** Form key → database column, when the form names a field differently than the table. */
+  columns?: Record<string, string>
 }) {
-  const { table, id, enabled, values, setValues, textFields = [], userName } = options
+  const { table, id, enabled, values, setValues, textFields = [], userName, columns } = options
   const supabase = createClient()
+  const columnsRef = useRef(columns)
+  columnsRef.current = columns
+  const toColumn = (key: string) => columnsRef.current?.[key] ?? key
+  const toKey = (column: string) => {
+    const map = columnsRef.current
+    if (!map) return column
+    for (const [key, col] of Object.entries(map)) if (col === column) return key
+    return column
+  }
   const valuesRef = useRef(values)
   valuesRef.current = values
   const setValuesRef = useRef(setValues)
@@ -117,9 +128,9 @@ export function useLiveForm<T extends Record<string, unknown>>(options: {
         if (merged !== value) {
           setValuesRef.current((prev) => ({ ...prev, [key]: merged }))
         }
-        pending[key] = merged === "" ? null : merged
+        pending[toColumn(key)] = merged === "" ? null : merged
       } else if (!textSetRef.current.has(key)) {
-        pending[key] = canonicalLiveValue(value)
+        pending[toColumn(key)] = canonicalLiveValue(value)
       }
     }
 
@@ -149,7 +160,8 @@ export function useLiveForm<T extends Record<string, unknown>>(options: {
       setValuesRef.current((prev) => {
         let changed = false
         const next = { ...prev } as Record<string, unknown>
-        for (const [key, remoteValue] of Object.entries(remote)) {
+        for (const [column, remoteValue] of Object.entries(remote)) {
+          const key = toKey(column)
           if (SKIP_KEYS.has(key) || !(key in prev)) continue
           if (textSetRef.current.has(key)) continue
           if (dirtyRef.current.has(key) && !liveValuesEqual(prev[key], remoteValue)) continue
