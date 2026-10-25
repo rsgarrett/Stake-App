@@ -40,7 +40,7 @@ function PagerButton({
     </>
   )
   const buttonClass =
-    "group flex min-w-0 flex-1 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm transition-colors hover:border-indigo-300 hover:bg-indigo-50 sm:w-36 sm:flex-none " +
+    "group flex min-w-0 flex-1 min-h-[44px] items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm transition-colors hover:border-indigo-300 hover:bg-indigo-50 sm:w-36 sm:flex-none " +
     (isPrev ? "justify-start text-left" : "justify-end text-right")
 
   if (target.href) {

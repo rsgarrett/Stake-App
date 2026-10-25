@@ -70,6 +70,7 @@ export function useSupabaseYDoc(options: {
     let readyFallback: ReturnType<typeof setTimeout> | null = null
     let snapshotPoll: ReturnType<typeof setInterval> | null = null
     let persistChannel: ReturnType<SupabaseClient["channel"]> | null = null
+    let resumeLive: (() => void) | null = null
 
     const markReady = () => {
       if (!cancelled) setReady(true)
@@ -166,6 +167,7 @@ export function useSupabaseYDoc(options: {
       // even when the live channel is quiet.
       const pullSnapshot = async () => {
         if (cancelled || !persist) return
+        if (typeof document !== "undefined" && document.visibilityState === "hidden") return
         const { data } = await supabaseRef.current
           .from("yjs_documents")
           .select("state")
@@ -173,10 +175,20 @@ export function useSupabaseYDoc(options: {
           .maybeSingle()
         applyPersistedState(data?.state)
       }
+      resumeLive = () => {
+        if (cancelled) return
+        void supabaseRef.current.auth.getSession().then(({ data }) => {
+          if (data.session?.access_token) void supabaseRef.current.realtime.setAuth(data.session.access_token)
+        })
+        void pullSnapshot()
+      }
       void pullSnapshot()
       snapshotPoll = setInterval(() => {
         void pullSnapshot()
       }, 600)
+      document.addEventListener("visibilitychange", resumeLive)
+      window.addEventListener("online", resumeLive)
+      window.addEventListener("pageshow", resumeLive)
       if (cancelled) {
         clearInterval(snapshotPoll)
         snapshotPoll = null
@@ -209,6 +221,11 @@ export function useSupabaseYDoc(options: {
 
     return () => {
       cancelled = true
+      if (resumeLive) {
+        document.removeEventListener("visibilitychange", resumeLive)
+        window.removeEventListener("online", resumeLive)
+        window.removeEventListener("pageshow", resumeLive)
+      }
       if (snapshotPoll) clearInterval(snapshotPoll)
       if (readyFallback) clearTimeout(readyFallback)
       if (persistChannel) void supabaseRef.current.removeChannel(persistChannel)

@@ -1204,7 +1204,7 @@ export default function ConferenceDetailPage() {
                                   </div>
                                 </dl>
                                 <div className="mt-3 flex justify-end border-t border-gray-100 pt-3">
-                                  <button type="button" onClick={() => deleteVisit(v.id)} className="text-red-500" aria-label="Remove visit">
+                                  <button type="button" onClick={() => deleteVisit(v.id)} className="tap-target text-red-500 inline-flex items-center justify-center" aria-label="Remove visit">
                                     <Trash2 className="h-4 w-4" />
                                   </button>
                                 </div>

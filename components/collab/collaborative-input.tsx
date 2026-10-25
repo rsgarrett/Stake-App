@@ -39,6 +39,8 @@ export function CollaborativeInput({
       value={value}
       readOnly={readOnly}
       placeholder={placeholder}
+      autoComplete="off"
+      enterKeyHint="done"
       className={className}
       onChange={(e) => {
         if (readOnly) return

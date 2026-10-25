@@ -5,6 +5,7 @@ import type { Dispatch, SetStateAction } from "react"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { createClient } from "@/lib/supabase/client"
 import { liveValuesEqual, normalizeLiveValue } from "@/lib/live/values"
+import { useLiveResume } from "@/lib/live/use-live-resume"
 
 type Order = { column: string; ascending?: boolean }
 
@@ -79,6 +80,8 @@ export function useLiveRows<T extends { id: string }>(options: {
     return (data || []) as T[]
   }, [table, eqKey, orderKey, limit]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const pullRef = useRef<() => void>(() => {})
+
   useEffect(() => {
     if (!enabled) return
     let cancelled = false
@@ -92,6 +95,9 @@ export function useLiveRows<T extends { id: string }>(options: {
       } catch (err) {
         console.error(`[live] ${table} poll failed`, err)
       }
+    }
+    pullRef.current = () => {
+      void pull()
     }
 
     void pull()
@@ -128,6 +134,8 @@ export function useLiveRows<T extends { id: string }>(options: {
       if (channel) void sb.removeChannel(channel)
     }
   }, [enabled, table, eqKey, fetchRows, applyIncoming, pollMs])
+
+  useLiveResume(() => pullRef.current(), enabled)
 
   const patch = useCallback(
     async (id: string, partial: Record<string, unknown>) => {

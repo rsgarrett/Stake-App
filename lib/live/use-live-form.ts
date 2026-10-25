@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import { useSupabaseYDoc } from "@/lib/collab/use-supabase-y-doc"
 import { applyTextChange } from "@/lib/collab/apply-text-change"
 import { canonicalLiveValue, liveValuesEqual, normalizeLiveValue } from "@/lib/live/values"
+import { useLiveResume } from "@/lib/live/use-live-resume"
 
 const SKIP_KEYS = new Set(["id", "created_at", "updated_at", "stake_id"])
 
@@ -147,6 +148,8 @@ export function useLiveForm<T extends object>(options: {
     return () => clearTimeout(timer)
   }, [values, enabled, id, table, supabase, collab.ready])
 
+  const pullRef = useRef<() => void>(() => {})
+
   useEffect(() => {
     if (!enabled || !id) return
     let cancelled = false
@@ -179,6 +182,9 @@ export function useLiveForm<T extends object>(options: {
         return (changed ? next : prev) as unknown as T
       })
     }
+    pullRef.current = () => {
+      void pull()
+    }
 
     void pull()
     const poll = setInterval(() => {
@@ -208,6 +214,8 @@ export function useLiveForm<T extends object>(options: {
       if (channel) void sb.removeChannel(channel)
     }
   }, [enabled, id, table, supabase])
+
+  useLiveResume(() => pullRef.current(), Boolean(enabled && id))
 
   return { status: collab.status, peers: collab.peers }
 }
