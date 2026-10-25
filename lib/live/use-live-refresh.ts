@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { useLiveResume } from "@/lib/live/use-live-resume"
 
 /**
  * Re-run a loader whenever any of the given tables change, with a short
@@ -18,6 +19,7 @@ export function useLiveRefresh(options: {
   const refreshRef = useRef(refresh)
   refreshRef.current = refresh
   const tablesKey = tables.join(",")
+  const runRef = useRef<() => void>(() => {})
 
   useEffect(() => {
     if (!enabled) return
@@ -31,6 +33,7 @@ export function useLiveRefresh(options: {
         inFlight = false
       })
     }
+    runRef.current = run
     const poll = setInterval(run, pollMs)
     let channel: ReturnType<typeof sb.channel> | null = null
     ;(async () => {
@@ -49,4 +52,6 @@ export function useLiveRefresh(options: {
       if (channel) void sb.removeChannel(channel)
     }
   }, [enabled, tablesKey, pollMs])
+
+  useLiveResume(() => runRef.current(), enabled)
 }

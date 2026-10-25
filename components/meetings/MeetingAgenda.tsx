@@ -476,7 +476,7 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
                     />
                     <CollaborativeInput yText={live.rowText("calendar", row.id, "time")} ready={live.ready} placeholder="Time" className={`${inputClass} col-span-1 sm:col-span-2`} />
                     <CollaborativeInput yText={live.rowText("calendar", row.id, "event")} ready={live.ready} placeholder="Event" className={`${inputClass} col-span-2 sm:col-span-6`} />
-                    <button onClick={() => live.removeRow("calendar", row.id)} className="text-red-400 hover:text-red-600 col-span-2 sm:col-span-1 flex justify-end sm:justify-center p-1.5"><Trash2 className="h-4 w-4" /></button>
+                    <button onClick={() => live.removeRow("calendar", row.id)} className="tap-target text-red-400 hover:text-red-600 col-span-2 sm:col-span-1 inline-flex items-center justify-end sm:justify-center p-1.5"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 ))}
                 <Button variant="outline" size="sm" onClick={() => live.addRow("calendar", { date: "" })}>
@@ -551,7 +551,7 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
                 {live.rows("attendees").map((row) => (
                   <div key={row.id} className="flex items-center gap-2">
                     <CollaborativeInput yText={live.rowText("attendees", row.id, "name")} ready={live.ready} className={`${inputClass} flex-1`} />
-                    <button onClick={() => live.removeRow("attendees", row.id)} className="text-red-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                    <button onClick={() => live.removeRow("attendees", row.id)} className="tap-target text-red-400 hover:text-red-600 inline-flex items-center justify-center" aria-label="Remove attendee"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 ))}
                 <Button variant="outline" size="sm" onClick={() => live.addRow("attendees", {})}>
@@ -592,7 +592,7 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
                           <option value="Completed">{englishMenuTitleCase("Completed")}</option>
                         </select>
                         <CollaborativeInput yText={live.rowText("actions", row.id, "assignment")} ready={live.ready} placeholder="Assignment description" className={`${inputClass} col-span-2 sm:col-span-4`} />
-                        <button onClick={() => live.removeRow("actions", row.id)} className="text-red-400 hover:text-red-600 col-span-2 sm:col-span-1 flex justify-end sm:justify-center p-1.5"><Trash2 className="h-4 w-4" /></button>
+                        <button onClick={() => live.removeRow("actions", row.id)} className="tap-target text-red-400 hover:text-red-600 col-span-2 sm:col-span-1 inline-flex items-center justify-end sm:justify-center p-1.5"><Trash2 className="h-4 w-4" /></button>
                       </div>
                     </div>
                   ))}
@@ -619,7 +619,7 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
                   <div key={row.id} className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-center">
                     <CollaborativeInput yText={live.rowText("training", row.id, "conducted_by")} ready={live.ready} placeholder="Conducted by" className={`${inputClass} col-span-2 sm:col-span-4`} />
                     <CollaborativeInput yText={live.rowText("training", row.id, "topic")} ready={live.ready} placeholder="Topic" className={`${inputClass} col-span-2 sm:col-span-7`} />
-                    <button onClick={() => live.removeRow("training", row.id)} className="text-red-400 hover:text-red-600 col-span-2 sm:col-span-1 flex justify-end sm:justify-center p-1.5"><Trash2 className="h-4 w-4" /></button>
+                    <button onClick={() => live.removeRow("training", row.id)} className="tap-target text-red-400 hover:text-red-600 col-span-2 sm:col-span-1 inline-flex items-center justify-end sm:justify-center p-1.5"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 ))}
               </div>
@@ -647,7 +647,7 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
                     <div key={row.id} className="border border-gray-200 rounded-lg p-3 space-y-2">
                       <div className="flex items-center gap-2">
                         <CollaborativeInput yText={live.rowText("discussion", row.id, "topic")} ready={live.ready} placeholder="Topic" className={`${inputClass} flex-1`} />
-                        <button onClick={() => live.removeRow("discussion", row.id)} className="text-red-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                        <button onClick={() => live.removeRow("discussion", row.id)} className="tap-target text-red-400 hover:text-red-600 inline-flex items-center justify-center" aria-label="Remove topic"><Trash2 className="h-4 w-4" /></button>
                       </div>
                       <CollaborativeTextarea yText={live.rowText("discussion", row.id, "notes")} ready={live.ready} rows={2} placeholder="Notes..." className={textareaClass} />
                     </div>

@@ -41,6 +41,7 @@ export function CollaborativeTextarea({
       value={value}
       readOnly={readOnly}
       placeholder={placeholder}
+      autoComplete="off"
       className={className}
       onChange={(e) => {
         if (readOnly) return

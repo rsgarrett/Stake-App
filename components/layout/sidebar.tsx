@@ -79,7 +79,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={() => onItemSelect?.()}
-            className="-mr-2 inline-flex shrink-0 items-center justify-center rounded-md p-2 text-gray-400 hover:bg-gray-800 hover:text-white"
+            className="tap-target -mr-2 inline-flex shrink-0 items-center justify-center rounded-md p-2 text-gray-400 hover:bg-gray-800 hover:text-white"
             aria-label="Close menu"
           >
             <X className="h-5 w-5" />
@@ -95,7 +95,7 @@ export function Sidebar({
               href={item.href}
               onClick={() => onItemSelect?.()}
               className={cn(
-                "group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
+                "group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors min-h-[44px] md:min-h-0",
                 isActive
                   ? "bg-gray-800 text-white"
                   : "text-gray-300 hover:bg-gray-800 hover:text-white"

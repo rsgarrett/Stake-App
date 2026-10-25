@@ -274,54 +274,59 @@ export default function LeadershipPage() {
                 ) : (
                   <div className="divide-y divide-gray-200">
                     {items.map((c) => (
-                      <div key={c.id} className="py-2 flex items-center gap-2">
-                        {si > 0 ? (
-                          <button onClick={() => revert(c)} className="text-gray-300 hover:text-gray-500 shrink-0" title="Move back">
-                            <ChevronLeft className="h-4 w-4" />
-                          </button>
-                        ) : (
-                          <span className="w-4 shrink-0" />
-                        )}
-
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">{c.person_name}</p>
-                          <p className="text-xs text-gray-500 truncate">{c.calling_name}{c.ward ? ` · ${c.ward}` : ""}</p>
-                          {c.replaces_person_name && (
-                            c.previous_release_verified ? (
-                              <p className="text-xs text-green-600 truncate flex items-center gap-1">
-                                <CheckCircle2 className="h-3 w-3 shrink-0" aria-hidden />
-                                Released: {c.replaces_person_name}
-                              </p>
-                            ) : (
-                              <p className="flex min-w-0 items-center gap-1 text-xs text-amber-600">
-                                <span className="truncate">Release pending: {c.replaces_person_name}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => markReleaseVerified(c)}
-                                  className="shrink-0 font-medium underline underline-offset-2 hover:text-amber-800"
-                                  title="Record that this person has been released"
-                                >
-                                  Mark released
-                                </button>
-                              </p>
-                            )
+                      <div key={c.id} className="py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2 sm:py-2">
+                        <div className="flex min-w-0 items-start gap-1">
+                          {si > 0 ? (
+                            <button type="button" onClick={() => revert(c)} className="tap-target text-gray-400 hover:text-gray-600 shrink-0 inline-flex items-center justify-center" title="Move back" aria-label="Move back">
+                              <ChevronLeft className="h-5 w-5" />
+                            </button>
+                          ) : (
+                            <span className="hidden w-11 shrink-0 sm:block" />
                           )}
+
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{c.person_name}</p>
+                            <p className="text-xs text-gray-500 truncate">{c.calling_name}{c.ward ? ` · ${c.ward}` : ""}</p>
+                            {c.replaces_person_name && (
+                              c.previous_release_verified ? (
+                                <p className="text-xs text-green-600 truncate flex items-center gap-1">
+                                  <CheckCircle2 className="h-3 w-3 shrink-0" aria-hidden />
+                                  Released: {c.replaces_person_name}
+                                </p>
+                              ) : (
+                                <p className="flex min-w-0 flex-wrap items-center gap-1 text-xs text-amber-600">
+                                  <span className="truncate">Release pending: {c.replaces_person_name}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => markReleaseVerified(c)}
+                                    className="tap-target shrink-0 font-medium underline underline-offset-2 hover:text-amber-800 px-1"
+                                    title="Record that this person has been released"
+                                  >
+                                    Mark released
+                                  </button>
+                                </p>
+                              )
+                            )}
+                          </div>
                         </div>
 
-                        <Link href={`/modules/leadership/edit/${c.id}${returnQuery}`} className="text-gray-300 hover:text-indigo-600 shrink-0">
-                          <Edit className="h-3.5 w-3.5" />
-                        </Link>
+                        <div className="flex items-center gap-1 pl-0 sm:pl-0">
+                          <Link href={`/modules/leadership/edit/${c.id}${returnQuery}`} className="tap-target text-gray-400 hover:text-indigo-600 shrink-0 inline-flex items-center justify-center" aria-label="Edit calling">
+                            <Edit className="h-4 w-4" />
+                          </Link>
 
-                        <button onClick={() => deleteCalling(c)} className="text-gray-300 hover:text-red-500 shrink-0" title="Delete">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                          <button type="button" onClick={() => deleteCalling(c)} className="tap-target text-gray-400 hover:text-red-500 shrink-0 inline-flex items-center justify-center" title="Delete" aria-label="Delete calling">
+                            <Trash2 className="h-4 w-4" />
+                          </button>
 
-                        <button
-                          onClick={() => advance(c)}
-                          className="text-xs font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-0.5 shrink-0 hover:bg-indigo-50 px-1.5 py-0.5 rounded transition-colors"
-                        >
-                          Advance<ChevronRight className="h-3.5 w-3.5" />
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => advance(c)}
+                            className="tap-target flex-1 sm:flex-none text-sm font-medium text-indigo-600 hover:text-indigo-800 inline-flex items-center justify-center gap-0.5 shrink-0 hover:bg-indigo-50 px-3 rounded-md transition-colors"
+                          >
+                            Advance<ChevronRight className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>

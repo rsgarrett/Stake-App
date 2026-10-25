@@ -68,7 +68,7 @@ export function Header({ onMenuToggle }: { onMenuToggle?: () => void }) {
             <button
               type="button"
               onClick={onMenuToggle}
-              className="mr-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-gray-700 hover:bg-gray-100 md:hidden"
+              className="tap-target mr-3 inline-flex shrink-0 items-center justify-center rounded-md text-gray-700 hover:bg-gray-100 md:hidden"
               aria-label="Open navigation menu"
             >
               <Menu className="h-5 w-5" aria-hidden />
@@ -79,7 +79,7 @@ export function Header({ onMenuToggle }: { onMenuToggle?: () => void }) {
           </h2>
         </div>
         <div className="flex items-center space-x-2">
-          <Link href="/modules/communication/messages" className="relative inline-flex items-center justify-center h-10 w-10 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors">
+          <Link href="/modules/communication/messages" className="tap-target relative inline-flex items-center justify-center rounded-md hover:bg-accent hover:text-accent-foreground transition-colors">
             <MessageSquare className="h-5 w-5" />
             {messageCount > 0 && (
               <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-blue-500 text-white text-xs flex items-center justify-center">
@@ -87,7 +87,7 @@ export function Header({ onMenuToggle }: { onMenuToggle?: () => void }) {
               </span>
             )}
           </Link>
-          <Link href="/modules/leadership/notifications" className="relative inline-flex items-center justify-center h-10 w-10 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors">
+          <Link href="/modules/leadership/notifications" className="tap-target relative inline-flex items-center justify-center rounded-md hover:bg-accent hover:text-accent-foreground transition-colors">
             <Bell className="h-5 w-5" />
             {notificationCount > 0 && (
               <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center">
