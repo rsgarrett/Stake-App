@@ -84,7 +84,7 @@ export default function ComplianceDashboard() {
         <ArrowLeft className="h-4 w-4 mr-1" /> Back to Training
       </Link>
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Training Compliance Dashboard</h1>
+        <h1 className="text-2xl font-bold text-gray-900 break-words sm:text-3xl">Training Compliance Dashboard</h1>
         <p className="mt-2 text-gray-600">Track required training completion across all leaders</p>
       </div>
 

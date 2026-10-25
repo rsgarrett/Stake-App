@@ -135,7 +135,7 @@ export default function TrainingPage() {
     <div className="p-4 sm:p-6">
       <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Training & Resources</h1>
+        <h1 className="text-2xl font-bold text-gray-900 break-words sm:text-3xl">Training & Resources</h1>
           <p className="mt-2 text-gray-600">
             Role leadership academies, handbook resources, and stake training modules
           </p>

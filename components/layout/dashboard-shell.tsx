@@ -44,7 +44,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         <Suspense fallback={null}>
           <AgendaReturnBar />
         </Suspense>
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain pb-[env(safe-area-inset-bottom)] [-webkit-overflow-scrolling:touch]">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain pb-[env(safe-area-inset-bottom)] [-webkit-overflow-scrolling:touch] [&>*]:min-w-0 [&>*]:max-w-full">
           {children}
         </main>
       </div>

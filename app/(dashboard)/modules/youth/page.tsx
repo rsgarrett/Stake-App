@@ -138,9 +138,9 @@ export default function YouthPage() {
 
   return (
     <div className="p-4 sm:p-6">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Youth Programs</h1>
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold text-gray-900 break-words sm:text-3xl">Youth Programs</h1>
           <p className="mt-2 text-gray-600">Programs, priesthood advancements, and youth activities</p>
         </div>
         <Link href="/modules/youth/new-program" className={buttonVariants()}><Plus className="h-4 w-4 mr-2" />New Program</Link>
@@ -173,14 +173,14 @@ export default function YouthPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex space-x-1 border-b mb-4">
+      <div className="flex gap-1 overflow-x-auto border-b mb-4 [-webkit-overflow-scrolling:touch]">
         {([
           { key: "programs" as const, label: `Programs (${programs.length})`, icon: Calendar },
           { key: "advancements" as const, label: `Advancements (${advancements.length})`, icon: ArrowUp },
           { key: "activities" as const, label: `Activities (${activities.length})`, icon: Users },
         ]).map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setTabView(key)}
-            className={`flex items-center px-4 py-2 text-sm font-medium border-b-2 -mb-px ${tabView === key ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500"}`}>
+            className={`flex shrink-0 items-center px-3 py-2 text-sm font-medium border-b-2 -mb-px min-h-[44px] ${tabView === key ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500"}`}>
             <Icon className="h-4 w-4 mr-2" />{label}
           </button>
         ))}

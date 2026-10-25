@@ -146,11 +146,9 @@ export default function TemplePage() {
 
   return (
     <div className="p-4 sm:p-6">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Temple & Family History</h1>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900 break-words sm:text-3xl">Temple & Family History</h1>
           <p className="mt-2 text-gray-600">Track temple attendance, family history activities, and assignments</p>
-        </div>
       </div>
 
       {/* Stats */}
@@ -166,14 +164,14 @@ export default function TemplePage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex space-x-1 border-b mb-4">
+      <div className="flex gap-1 overflow-x-auto border-b mb-4 [-webkit-overflow-scrolling:touch]">
         {([
           { key: "attendance" as const, label: "Attendance", icon: Building },
           { key: "familyhistory" as const, label: "Family History", icon: BookOpen },
           { key: "assignments" as const, label: "Assignments", icon: Users },
         ]).map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setTabView(key)}
-            className={`flex items-center px-4 py-2 text-sm font-medium border-b-2 -mb-px ${tabView === key ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500"}`}>
+            className={`flex shrink-0 items-center px-3 py-2 text-sm font-medium border-b-2 -mb-px min-h-[44px] ${tabView === key ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500"}`}>
             <Icon className="h-4 w-4 mr-2" />{label}
           </button>
         ))}

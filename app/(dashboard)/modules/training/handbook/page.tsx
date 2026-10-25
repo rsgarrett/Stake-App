@@ -53,7 +53,7 @@ export default function HandbookPage() {
         <ArrowLeft className="h-4 w-4 mr-1" /> Back to Training
       </Link>
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">General Handbook Reference</h1>
+        <h1 className="text-2xl font-bold text-gray-900 break-words sm:text-3xl">General Handbook Reference</h1>
         <p className="mt-2 text-gray-600">Quick reference to handbook sections and policies</p>
       </div>
 

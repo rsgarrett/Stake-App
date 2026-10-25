@@ -94,9 +94,9 @@ export default function SelfReliancePage() {
       <Link href="/modules/welfare" className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center mb-4">
         <ArrowLeft className="h-4 w-4 mr-1" /> Back to Welfare
       </Link>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Self-Reliance Programs</h1>
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold text-gray-900 break-words sm:text-3xl">Self-Reliance Programs</h1>
           <p className="mt-2 text-gray-600">Track participants in self-reliance courses</p>
         </div>
         <Button onClick={() => setShowForm(true)}><Plus className="h-4 w-4 mr-2" />Add Participant</Button>

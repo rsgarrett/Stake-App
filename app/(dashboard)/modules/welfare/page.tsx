@@ -106,12 +106,12 @@ export default function WelfarePage() {
 
   return (
     <div className="p-4 sm:p-6">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Welfare & Self-Reliance</h1>
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold text-gray-900 break-words sm:text-3xl">Welfare & Self-Reliance</h1>
           <p className="mt-2 text-gray-600">Manage welfare cases and self-reliance programs</p>
         </div>
-        <div className="flex space-x-2">
+        <div className="flex flex-wrap gap-2">
           <Link href="/modules/welfare/self-reliance" className={buttonVariants({ variant: "outline" })}><Users className="h-4 w-4 mr-2" />Self-Reliance</Link>
           <Link href="/modules/welfare/new-case" className={buttonVariants()}><Plus className="h-4 w-4 mr-2" />New Case</Link>
         </div>
@@ -138,11 +138,11 @@ export default function WelfarePage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex space-x-1 border-b mb-4">
-        <button onClick={() => setTabView("cases")} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${tabView === "cases" ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500"}`}>
+      <div className="flex gap-1 overflow-x-auto border-b mb-4 [-webkit-overflow-scrolling:touch]">
+        <button onClick={() => setTabView("cases")} className={`shrink-0 min-h-[44px] px-3 py-2 text-sm font-medium border-b-2 -mb-px ${tabView === "cases" ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500"}`}>
           Cases ({cases.length})
         </button>
-        <button onClick={() => setTabView("self-reliance")} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${tabView === "self-reliance" ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500"}`}>
+        <button onClick={() => setTabView("self-reliance")} className={`shrink-0 min-h-[44px] px-3 py-2 text-sm font-medium border-b-2 -mb-px ${tabView === "self-reliance" ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500"}`}>
           Self-Reliance ({participants.length})
         </button>
       </div>
