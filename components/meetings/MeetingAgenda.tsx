@@ -393,18 +393,18 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
   )
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="min-w-0 p-4 sm:p-6 max-w-5xl mx-auto">
       {/* Header */}
       <div className="mb-6">
-        <Link href="/modules/meetings" className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center mb-3">
+        <Link href="/modules/meetings" className="text-sm text-indigo-600 hover:text-indigo-800 inline-flex min-h-[44px] items-center mb-1 sm:min-h-0 sm:mb-3">
           <ArrowLeft className="h-4 w-4 mr-1" /> Back to Meetings
         </Link>
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">{config.title}</h1>
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 break-words">{config.title}</h1>
             <p className="text-gray-600 mt-1">{formatDate(date)}</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             {live.peers.length > 0 && (
               <span
                 className="text-xs font-medium text-emerald-700 truncate max-w-[12rem]"
@@ -438,7 +438,7 @@ export function MeetingAgenda({ config, initialDate }: { config: AgendaConfig; i
         <AgendaPager previous={pagerPrevious} next={pagerNext} className="mt-4">
           <Button variant="outline" size="sm" onClick={() => void loadAgenda(getNextDate())}>Today</Button>
           {allKnownDates.length > 0 && (
-            <select className="text-sm border rounded-md px-2 py-1 text-gray-700 max-w-[10rem]" value={date} onChange={(e) => void loadAgenda(e.target.value)}>
+            <select className="min-h-[36px] text-sm border rounded-md px-2 py-1 text-gray-700 bg-white max-w-[12rem]" value={date} onChange={(e) => void loadAgenda(e.target.value)}>
               {!allKnownDates.includes(date) && (
                 <option value={date}>
                   {formatShortDate(date)} {englishMenuTitleCase("(new)")}

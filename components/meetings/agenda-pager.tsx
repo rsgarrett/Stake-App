@@ -21,7 +21,7 @@ function PagerButton({
 }) {
   if (!target) {
     // Invisible placeholder keeps the other button and any center content aligned.
-    return <span className="w-36 shrink-0" aria-hidden />
+    return <span className="min-w-0 flex-1 sm:w-36 sm:flex-none" aria-hidden />
   }
 
   const isPrev = side === "previous"
@@ -40,7 +40,7 @@ function PagerButton({
     </>
   )
   const buttonClass =
-    "group flex w-36 shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm transition-colors hover:border-indigo-300 hover:bg-indigo-50 " +
+    "group flex min-w-0 flex-1 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm transition-colors hover:border-indigo-300 hover:bg-indigo-50 sm:w-36 sm:flex-none " +
     (isPrev ? "justify-start text-left" : "justify-end text-right")
 
   if (target.href) {
@@ -74,10 +74,16 @@ export function AgendaPager({
   children?: React.ReactNode
   className?: string
 }) {
+  // Phones: prev/next share the first row, center controls (Today, date picker) wrap
+  // below them. From `sm` up it is a single row with the controls centered.
   return (
-    <div className={`flex items-center justify-between gap-3 ${className}`}>
+    <div className={`flex flex-wrap items-center justify-between gap-2 sm:flex-nowrap sm:gap-3 ${className}`}>
       <PagerButton side="previous" target={previous} />
-      {children ? <div className="flex min-w-0 items-center gap-2">{children}</div> : null}
+      {children ? (
+        <div className="order-last flex w-full min-w-0 flex-wrap items-center justify-center gap-2 sm:order-none sm:w-auto sm:flex-nowrap">
+          {children}
+        </div>
+      ) : null}
       <PagerButton side="next" target={next} />
     </div>
   )
