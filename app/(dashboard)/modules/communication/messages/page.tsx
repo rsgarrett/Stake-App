@@ -135,9 +135,9 @@ export default function MessagesPage() {
       <Link href="/modules/communication" className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center mb-4">
         <ArrowLeft className="h-4 w-4 mr-1" /> Back to Communication
       </Link>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Messages</h1>
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold text-gray-900 break-words sm:text-3xl">Messages</h1>
           <p className="mt-2 text-gray-600">Leader-to-leader messaging</p>
         </div>
         <Button onClick={() => { setTabView("compose"); setSelectedMsg(null) }}>
@@ -146,14 +146,14 @@ export default function MessagesPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex space-x-1 border-b mb-6">
+      <div className="flex gap-1 overflow-x-auto border-b mb-6 [-webkit-overflow-scrolling:touch]">
         {([
           { key: "inbox" as const, label: `Inbox${unreadCount > 0 ? ` (${unreadCount})` : ""}` },
           { key: "sent" as const, label: "Sent" },
           { key: "compose" as const, label: "Compose" },
         ]).map(({ key, label }) => (
           <button key={key} onClick={() => { setTabView(key); setSelectedMsg(null) }}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${tabView === key ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
+            className={`shrink-0 min-h-[44px] px-3 py-2 text-sm font-medium border-b-2 -mb-px ${tabView === key ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
             {label}
           </button>
         ))}
