@@ -61,8 +61,8 @@ export function Header({ onMenuToggle }: { onMenuToggle?: () => void }) {
   }
 
   return (
-    <header className="bg-white shadow-sm border-b">
-      <div className="flex h-16 items-center justify-between px-4 sm:px-6">
+    <header className="bg-white shadow-sm border-b pt-[env(safe-area-inset-top)]">
+      <div className="flex h-16 items-center justify-between px-4 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] sm:px-6">
         <div className="flex min-w-0 items-center">
           {onMenuToggle ? (
             <button

@@ -18,6 +18,20 @@ export const metadata: Metadata = {
   title: "Stake President App",
   description: "Comprehensive stake management application",
   manifest: "/manifest.json",
+  applicationName: "Stake App",
+  appleWebApp: {
+    capable: true,
+    title: "Stake App",
+    statusBarStyle: "default",
+  },
+  formatDetection: { telephone: false },
+  icons: {
+    icon: [
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
 }
 
 export default function RootLayout({
@@ -27,10 +41,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <head>
-        <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#4f46e5" />
-      </head>
       <body className={inter.className}>{children}</body>
     </html>
   )

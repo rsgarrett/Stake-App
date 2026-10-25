@@ -316,17 +316,19 @@ export default function DayViewPage() {
                           <div className="flex items-center space-x-1 ml-3 flex-shrink-0">
                             {hasAgenda && (
                               <button
-                                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-indigo-600 transition-colors"
+                                className="tap-target inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-indigo-600 transition-colors"
                                 onClick={() => navigateToMeeting(meeting)}
                                 title="Open agenda"
+                                aria-label="Open agenda"
                               >
                                 <FileText className="h-4 w-4" />
                               </button>
                             )}
                             <button
-                              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                              className="tap-target inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
                               onClick={() => router.push(`/modules/meetings/${meeting.id}`)}
                               title="Meeting details"
+                              aria-label="Meeting details"
                             >
                               <Edit2 className="h-4 w-4" />
                             </button>
@@ -406,9 +408,10 @@ export default function DayViewPage() {
                                   <UserCircle className="h-3 w-3 mr-1 text-gray-400" />
                                   {p}
                                   <button
-                                    className="ml-1 p-1 text-gray-400 hover:text-red-500 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                                    className="ml-1 -my-2 inline-flex min-h-[32px] min-w-[32px] items-center justify-center p-1 text-gray-400 hover:text-red-500 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
                                     onClick={() => removeParticipant(meeting.id, p)}
                                     title="Remove"
+                                    aria-label={`Remove ${p}`}
                                   >
                                     <Trash2 className="h-3 w-3" />
                                   </button>
