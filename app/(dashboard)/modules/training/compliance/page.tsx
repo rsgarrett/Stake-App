@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ArrowLeft, CheckCircle2, XCircle, AlertTriangle } from "lucide-react"
+import { useLiveRefresh } from "@/lib/live/use-live-refresh"
 
 interface TrainingModule {
   id: string
@@ -28,6 +29,12 @@ export default function ComplianceDashboard() {
   const supabase = createClient()
 
   useEffect(() => { loadData() }, [])
+
+  useLiveRefresh({
+    tables: ["training_completions", "training_modules", "users"],
+    enabled: !loading,
+    refresh: () => loadData(),
+  })
 
   const loadData = async () => {
     try {

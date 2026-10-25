@@ -15,7 +15,7 @@ const SKIP_KEYS = new Set(["id", "created_at", "updated_at", "stake_id"])
  * Checkboxes, dates, and selects save only that field, so one person's
  * change does not replace a field someone else just edited.
  */
-export function useLiveForm<T extends Record<string, unknown>>(options: {
+export function useLiveForm<T extends object>(options: {
   table: string
   id: string | null | undefined
   enabled: boolean
@@ -71,7 +71,7 @@ export function useLiveForm<T extends Record<string, unknown>>(options: {
       for (const field of fields) {
         const yText = doc.getText(field)
         if (yText.length > 0) continue
-        const seed = valuesRef.current[field]
+        const seed = (valuesRef.current as Record<string, unknown>)[field]
         if (typeof seed === "string" && seed) yText.insert(0, seed)
       }
     }, "seed")
@@ -87,13 +87,13 @@ export function useLiveForm<T extends Record<string, unknown>>(options: {
         const next = { ...prev } as Record<string, unknown>
         for (const field of fields) {
           const text = doc.getText(field).toString()
-          if (text === String(prev[field] ?? "")) continue
+          if (text === String(next[field] ?? "")) continue
           next[field] = text
           ackRef.current[field] = text
           dirtyRef.current.delete(field)
           changed = true
         }
-        return (changed ? next : prev) as T
+        return (changed ? next : prev) as unknown as T
       })
     }
     doc.on("update", applyDocText)
@@ -105,14 +105,14 @@ export function useLiveForm<T extends Record<string, unknown>>(options: {
   useEffect(() => {
     if (!enabled || !id) return
     if (!hydratedRef.current) {
-      ackRef.current = { ...values }
+      ackRef.current = { ...(values as Record<string, unknown>) }
       hydratedRef.current = true
       return
     }
 
     const doc = docRef.current
     const pending: Record<string, unknown> = {}
-    for (const [key, value] of Object.entries(values)) {
+    for (const [key, value] of Object.entries(values as Record<string, unknown>)) {
       if (SKIP_KEYS.has(key)) continue
       if (liveValuesEqual(value, ackRef.current[key])) {
         dirtyRef.current.delete(key)
@@ -126,7 +126,7 @@ export function useLiveForm<T extends Record<string, unknown>>(options: {
         // The database copy can lag; the shared document is the live source for text.
         ackRef.current[key] = merged
         if (merged !== value) {
-          setValuesRef.current((prev) => ({ ...prev, [key]: merged }))
+          setValuesRef.current((prev) => ({ ...prev, [key]: merged }) as T)
         }
         pending[toColumn(key)] = merged === "" ? null : merged
       } else if (!textSetRef.current.has(key)) {
@@ -157,9 +157,10 @@ export function useLiveForm<T extends Record<string, unknown>>(options: {
       const { data, error } = await sb.from(table).select("*").eq("id", id).maybeSingle()
       if (error || !data || cancelled) return
       const remote = data as Record<string, unknown>
-      setValuesRef.current((prev) => {
+      setValuesRef.current((prevT) => {
         let changed = false
-        const next = { ...prev } as Record<string, unknown>
+        const prev = prevT as Record<string, unknown>
+        const next = { ...prev }
         for (const [column, remoteValue] of Object.entries(remote)) {
           const key = toKey(column)
           if (SKIP_KEYS.has(key) || !(key in prev)) continue
@@ -175,7 +176,7 @@ export function useLiveForm<T extends Record<string, unknown>>(options: {
           dirtyRef.current.delete(key)
           changed = true
         }
-        return (changed ? next : prev) as T
+        return (changed ? next : prev) as unknown as T
       })
     }
 

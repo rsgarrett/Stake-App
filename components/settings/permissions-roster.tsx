@@ -14,6 +14,7 @@ import {
 import type { UserRole } from "@/types"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 import { AlertCircle, Copy, KeyRound, Plus, Shield, Trash2, UserPlus, UserRoundCog } from "lucide-react"
+import { useLiveRefresh } from "@/lib/live/use-live-refresh"
 
 export interface StakePermissionRosterRow {
   id: string
@@ -140,8 +141,8 @@ export function PermissionsRoster() {
     }
   }
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (opts?: { background?: boolean }) => {
+    if (!opts?.background) setLoading(true)
     setError(null)
     try {
       const {
@@ -247,6 +248,13 @@ export function PermissionsRoster() {
   useEffect(() => {
     void load()
   }, [load])
+
+  // Live: seat assignments and roles changed by another leader show up without a refresh.
+  useLiveRefresh({
+    tables: ["stake_permission_roster", "users", "high_council_members"],
+    enabled: !loading,
+    refresh: () => load({ background: true }),
+  })
 
   const occupiedOthers = useCallback(
     (excludeRowId: string) =>

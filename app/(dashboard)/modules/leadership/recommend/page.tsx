@@ -10,6 +10,7 @@ import Link from "next/link"
 import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 import { BishopRecommendShareCard } from "@/components/leadership/bishop-recommend-share-card"
 import { sameCallingName } from "@/lib/callings/calling-holders"
+import { useLiveRows } from "@/lib/live/use-live-rows"
 
 const CUSTOM_CALLING_VALUE = "__custom__"
 const CUSTOM_ORG_VALUE = "__custom_org__"
@@ -122,6 +123,7 @@ export default function SubmitNamePage() {
 
   const [useCustomReplaces, setUseCustomReplaces] = useState(false)
   type HolderRow = {
+    id?: string
     organization: string | null
     calling_name: string
     person_name: string
@@ -130,12 +132,33 @@ export default function SubmitNamePage() {
   const [holders, setHolders] = useState<HolderRow[]>([])
   const [holdersReady, setHoldersReady] = useState(false)
 
+  // Live: the calling-holder lookup reflects roster changes made by others.
+  useLiveRows<HolderRow & { id: string }>({
+    table: "stake_calling_holders",
+    eq: { status: "active" },
+    enabled: holdersReady,
+    order: { column: "person_name", ascending: true },
+    matches: (r) => Boolean(r.person_name?.trim() && r.calling_name?.trim()),
+    setRows: (updater) => {
+      setHolders((prev) => {
+        const next = typeof updater === "function" ? updater(prev as (HolderRow & { id: string })[]) : updater
+        return next.map((r) => ({
+          id: r.id,
+          organization: r.organization ?? null,
+          calling_name: r.calling_name,
+          person_name: r.person_name.trim(),
+          ward: r.ward ?? null,
+        }))
+      })
+    },
+  })
+
   useEffect(() => {
     const supabase = createClient()
     void (async () => {
       const { data, error } = await supabase
         .from("stake_calling_holders")
-        .select("organization, calling_name, person_name, ward")
+        .select("id, organization, calling_name, person_name, ward")
         .eq("status", "active")
         .order("person_name")
       if (!error && data) {
@@ -143,6 +166,7 @@ export default function SubmitNamePage() {
           data
             .filter((r) => r.person_name?.trim() && r.calling_name?.trim())
             .map((r) => ({
+              id: r.id as string,
               organization: (r.organization as string | null) ?? null,
               calling_name: r.calling_name as string,
               person_name: (r.person_name as string).trim(),
