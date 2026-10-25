@@ -235,7 +235,7 @@ export default function DayViewPage() {
   const totalItems = meetings.length + interviews.length
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="min-w-0 p-4 sm:p-6 max-w-4xl mx-auto">
       {/* Header */}
       <div className="mb-6">
         <Link
