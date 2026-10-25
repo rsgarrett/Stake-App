@@ -86,7 +86,7 @@ export function Sidebar({
           </button>
         ) : null}
       </div>
-      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-4">
+      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         {items.map((item) => {
           const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
           return (
