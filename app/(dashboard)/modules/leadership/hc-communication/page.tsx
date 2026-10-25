@@ -25,6 +25,7 @@ import { canManageHcCommunication, isHighCouncilOnly } from "@/lib/auth/module-a
 import { hcSeatHistoryIds, matchHcMembersForUser } from "@/lib/settings/hc-member-match"
 import { isHighCouncilSeatSlug } from "@/lib/settings/stake-office-slugs"
 import { useLiveRows } from "@/lib/live/use-live-rows"
+import { useLiveForm } from "@/lib/live/use-live-form"
 
 type TabView = "reports" | "roster"
 
@@ -96,6 +97,16 @@ export default function HCCommunicationPage() {
   })
   const [editingMember, setEditingMember] = useState<string | null>(null)
   const [editMemberForm, setEditMemberForm] = useState<Partial<HighCouncilMember>>({})
+
+  // Live: two leaders editing the same high councilor's card merge their typing.
+  useLiveForm({
+    table: "high_council_members",
+    id: editingMember,
+    enabled: Boolean(editingMember),
+    values: editMemberForm,
+    setValues: setEditMemberForm,
+    textFields: ["member_name", "email", "stewardships", "assigned_wards", "presidency_oversight", "program_assignment", "stewardship_notes"],
+  })
 
   // Report form
   const [showSubmitReport, setShowSubmitReport] = useState(false)

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useParams, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -16,6 +16,8 @@ import { englishMenuTitleCase } from "@/lib/utils/english-menu-title-case"
 import { MISSION_INTERVIEW_TYPE } from "@/lib/interviews/interview-types"
 import { ensureRmChecklist, isPrepProgress, isRmProgress, rmDisplayNumber } from "@/lib/missionary/mission-ready-defaults"
 import { useLiveRows } from "@/lib/live/use-live-rows"
+import { useSupabaseYDoc } from "@/lib/collab/use-supabase-y-doc"
+import { applyTextChange } from "@/lib/collab/apply-text-change"
 
 const inputClass = "w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
 
@@ -40,6 +42,55 @@ export default function MissionReadyDetailPage() {
   const [loading, setLoading] = useState(true)
   const [editingNote, setEditingNote] = useState<string | null>(null)
   const [noteText, setNoteText] = useState("")
+  const editingNoteRef = useRef<string | null>(null)
+  editingNoteRef.current = editingNote
+
+  // Live: checklist notes merge keystroke-by-keystroke when two people edit the same note.
+  const notesCollab = useSupabaseYDoc({
+    room: missionaryId ? `agenda:row:mission_ready_progress:${missionaryId}` : null,
+    supabase,
+    enabled: !loading && Boolean(missionaryId),
+  })
+  const noteKey = (itemId: string) => `${itemId}:notes`
+
+  const startEditNote = (item: MissionReadyProgress) => {
+    const doc = notesCollab.doc
+    let text = item.notes || ""
+    if (doc && notesCollab.ready) {
+      const yText = doc.getText(noteKey(item.id))
+      if (yText.length === 0 && text) doc.transact(() => yText.insert(0, text), "seed")
+      text = yText.toString()
+    }
+    setEditingNote(item.id)
+    setNoteText(text)
+  }
+
+  const typeNote = (itemId: string, value: string) => {
+    const doc = notesCollab.doc
+    if (doc && notesCollab.ready) {
+      const yText = doc.getText(noteKey(itemId))
+      applyTextChange(yText, value)
+      setNoteText(yText.toString())
+    } else {
+      setNoteText(value)
+    }
+  }
+
+  useEffect(() => {
+    const doc = notesCollab.doc
+    if (!doc) return
+    const apply = (_u: unknown, origin: unknown) => {
+      if (origin === "local" || origin === "seed") return
+      const openId = editingNoteRef.current
+      if (!openId) return
+      const text = doc.getText(noteKey(openId)).toString()
+      setNoteText((prev) => (prev === text ? prev : text))
+    }
+    doc.on("update", apply)
+    return () => {
+      doc.off("update", apply)
+    }
+  }, [notesCollab.doc])
 
   useLiveRows<MissionReadyProgress>({
     table: "mission_ready_progress",
@@ -100,7 +151,9 @@ export default function MissionReadyDetailPage() {
   }
 
   const updateNote = async (itemId: string) => {
-    await supabase.from("mission_ready_progress").update({ notes: noteText || null }).eq("id", itemId)
+    const doc = notesCollab.doc
+    const text = doc && notesCollab.ready ? doc.getText(noteKey(itemId)).toString() : noteText
+    await supabase.from("mission_ready_progress").update({ notes: text || null }).eq("id", itemId)
     setEditingNote(null)
     setNoteText("")
     await loadData()
@@ -262,7 +315,7 @@ export default function MissionReadyDetailPage() {
                           <input
                             type="text"
                             value={noteText}
-                            onChange={(e) => setNoteText(e.target.value)}
+                            onChange={(e) => typeNote(item.id, e.target.value)}
                             className="flex-1 rounded border border-gray-300 px-2 py-2 text-sm"
                             autoFocus
                             onKeyDown={(e) => { if (e.key === "Enter") updateNote(item.id); if (e.key === "Escape") setEditingNote(null) }}
@@ -272,7 +325,7 @@ export default function MissionReadyDetailPage() {
                         </div>
                       ) : (
                         <button
-                          onClick={() => { setEditingNote(item.id); setNoteText(item.notes || "") }}
+                          onClick={() => startEditNote(item)}
                           className="mt-1 block w-full text-left text-sm text-gray-700 break-words min-h-[24px]"
                         >
                           {item.notes || <span className="italic text-gray-400">Tap to add a note…</span>}
@@ -334,7 +387,7 @@ export default function MissionReadyDetailPage() {
                             <input
                               type="text"
                               value={noteText}
-                              onChange={(e) => setNoteText(e.target.value)}
+                              onChange={(e) => typeNote(item.id, e.target.value)}
                               className="px-2 py-1 border border-gray-300 rounded text-xs flex-1"
                               autoFocus
                               onKeyDown={(e) => { if (e.key === "Enter") updateNote(item.id); if (e.key === "Escape") setEditingNote(null) }}
@@ -344,7 +397,7 @@ export default function MissionReadyDetailPage() {
                           </div>
                         ) : (
                           <button
-                            onClick={() => { setEditingNote(item.id); setNoteText(item.notes || "") }}
+                            onClick={() => startEditNote(item)}
                             className="text-left text-xs text-gray-500 hover:text-gray-700 w-full min-h-[20px]"
                           >
                             {item.notes || <span className="text-gray-300 italic">Add note...</span>}
