@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
       claimUrl,
       expiresAt: result.expiresAt,
       message:
-        "Copy this link and send it to them (text or email). They will set their own email and password. The link works once and expires in 14 days.",
+        "Copy this link and send it to them (text or email). They set their own email and password. It works once, expires in 14 days, and replaces any unused link for this seat.",
     })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Could not create claim link."
