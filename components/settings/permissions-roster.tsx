@@ -96,6 +96,13 @@ export function PermissionsRoster() {
   const [lastProvisionMessage, setLastProvisionMessage] = useState<string | null>(null)
   const [lastClaimUrl, setLastClaimUrl] = useState<string | null>(null)
   const [claimingForRowId, setClaimingForRowId] = useState<string | null>(null)
+  const [myUserId, setMyUserId] = useState<string | null>(null)
+  const [accessBusyId, setAccessBusyId] = useState<string | null>(null)
+  const [lastAccess, setLastAccess] = useState<{
+    title: string
+    detail: string
+    secret?: string
+  } | null>(null)
 
   const canEdit = canEditStakePermissionRoster(myRole)
 
@@ -141,6 +148,47 @@ export function PermissionsRoster() {
     }
   }
 
+  const resetSeatAccess = async (row: StakePermissionRosterRow, userId: string, mode: "password" | "link") => {
+    if (!canEdit || userId === myUserId) return
+    setAccessBusyId(row.id)
+    setError(null)
+    setLastAccess(null)
+    setLastClaimUrl(null)
+    try {
+      const res = await fetch("/api/admin/users/reset-access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, mode }),
+      })
+      const payload = (await res.json()) as {
+        error?: string
+        tempPassword?: string
+        signInUrl?: string
+        message?: string
+      }
+      if (!res.ok) throw new Error(payload.error || "Could not reset access.")
+      const secret = payload.tempPassword || payload.signInUrl
+      setLastAccess({
+        title: payload.tempPassword ? "New password (send this to them)" : "One-time sign-in link",
+        detail: payload.message || "Ready to send.",
+        secret,
+      })
+      if (secret) {
+        try {
+          await navigator.clipboard.writeText(secret)
+        } catch {
+          // Still shown below for manual copy.
+        }
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setError(msg)
+      window.alert(msg)
+    } finally {
+      setAccessBusyId(null)
+    }
+  }
+
   const load = useCallback(async (opts?: { background?: boolean }) => {
     if (!opts?.background) setLoading(true)
     setError(null)
@@ -150,6 +198,7 @@ export function PermissionsRoster() {
       } = await supabase.auth.getUser()
       if (!user) {
         setMyRole(null)
+        setMyUserId(null)
         setStakeId(null)
         setRoster([])
         setStakeUsers([])
@@ -163,6 +212,7 @@ export function PermissionsRoster() {
         return
       }
       setMyRole(me.role ?? null)
+      setMyUserId(user.id)
       setStakeId(me.stake_id)
 
       let [rosterResult, leadersResult, hcResult] = await Promise.all([
@@ -530,7 +580,7 @@ export function PermissionsRoster() {
                   onClick={() => void copyClaimLinkForSeat(row)}
                 >
                   <Copy className="h-3.5 w-3.5 mr-1.5 inline" aria-hidden />
-                  {claimingForRowId === row.id ? "Creating claim link…" : "Copy claim link"}
+                  {claimingForRowId === row.id ? "Refreshing claim link…" : "Refresh claim link"}
                 </Button>
               ) : null}
               {canEdit && !seated ? (
@@ -550,6 +600,31 @@ export function PermissionsRoster() {
                   <UserPlus className="h-3.5 w-3.5 mr-1.5 inline" aria-hidden />
                   {creatingForRowId === row.id ? "Cancel create login" : "Create login manually"}
                 </Button>
+              ) : null}
+              {canEdit && seated && seated.id !== myUserId ? (
+                <>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="w-full"
+                    disabled={savingId === row.id || accessBusyId === row.id}
+                    onClick={() => void resetSeatAccess(row, seated.id, "password")}
+                  >
+                    <KeyRound className="h-3.5 w-3.5 mr-1.5 inline" aria-hidden />
+                    {accessBusyId === row.id ? "Working…" : "Set a new password"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="w-full"
+                    disabled={savingId === row.id || accessBusyId === row.id}
+                    onClick={() => void resetSeatAccess(row, seated.id, "link")}
+                  >
+                    <Copy className="h-3.5 w-3.5 mr-1.5 inline" aria-hidden />
+                    Copy a new sign-in link
+                  </Button>
+                </>
               ) : null}
               {canEdit && row.assigned_user_id ? (
                 <Button
@@ -701,10 +776,11 @@ export function PermissionsRoster() {
               <CardTitle className="text-xl">Stake leadership roster &amp; app permissions</CardTitle>
             </div>
             <CardDescription>
-              Manage stake leadership seats and app permissions. Prefer <strong>Copy claim link</strong> (or Set Apart on
-              the calling tracker) so the new holder sets their own email and password — no need to type names into
-              Supabase. When someone is released, use <strong>Remove from seat</strong> or{" "}
-              <strong>Revoke login</strong> so they lose access.
+              Manage stake leadership seats and app permissions. For a new holder, use <strong>Refresh claim link</strong>{" "}
+              (each tap replaces the previous unused link) or Set Apart on the calling tracker. When someone already has
+              a seat and cannot sign in, use <strong>Set a new password</strong> or <strong>Copy a new sign-in link</strong>.
+              When someone is released, use <strong>Remove from seat</strong> or <strong>Revoke login</strong> so they lose
+              access.
               {canEdit
                 ? " If the stake president seat was still empty after migration, it links to your account the first time you open this screen as president."
                 : " Contact stake presidency or a clerk to change assignments."}
@@ -748,6 +824,29 @@ export function PermissionsRoster() {
             <p className="text-sm rounded-md bg-emerald-50 border border-emerald-200 px-3 py-2 text-emerald-900">
               {lastProvisionMessage}
             </p>
+          ) : null}
+
+          {lastAccess ? (
+            <div className="text-sm rounded-md bg-sky-50 border border-sky-200 px-3 py-2 text-sky-950 space-y-2">
+              <p className="font-medium">{lastAccess.title}</p>
+              <p>{lastAccess.detail}</p>
+              {lastAccess.secret ? (
+                <code className="block break-all text-xs bg-white border border-sky-100 rounded px-2 py-1.5">
+                  {lastAccess.secret}
+                </code>
+              ) : null}
+              {lastAccess.secret ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => void navigator.clipboard.writeText(lastAccess.secret || "")}
+                >
+                  <Copy className="h-3.5 w-3.5 mr-1.5 inline" aria-hidden />
+                  Copy again
+                </Button>
+              ) : null}
+            </div>
           ) : null}
 
           {lastClaimUrl ? (

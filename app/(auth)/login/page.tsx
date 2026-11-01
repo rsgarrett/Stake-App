@@ -8,6 +8,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [resetNote, setResetNote] = useState<string | null>(null)
+  const [resetting, setResetting] = useState(false)
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -69,7 +71,7 @@ export default function LoginPage() {
               )}
               {error.includes("Invalid login") && (
                 <div className="mt-2 text-xs text-red-600">
-                  <p>Check that your email and password are correct. Accounts are created by stake leadership — if you have not received an invitation, contact your stake clerk.</p>
+                  <p>Check that your email and password are correct. Use Forgot password, or ask the stake president to set a new password in Settings.</p>
                 </div>
               )}
             </div>
@@ -112,6 +114,38 @@ export default function LoginPage() {
               />
             </div>
           </div>
+
+          <div className="flex justify-end">
+            <button
+              type="button"
+              className="text-sm text-indigo-600 hover:text-indigo-800 min-h-[44px]"
+              disabled={resetting}
+              onClick={async () => {
+                setError(null)
+                setResetNote(null)
+                if (!email.trim()) {
+                  setError("Enter your email first, then tap Forgot password.")
+                  return
+                }
+                setResetting(true)
+                const supabase = createClient()
+                const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+                  redirectTo: `${window.location.origin}/auth/reset-password`,
+                })
+                setResetting(false)
+                if (resetError) {
+                  setError(resetError.message)
+                  return
+                }
+                setResetNote("If that email has a seat, a reset link is on its way. You can also ask the stake president to set a new password in Settings.")
+              }}
+            >
+              {resetting ? "Sending…" : "Forgot password?"}
+            </button>
+          </div>
+          {resetNote ? (
+            <div className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-900">{resetNote}</div>
+          ) : null}
 
           <div>
             <button
