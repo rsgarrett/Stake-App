@@ -126,8 +126,11 @@
     max-width: none !important;
     padding: 0 !important;
   }
-  html.print-conducting-sheets .flex.h-screen {
+  /* The app shell is one screen tall and clips; let sheets flow onto every page. */
+  html.print-conducting-sheets .app-shell,
+  html.print-conducting-sheets .app-shell-content {
     height: auto !important;
+    max-height: none !important;
     overflow: visible !important;
   }
   html.print-conducting-sheets main {
