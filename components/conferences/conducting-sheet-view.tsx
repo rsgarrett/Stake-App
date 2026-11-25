@@ -1,7 +1,7 @@
 "use client"
 
-import { Fragment, useCallback } from "react"
-import { Printer } from "lucide-react"
+import { Fragment, useCallback, useState } from "react"
+import { FileText, Printer } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { ConferenceProgramItem, ConferenceSession } from "@/types"
 import type { ConductingSheetEvent } from "@/lib/conferences/conducting-sheet-event"
@@ -61,14 +61,69 @@ export function ConductingSheetView({
     window.setTimeout(cleanup, 500)
   }, [lagSessions.length])
 
+  const [exportingWord, setExportingWord] = useState(false)
+
+  const downloadWord = async () => {
+    if (lagSessions.length === 0 || exportingWord) return
+    setExportingWord(true)
+    try {
+      // Loaded on demand: the Word library must never be part of the page's own code.
+      const { buildConductingSheetsDocx, conductingDocxFilename } = await import(
+        "@/lib/conferences/build-conducting-docx"
+      )
+      const blob = await buildConductingSheetsDocx({
+        event,
+        sessions: lagSessions,
+        formatTime,
+        resolveSessionDisplayDateIso,
+        formatSessionDateLong,
+        formatEventDateRange,
+      })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = conductingDocxFilename(event.title)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 10_000)
+    } catch (err) {
+      console.error("Word export failed:", err)
+      window.alert("Could not create the Word document. Please try again.")
+    } finally {
+      setExportingWord(false)
+    }
+  }
+
   return (
     <div className="conducting-sheet-print space-y-8 px-3 sm:px-0">
+      {lagSessions.length > 0 ? (
+        <div className="conducting-no-print flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2">
+          <button
+            type="button"
+            disabled={exportingWord}
+            onClick={() => void downloadWord()}
+            className="inline-flex min-h-[44px] items-center text-left text-sm font-semibold text-indigo-700 underline underline-offset-2 hover:text-indigo-900 disabled:opacity-60"
+          >
+            <FileText className="mr-2 h-4 w-4 shrink-0" aria-hidden />
+            {exportingWord ? "Creating Word document…" : "Open conducting sheets in Word"}
+          </button>
+          <span className="text-xs text-slate-600">
+            Built from what is in the app right now. Edits made in Word stay in that file.
+          </span>
+        </div>
+      ) : null}
+
       <div className="conducting-no-print rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
         <p className="font-medium text-slate-900">Welcome sheets &amp; conducting sheets</p>
         <p className="mt-1 text-slate-600">
           Each session gets a Welcome &amp; Announcements page (read before the meeting begins) followed by a one-page
           conducting sheet. Everything is editable in place — click a line on a conducting sheet, or use
           &ldquo;Edit script&rdquo; on a welcome page. Stand seating and sustaining flow in from the Stake Business tab.
+        </p>
+        <p className="mt-1 text-slate-600">
+          To change wording or formatting freely, use &ldquo;Open conducting sheets in Word&rdquo; at the top of this
+          page. Changes made in Word stay in that file and do not come back into the app.
         </p>
       </div>
 
